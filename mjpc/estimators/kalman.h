@@ -96,16 +96,16 @@ class Kalman : public Estimator {
   int DimensionSensor() const override { return nsensordata_; };
 
   // set state
-  void SetState(const double* state) override {
-    mju_copy(this->state.data(), state, ndstate_);
+  void SetState(const double* in_state) override {
+    mju_copy(this->state.data(), in_state, ndstate_);
   };
 
   // set time
-  void SetTime(double time) override { this->time = time; }
+  void SetTime(double in_time) override { this->time = in_time; }
 
   // set covariance
-  void SetCovariance(const double* covariance) override {
-    mju_copy(this->covariance.data(), covariance, ndstate_ * ndstate_);
+  void SetCovariance(const double* in_covariance) override {
+    mju_copy(this->covariance.data(), in_covariance, ndstate_ * ndstate_);
   }
 
   // get measurement timer (ms)
