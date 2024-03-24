@@ -56,7 +56,7 @@ set(MUJOCO_BUILD_TESTS OFF)
 set(MUJOCO_TEST_PYTHON_UTIL OFF)
 
 set(MUJOCO_MPC_MUJOCO_GIT_TAG
-    3.1.4
+    main 
     CACHE STRING "Git revision for MuJoCo."
 )
 
@@ -90,7 +90,7 @@ findorfetch(
 # TODO(nimrod): Update to the latest version of abseil, or use the one defined
 # by MuJoCo, once grpc fix their build issues.
 set(MUJOCO_DEP_VERSION_abseil
-    fb3621f4f897824c0dbe0615fa94543df6192f30 # LTS 20230802.1
+    master
     CACHE STRING "Version of `abseil` to be fetched."
     FORCE
 )

@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set(MJPC_INSTALL_PUBLIC 0)
+
 add_library(threadpool STATIC)
 target_sources(
   threadpool
@@ -24,125 +26,125 @@ target_link_libraries(
 )
 target_include_directories(threadpool PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
+set(LIB_MJPC_HEADERS
+    states/state.h
+    agent.h
+    trajectory.h
+    utilities.h
+    tasks/tasks.h
+    tasks/acrobot/acrobot.h
+    tasks/allegro/allegro.h
+    tasks/bimanual/handover/handover.h
+    tasks/bimanual/reorient/reorient.h
+    tasks/cartpole/cartpole.h
+    tasks/fingers/fingers.h
+    tasks/humanoid/stand/stand.h
+    tasks/humanoid/tracking/tracking.h
+    tasks/humanoid/walk/walk.h
+    tasks/manipulation/common.h
+    tasks/manipulation/manipulation.h
+    tasks/op3/stand.h
+    tasks/panda/panda.h
+    tasks/particle/particle.h
+    tasks/rubik/solve.h
+    tasks/shadow_reorient/hand.h
+    tasks/quadrotor/quadrotor.h
+    tasks/quadruped/quadruped.h
+    tasks/swimmer/swimmer.h
+    tasks/walker/walker.h
+    planners/planner.h
+    planners/policy.h
+    planners/include.h
+    planners/cost_derivatives.h
+    planners/model_derivatives.h
+    planners/cross_entropy/planner.h
+    planners/robust/robust_planner.h
+    planners/sample_gradient/planner.h
+    planners/sampling/planner.h
+    planners/gradient/policy.h
+    planners/gradient/settings.h
+    planners/ilqg/backward_pass.h
+    planners/ilqg/boxqp.h
+    planners/ilqg/planner.h
+    planners/sampling/policy.h
+    planners/gradient/gradient.h
+    planners/gradient/planner.h
+    planners/gradient/spline_mapping.h
+    planners/ilqg/policy.h
+    estimators/batch.h
+    planners/ilqs/planner.h
+    planners/ilqg/settings.h
+    estimators/estimator.h
+    estimators/unscented.h
+    estimators/kalman.h
+    direct/direct.h
+    direct/trajectory.h
+    task.h
+    norm.h
+    spline/spline.h
+    direct/model_parameters.h
+)
+
 add_library(
   libmjpc STATIC
   states/state.cc
-  states/state.h
   agent.cc
-  agent.h
   trajectory.cc
-  trajectory.h
   utilities.cc
-  utilities.h
   tasks/tasks.cc
-  tasks/tasks.h
   tasks/acrobot/acrobot.cc
-  tasks/acrobot/acrobot.h
   tasks/allegro/allegro.cc
-  tasks/allegro/allegro.h
   tasks/bimanual/insert/insert.cc
   tasks/bimanual/insert/insert.h
   tasks/bimanual/handover/handover.cc
-  tasks/bimanual/handover/handover.h
   tasks/bimanual/reorient/reorient.cc
-  tasks/bimanual/reorient/reorient.h
   tasks/cartpole/cartpole.cc
-  tasks/cartpole/cartpole.h
   tasks/fingers/fingers.cc
-  tasks/fingers/fingers.h
   tasks/humanoid/stand/stand.cc
-  tasks/humanoid/stand/stand.h
   tasks/humanoid/tracking/tracking.cc
-  tasks/humanoid/tracking/tracking.h
   tasks/humanoid/walk/walk.cc
-  tasks/humanoid/walk/walk.h
   tasks/manipulation/common.cc
-  tasks/manipulation/common.h
   tasks/manipulation/manipulation.cc
-  tasks/manipulation/manipulation.h
   tasks/op3/stand.cc
-  tasks/op3/stand.h
   tasks/panda/panda.cc
-  tasks/panda/panda.h
   tasks/particle/particle.cc
-  tasks/particle/particle.h
   tasks/rubik/solve.cc
-  tasks/rubik/solve.h
   tasks/shadow_reorient/hand.cc
-  tasks/shadow_reorient/hand.h
   tasks/quadrotor/quadrotor.cc
-  tasks/quadrotor/quadrotor.h
   tasks/quadruped/quadruped.cc
-  tasks/quadruped/quadruped.h
   tasks/swimmer/swimmer.cc
-  tasks/swimmer/swimmer.h
   tasks/walker/walker.cc
-  tasks/walker/walker.h
   planners/planner.cc
-  planners/planner.h
-  planners/policy.h
   planners/include.cc
-  planners/include.h
   planners/cost_derivatives.cc
-  planners/cost_derivatives.h
   planners/model_derivatives.cc
-  planners/model_derivatives.h
   planners/cross_entropy/planner.cc
-  planners/cross_entropy/planner.h
   planners/robust/robust_planner.cc
-  planners/robust/robust_planner.h
   planners/sample_gradient/planner.cc
-  planners/sample_gradient/planner.h
   planners/sampling/planner.cc
-  planners/sampling/planner.h
   planners/sampling/policy.cc
-  planners/sampling/policy.h
   planners/gradient/gradient.cc
-  planners/gradient/gradient.h
   planners/gradient/planner.cc
-  planners/gradient/planner.h
   planners/gradient/policy.cc
-  planners/gradient/policy.h
-  planners/gradient/settings.h
   planners/gradient/spline_mapping.cc
-  planners/gradient/spline_mapping.h
   planners/ilqg/backward_pass.cc
-  planners/ilqg/backward_pass.h
-  planners/ilqg/boxqp.h
   planners/ilqg/planner.cc
-  planners/ilqg/planner.h
   planners/ilqg/policy.cc
-  planners/ilqg/policy.h
-  planners/ilqg/settings.h
   planners/ilqs/planner.cc
-  planners/ilqs/planner.h
   estimators/batch.cc
-  estimators/batch.h
-  estimators/estimator.h
   estimators/include.cc
   estimators/include.h
   estimators/kalman.cc
-  estimators/kalman.h
   estimators/unscented.cc
-  estimators/unscented.h
   direct/direct.cc
-  direct/direct.h
-  direct/trajectory.h
   direct/model_parameters.cc
-  direct/model_parameters.h
   spline/spline.cc
-  spline/spline.h
-  app.cc
-  app.h
   norm.cc
-  norm.h
-  simulate.cc
-  simulate.h
   task.cc
-  task.h
-  $<TARGET_OBJECTS:mujoco::platform_ui_adapter>
+  ${LIB_MJPC_HEADERS}
 )
 set_target_properties(libmjpc PROPERTIES OUTPUT_NAME mjpc)
+set_target_properties(libmjpc PROPERTIES PUBLIC_HEADER "${LIB_MJPC_HEADERS}")
 target_compile_options(libmjpc PUBLIC ${MJPC_COMPILE_OPTIONS})
 target_compile_definitions(libmjpc PRIVATE MJSIMULATE_STATIC)
 target_link_libraries(
@@ -156,7 +158,6 @@ target_link_libraries(
   glfw
   lodepng
   mujoco::mujoco
-  mujoco::platform_ui_adapter
   threadpool
   Threads::Threads
 )
@@ -169,6 +170,11 @@ target_include_directories(libmjpc
 add_executable(
   mjpc
   main.cc
+  app.cc
+  app.h
+  simulate.cc
+  simulate.h
+  $<TARGET_OBJECTS:mujoco::platform_ui_adapter>
 )
 target_link_libraries(
   mjpc
@@ -178,6 +184,7 @@ target_link_libraries(
   absl::strings
   libmjpc
   mujoco::mujoco
+  mujoco::platform_ui_adapter
   threadpool
   Threads::Threads
 )
@@ -231,4 +238,16 @@ endif()
 
 if(MJPC_BUILD_GRPC_SERVICE)
   add_subdirectory(grpc)
+endif()
+
+# Install the libraries
+if(MJPC_INSTALL_PUBLIC)
+  install(
+    TARGETS libmjpc
+    EXPORT libmjpc
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}" COMPONENT runtime
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT runtime
+    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT dev
+    PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/mjpc" COMPONENT dev
+  )
 endif()

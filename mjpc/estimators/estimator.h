@@ -102,8 +102,8 @@ class GroundTruth : public Estimator {
  public:
   // constructor
   GroundTruth() = default;
-  explicit GroundTruth(const mjModel* model) {
-    Initialize(model);
+  explicit GroundTruth(const mjModel* in_model) {
+    Initialize(in_model);
     Reset();
   }
 
@@ -114,10 +114,10 @@ class GroundTruth : public Estimator {
   }
 
   // initialize
-  void Initialize(const mjModel* model) override {
+  void Initialize(const mjModel* in_model) override {
     // model
     if (this->model) mj_deleteModel(this->model);
-    this->model = mj_copyModel(nullptr, model);
+    this->model = mj_copyModel(nullptr, in_model);
 
     // data
     if (data_) mj_deleteData(data_);
@@ -240,16 +240,16 @@ class GroundTruth : public Estimator {
   int DimensionSensor() const override { return nsensordata_; };
 
   // set state
-  void SetState(const double* state) override {
-    mju_copy(this->state.data(), state, ndstate_);
+  void SetState(const double* in_state) override {
+    mju_copy(this->state.data(), in_state, ndstate_);
   };
 
   // set time
-  void SetTime(double time) override { this->time = time; }
+  void SetTime(double in_time) override { this->time = in_time; }
 
   // set covariance
-  void SetCovariance(const double* covariance) override {
-    mju_copy(this->covariance.data(), covariance, ndstate_ * ndstate_);
+  void SetCovariance(const double* in_covariance) override {
+    mju_copy(this->covariance.data(), in_covariance, ndstate_ * ndstate_);
   };
 
   // estimator-specific GUI elements
