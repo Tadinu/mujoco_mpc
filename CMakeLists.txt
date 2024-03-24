@@ -124,21 +124,21 @@ set(ABSL_BUILD_TESTING OFF)
 # ABSL_ENABLE_INSTALL is needed for
 # https://github.com/protocolbuffers/protobuf/issues/12185#issuecomment-1594685860
 set(ABSL_ENABLE_INSTALL ON)
-findorfetch(
-  USE_SYSTEM_PACKAGE
-  OFF
-  PACKAGE_NAME
-  absl
-  LIBRARY_NAME
-  abseil-cpp
-  GIT_REPO
-  https://github.com/abseil/abseil-cpp.git
-  GIT_TAG
-  ${MUJOCO_DEP_VERSION_abseil}
-  TARGETS
-  absl::core_headers
-  EXCLUDE_FROM_ALL
-)
+#findorfetch(
+#  USE_SYSTEM_PACKAGE
+#  OFF
+#  PACKAGE_NAME
+#  absl
+#  LIBRARY_NAME
+#  abseil-cpp
+#  GIT_REPO
+#  https://github.com/abseil/abseil-cpp.git
+#  GIT_TAG
+#  ${MUJOCO_DEP_VERSION_abseil}
+#  TARGETS
+#  absl::core_headers
+#  EXCLUDE_FROM_ALL
+#)
 
 set(GLFW_BUILD_EXAMPLES OFF)
 set(GLFW_BUILD_TESTS OFF)

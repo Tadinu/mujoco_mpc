@@ -251,6 +251,10 @@ target_link_options(mjpc_ui_agent_service PRIVATE ${AGENT_SERVICE_LINK_OPTIONS})
 add_executable(
   ui_agent_server
   ui_agent_server.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/../app.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/../app.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../simulate.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/../simulate.h
 )
 
 target_link_libraries(
