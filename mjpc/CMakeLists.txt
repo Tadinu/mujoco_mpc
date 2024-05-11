@@ -12,16 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(MJPC_INSTALL_PUBLIC 0)
+set(MJPC_INSTALL_PUBLIC 1)
 
-add_library(threadpool STATIC)
+if(NOT "${CMAKE_CXX_STANDARD}")
+  set(CMAKE_CXX_STANDARD 17)
+endif()
+
+add_library(threadpool SHARED)
 target_sources(
   threadpool
   PUBLIC threadpool.h
   PRIVATE threadpool.cc
 )
 target_link_libraries(
-  threadpool
+  threadpool PUBLIC
   absl::base
 )
 target_include_directories(threadpool PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
@@ -86,7 +90,7 @@ set(LIB_MJPC_HEADERS
 )
 
 add_library(
-  libmjpc STATIC
+  libmjpc SHARED
   states/state.cc
   agent.cc
   trajectory.cc
@@ -146,15 +150,20 @@ add_library(
 set_target_properties(libmjpc PROPERTIES OUTPUT_NAME mjpc)
 set_target_properties(libmjpc PROPERTIES PUBLIC_HEADER "${LIB_MJPC_HEADERS}")
 target_compile_options(libmjpc PUBLIC ${MJPC_COMPILE_OPTIONS})
-target_compile_definitions(libmjpc PRIVATE MJSIMULATE_STATIC)
+#target_compile_definitions(libmjpc PRIVATE MJSIMULATE_STATIC)
 target_link_libraries(
-  libmjpc
+  libmjpc PUBLIC
   absl::any_invocable
   absl::check
   absl::flat_hash_map
   absl::log
   absl::random_random
   absl::span
+  absl::flags
+  absl::flags_parse
+  absl::base
+  absl::synchronization
+  absl::strings
   glfw
   lodepng
   mujoco::mujoco
@@ -167,6 +176,7 @@ target_include_directories(libmjpc
   ${CMAKE_CURRENT_BINARY_DIR}/..
 )
 
+if(APPLE)
 add_executable(
   mjpc
   main.cc
@@ -177,57 +187,60 @@ add_executable(
   $<TARGET_OBJECTS:mujoco::platform_ui_adapter>
 )
 target_link_libraries(
-  mjpc
+  mjpc PUBLIC
   absl::flags
   absl::flags_parse
   absl::random_random
   absl::strings
+  absl::base
   libmjpc
   mujoco::mujoco
   mujoco::platform_ui_adapter
   threadpool
   Threads::Threads
 )
-target_include_directories(mjpc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_include_directories(mjpc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_compile_options(mjpc PUBLIC ${MJPC_COMPILE_OPTIONS})
 target_link_options(mjpc PRIVATE ${MJPC_LINK_OPTIONS})
-target_compile_definitions(mjpc PRIVATE MJSIMULATE_STATIC)
-if(APPLE)
+#target_compile_definitions(mjpc PRIVATE MJSIMULATE_STATIC)
+
   target_sources(mjpc PRIVATE macos_gui.mm)
   target_link_libraries(mjpc "-framework Cocoa")
 endif()
 
-add_library(
-  libtestspeed STATIC
-  testspeed_app.cc
-  testspeed.h
-  testspeed.cc
-)
-target_link_libraries(
-  libtestspeed
-  absl::random_random
-  absl::strings
-  libmjpc
-  mujoco::mujoco
-  threadpool
-  Threads::Threads
-)
-target_include_directories(libtestspeed PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+if(BUILD_TESTING AND MJPC_BUILD_TESTS)
+  add_library(
+    libtestspeed STATIC
+    testspeed_app.cc
+    testspeed.h
+    testspeed.cc
+  )
+  target_link_libraries(
+    libtestspeed
+    absl::random_random
+    absl::strings
+    libmjpc
+    mujoco::mujoco
+    threadpool
+    Threads::Threads
+  )
+  target_include_directories(libtestspeed PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
-add_executable(
-  testspeed
-  testspeed_app.cc
-)
-target_link_libraries(
-  testspeed
-  libtestspeed
-  absl::flags
-  absl::flags_parse
-)
-target_include_directories(testspeed PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
-target_compile_options(testspeed PUBLIC ${MJPC_COMPILE_OPTIONS})
-target_link_options(testspeed PRIVATE ${MJPC_LINK_OPTIONS})
-target_compile_definitions(testspeed PRIVATE MJSIMULATE_STATIC)
+  add_executable(
+    testspeed
+    testspeed_app.cc
+  )
+  target_link_libraries(
+    testspeed
+    libtestspeed
+    absl::flags
+    absl::flags_parse
+  )
+  target_include_directories(testspeed PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+  target_compile_options(testspeed PUBLIC ${MJPC_COMPILE_OPTIONS})
+  target_link_options(testspeed PRIVATE ${MJPC_LINK_OPTIONS})
+  #target_compile_definitions(testspeed PRIVATE MJSIMULATE_STATIC)
+endif()
 
 add_subdirectory(tasks)
 

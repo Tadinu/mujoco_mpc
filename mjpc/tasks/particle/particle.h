@@ -19,15 +19,34 @@
 #include <string>
 #include <mujoco/mujoco.h>
 #include "mjpc/task.h"
+#include "mjpc/utilities.h"
 
 namespace mjpc {
+inline void ResidualImpl(const mjModel* model, const mjData* data,
+                         const double goal[2], double* residual) {
+  // ----- residual (0) ----- //
+  double* position = SensorByName(model, data, "position");
+  mju_sub(residual, position, goal, model->nq);
+
+  // ----- residual (1) ----- //
+  double* velocity = SensorByName(model, data, "velocity");
+  mju_copy(residual + 2, velocity, model->nv);
+
+  // ----- residual (2) ----- //
+  mju_copy(residual + 4, data->ctrl, model->nu);
+}
+
 class Particle : public Task {
  public:
-  std::string Name() const override;
-  std::string XmlPath() const override;
-  class ResidualFn : public mjpc::BaseResidualFn {
+  Particle() : residual_(this) {}
+  inline std::string XmlPath() const override {
+    return GetModelPath("particle/task_timevarying.xml");
+  }
+  inline std::string Name() const override { return "Particle"; }
+
+  class ResidualFn : public BaseResidualFn {
    public:
-    explicit ResidualFn(const Particle* task) : mjpc::BaseResidualFn(task) {}
+    explicit ResidualFn(const Particle* task) : BaseResidualFn(task) {}
     // -------- Residuals for particle task -------
     //   Number of residuals: 3
     //     Residual (0): position - goal_position
@@ -35,10 +54,22 @@ class Particle : public Task {
     //     Residual (2): control
     // --------------------------------------------
     void Residual(const mjModel* model, const mjData* data,
-                  double* residual) const override;
+                  double* residual) const override
+    {
+        // some Lissajous curve
+        double goal[2]{0.25 * mju_sin(data->time), 0.25 * mju_cos(data->time / mjPI)};
+        ResidualImpl(model, data, goal, residual);
+    }
   };
-  Particle() : residual_(this) {}
-  void TransitionLocked(mjModel* model, mjData* data) override;
+  inline void TransitionLocked(mjModel* model, mjData* data) override
+  {
+    // some Lissajous curve
+    double goal[2]{0.25 * mju_sin(data->time), 0.25 * mju_cos(data->time / mjPI)};
+
+    // update mocap position
+    data->mocap_pos[0] = goal[0];
+    data->mocap_pos[1] = goal[1];
+  }
 
  protected:
   std::unique_ptr<mjpc::ResidualFn> ResidualLocked() const override {
@@ -53,20 +84,27 @@ class Particle : public Task {
 // The same task, but the goal mocap body doesn't move.
 class ParticleFixed : public Task {
  public:
-  std::string Name() const override;
-  std::string XmlPath() const override;
-  class ResidualFn : public mjpc::BaseResidualFn {
+  inline std::string XmlPath() const override {
+    return GetModelPath("particle/task_timevarying.xml");
+  }
+  inline std::string Name() const override { return "ParticleFixed"; }
+
+  class ResidualFn : public BaseResidualFn {
    public:
     explicit ResidualFn(const ParticleFixed* task)
-        : mjpc::BaseResidualFn(task) {}
+        : BaseResidualFn(task) {}
     // -------- Residuals for particle task -------
     //   Number of residuals: 3
     //     Residual (0): position - goal_position
     //     Residual (1): velocity
     //     Residual (2): control
     // --------------------------------------------
-    void Residual(const mjModel* model, const mjData* data,
-                  double* residual) const override;
+    inline void Residual(const mjModel* model, const mjData* data,
+                         double* residual) const override
+    {
+      double goal[2]{data->mocap_pos[0], data->mocap_pos[1]};
+      ResidualImpl(model, data, goal, residual);
+    }
   };
   ParticleFixed() : residual_(this) {}
 

@@ -21,14 +21,31 @@
 #include "mjpc/estimators/estimator.h"
 #include "mjpc/estimators/kalman.h"
 #include "mjpc/estimators/unscented.h"
-
+#include "mjpc/estimators/batch.h"
+#include "mjpc/estimators/estimator.h"
 namespace mjpc {
 
 // Estimator names, separated by '\n'.
-extern const char kEstimatorNames[];
+static const char kEstimatorNames[] =
+    "Ground Truth\n"
+    "Kalman\n"
+    "Unscented\n"
+    "Batch";
 
 // Loads all available estimators
-std::vector<std::unique_ptr<mjpc::Estimator>> LoadEstimators();
+// load all available estimators
+inline std::vector<std::unique_ptr<mjpc::Estimator>> LoadEstimators() {
+  // planners
+  std::vector<std::unique_ptr<mjpc::Estimator>> estimators;
+
+  // add estimators
+  estimators.emplace_back(new mjpc::GroundTruth());  // ground truth state
+  estimators.emplace_back(new mjpc::Kalman());       // extended Kalman filter
+  estimators.emplace_back(new mjpc::Unscented());    // unscented Kalman filter
+  estimators.emplace_back(new mjpc::Batch());       // recursive batch filter
+
+  return estimators;
+}
 
 }  // namespace mjpc
 

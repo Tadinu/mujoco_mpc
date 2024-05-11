@@ -23,29 +23,50 @@
 #include <queue>
 #include <thread>
 #include <vector>
+#include <utility>
 
 #include <absl/base/attributes.h>
 
 namespace mjpc {
 
+  ABSL_CONST_INIT static thread_local int worker_id_ = -1;
 // ThreadPool class
 class ThreadPool {
  public:
   // constructor
-  explicit ThreadPool(int num_threads);
+  explicit ThreadPool(int num_threads): ctr_(0) {
+    for (int i = 0; i < num_threads; i++) {
+      threads_.push_back(std::thread(&ThreadPool::WorkerThread, this, i));
+    }
+  }
 
   // destructor
-  ~ThreadPool();
+  ~ThreadPool() {
+    {
+      std::unique_lock<std::mutex> lock(m_);
+      for (int i = 0; i < threads_.size(); i++) {
+        queue_.push(nullptr);
+      }
+      cv_in_.notify_all();
+    }
+    for (auto& thread : threads_) {
+      thread.join();
+    }
+  }
 
   int NumThreads() const { return threads_.size(); }
 
   // returns an ID between 0 and NumThreads() - 1. must be called within
   // worker thread (returns -1 if not).
-  static int WorkerId() { return worker_id_; }
+  static int WorkerId() { return mjpc::worker_id_; }
 
   // ----- methods ----- //
   // set task for threadpool
-  void Schedule(std::function<void()> task);
+  inline void Schedule(std::function<void()> task) {
+    std::unique_lock<std::mutex> lock(m_);
+    queue_.push(std::move(task));
+    cv_in_.notify_one();
+  }
 
   // return number of tasks completed
   std::uint64_t GetCount() { return ctr_; }
@@ -63,10 +84,37 @@ class ThreadPool {
   // ----- methods ----- //
 
   // execute task with available thread
-  void WorkerThread(int i);
+  
+  // ThreadPool worker
+  inline void WorkerThread(int i) {
+    worker_id_ = i;
+    while (true) {
+      auto task = [&]() {
+        std::unique_lock<std::mutex> lock(m_);
+        cv_in_.wait(lock, [&]() { return !queue_.empty(); });
+        std::function<void()> task = std::move(queue_.front());
+        queue_.pop();
+        cv_in_.notify_one();
+        return task;
+      }();
+      if (task == nullptr) {
+        {
+          std::unique_lock<std::mutex> lock(m_);
+          ++ctr_;
+          cv_ext_.notify_one();
+        }
+        break;
+      }
+      task();
 
-  ABSL_CONST_INIT static thread_local int worker_id_;
-
+      {
+        std::unique_lock<std::mutex> lock(m_);
+        ++ctr_;
+        cv_ext_.notify_one();
+      }
+    }
+  }
+  
   // ----- members ----- //
   std::vector<std::thread> threads_;
   std::mutex m_;

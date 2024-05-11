@@ -16,11 +16,19 @@
 #define MJPC_PLANNERS_SAMPLING_POLICY_H_
 
 #include <mujoco/mujoco.h>
+#include <absl/log/check.h>
+#include <absl/types/span.h>
+#include "mjpc/spline/spline.h"
+#include "mjpc/task.h"
+#include "mjpc/trajectory.h"
+#include "mjpc/utilities.h"
 #include "mjpc/planners/policy.h"
 #include "mjpc/spline/spline.h"
 #include "mjpc/task.h"
 
 namespace mjpc {
+
+using mjpc::spline::TimeSpline;
 
 // policy for sampling planner
 class SamplingPolicy : public Policy {
@@ -34,20 +42,47 @@ class SamplingPolicy : public Policy {
   // ----- methods ----- //
 
   // allocate memory
-  void Allocate(const mjModel* model, const Task& task, int horizon) override;
+  void Allocate(const mjModel* model_, const Task& task_,
+                int horizon) override {
+    // model
+    this->model = model_;
+
+    // spline points
+    num_spline_points = GetNumberOrDefault(kMaxTrajectoryHorizon, model,
+                                          "sampling_spline_points");
+
+    plan = TimeSpline(/*dim=*/model->nu);
+    plan.Reserve(num_spline_points);
+  }
 
   // reset memory to zeros
-  void Reset(int horizon,
-             const double* initial_repeated_action = nullptr) override;
+  void Reset(int horizon, const double* initial_repeated_action = nullptr) override {
+    plan.Clear();
+    if (initial_repeated_action != nullptr) {
+      plan.AddNode(0, absl::MakeConstSpan(initial_repeated_action, model->nu));
+    }
+  }
 
   // set action from policy
-  void Action(double* action, const double* state, double time) const override;
+  void Action(double* action_, const double* state_,
+              double time_) const override {
+    CHECK(action_ != nullptr);
+    plan.Sample(time_, absl::MakeSpan(action_, model->nu));
+
+    // Clamp controls
+    Clamp(action_, model->actuator_ctrlrange, model->nu);
+  }
 
   // copy policy
-  void CopyFrom(const SamplingPolicy& policy, int horizon);
+  void CopyFrom(const SamplingPolicy& policy, int horizon) {
+    this->plan = policy.plan;
+    num_spline_points = policy.num_spline_points;
+  }
 
   // copy parameters
-  void SetPlan(const mjpc::spline::TimeSpline& plan);
+  void SetPlan(const TimeSpline& plan_) {
+    this->plan = plan_;
+  }
 
   // ----- members ----- //
   const mjModel* model;

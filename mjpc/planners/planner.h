@@ -15,6 +15,9 @@
 #ifndef MJPC_PLANNERS_PLANNER_H_
 #define MJPC_PLANNERS_PLANNER_H_
 
+
+#include <algorithm>
+
 #include <mujoco/mujoco.h>
 
 #include "mjpc/states/state.h"
@@ -35,48 +38,58 @@ class Planner {
   virtual ~Planner() = default;
 
   // initialize data and settings
-  virtual void Initialize(mjModel* model, const Task& task) = 0;
+  virtual void Initialize(mjModel* model, const Task& task)  {}
 
   // allocate memory
-  virtual void Allocate() = 0;
+  virtual void Allocate() {}
 
   // reset memory to zeros
   virtual void Reset(int horizon,
-                     const double* initial_repeated_action = nullptr) = 0;
+                     const double* initial_repeated_action = nullptr)  {}
 
   // set state
-  virtual void SetState(const State& state) = 0;
+  virtual void SetState(const State& state)  {}
 
   // optimize nominal policy
-  virtual void OptimizePolicy(int horizon, ThreadPool& pool) = 0;
+  virtual void OptimizePolicy(int horizon, ThreadPool& pool)  {}
 
   // compute trajectory using nominal policy
-  virtual void NominalTrajectory(int horizon, ThreadPool& pool) = 0;
+  virtual void NominalTrajectory(int horizon, ThreadPool& pool)  {}
 
   // set action from policy
   virtual void ActionFromPolicy(double* action, const double* state,
-                                double time, bool use_previous = false) = 0;
+                                double time, bool use_previous = false)  {}
 
   // return trajectory with best total return, or nullptr if no planning
   // iteration has completed
-  virtual const Trajectory* BestTrajectory() = 0;
+  virtual const Trajectory* BestTrajectory()  {return nullptr;}
 
   // visualize planner-specific traces
-  virtual void Traces(mjvScene* scn) = 0;
+  virtual void Traces(mjvScene* scn)  {}
 
   // planner-specific GUI elements
-  virtual void GUI(mjUI& ui) = 0;
+  virtual void GUI(mjUI& ui)  {}
 
   // planner-specific plots
   virtual void Plots(mjvFigure* fig_planner, mjvFigure* fig_timer,
                      int planner_shift, int timer_shift, int planning,
-                     int* shift) = 0;
+                     int* shift)  {}
 
   // return number of parameters optimized by planner
-  virtual int NumParameters() = 0;
+  virtual int NumParameters()  { return 0;}
 
   std::vector<UniqueMjData> data_;
-  void ResizeMjData(const mjModel* model, int num_threads);
+  void ResizeMjData(const mjModel* model, int num_threads) {
+    int new_size = std::max(1, num_threads);
+    if (data_.size() > new_size) {
+      data_.erase(data_.begin() + new_size, data_.end());
+    } else {
+      data_.reserve(new_size);
+      while (data_.size() < new_size) {
+        data_.push_back(MakeUniqueMjData(mj_makeData(model)));
+      }
+    }
+  }
 };
 
 // additional optional interface for planners that can produce several policy
@@ -88,17 +101,17 @@ class RankedPlanner : public Planner {
   // ncandidates. returns number of candidates created. only called
   // from the planning thread.
   virtual int OptimizePolicyCandidates(int ncandidates, int horizon,
-                                        ThreadPool& pool) = 0;
+                                        ThreadPool& pool)  { return 0; }
   // returns the total return for the nth candidate (or another score to
   // minimize). only called from the planning thread.
-  virtual double CandidateScore(int candidate) const = 0;
+  virtual double CandidateScore(int candidate) const  { return 0; }
 
   // set action from candidate policy. only called from the planning thread.
   virtual void ActionFromCandidatePolicy(double* action, int candidate,
-                                         const double* state, double time) = 0;
+                                         const double* state, double time)  {}
 
   // sets the nth candidate to the active policy.
-  virtual void CopyCandidateToPolicy(int candidate) = 0;
+  virtual void CopyCandidateToPolicy(int candidate)  {}
 };
 
 }  // namespace mjpc

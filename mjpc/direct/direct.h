@@ -276,7 +276,7 @@ class Direct {
                            const double* search_direction, double step_size);
 
   // reset timers
-  void ResetTimers();
+  virtual void ResetTimers();
 
   // print optimize status
   void PrintOptimize();

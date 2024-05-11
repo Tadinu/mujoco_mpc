@@ -13,9 +13,9 @@ rm -rf $DEST_INCL_DIR/mjpc/grpc
 DEST_LIB_DIR="$DEST_RELEASE_DIR/lib/"
 rm -rf $DEST_LIB_DIR
 mkdir -p $DEST_LIB_DIR
-cp -f build/lib/libmjpc.a $DEST_LIB_DIR
-cp -f build/lib/liblqr.a $DEST_LIB_DIR
-cp -f build/lib/libthreadpool.a $DEST_LIB_DIR
+cp -f build/lib/libmjpc.so $DEST_LIB_DIR
+cp -f build/lib/liblqr.so $DEST_LIB_DIR
+cp -f build/lib/libthreadpool.so $DEST_LIB_DIR
 #cp -f build/lib/libccd.a $DEST_LIB_DIR 
 ls -al $DEST_LIB_DIR
 
@@ -32,7 +32,7 @@ find absl -name '*.h' -exec cp --parents \{\} /$ABSEIL_DEST_INCL_DIR \;
 find absl -name '*.inc' -exec cp --parents \{\} /$ABSEIL_DEST_INCL_DIR \;
 popd
 pushd build/lib
-find . -name 'libabsl*.a' -exec cp --parents \{\} /$ABSEIL_DEST_LIB_DIR \;
+find . -name 'libabsl*.so' -exec cp --parents \{\} /$ABSEIL_DEST_LIB_DIR \;
 find . -name 'libabsl*.so' -exec cp --parents \{\} /$ABSEIL_DEST_LIB_DIR \;
 #find . -name 'libabsl*.so.*' -exec cp --parents \{\} /$ABSEIL_DEST_LIB_DIR \;
 popd

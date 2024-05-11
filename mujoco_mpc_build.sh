@@ -14,7 +14,8 @@ cmake .. -G Ninja \
 		 -DCMAKE_CXX_FLAGS:STRING="-stdlib=libc++" \
 		 -DCMAKE_EXE_LINKER_FLAGS:STRING="-Wl,--no-as-needed -stdlib=libc++" \
 		 -DCMAKE_BUILD_TYPE:STRING=Release \
-		 -DMJPC_BUILD_GRPC_SERVICE:BOOL=ON
+		 -DBUILD_TESTING:BOOL=OFF \
+		 -DMJPC_BUILD_GRPC_SERVICE:BOOL=OFF
 cmake --build . -j8 --config=Release
 cmake --install .
 popd

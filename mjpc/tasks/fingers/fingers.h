@@ -17,21 +17,52 @@
 
 #include <memory>
 #include <string>
+#include <absl/random/random.h>
 #include <mujoco/mujoco.h>
 #include "mjpc/task.h"
+#include "mjpc/utilities.h"
 
 namespace mjpc {
 class Fingers : public Task {
  public:
-  std::string Name() const override;
-  std::string XmlPath() const override;
-  class ResidualFn : public mjpc::BaseResidualFn {
-   public:
-    explicit ResidualFn(const Fingers* task) : mjpc::BaseResidualFn(task) {}
-    void Residual(const mjModel* model, const mjData* data,
-                  double* residual) const override;
-  };
   Fingers() : residual_(this) {}
+  inline std::string Name() const override {
+    return GetModelPath("fingers/task.xml");
+  }
+  inline std::string XmlPath() const override { return "FreeFingers"; }
+  
+  class ResidualFn : public BaseResidualFn {
+   public:
+    explicit ResidualFn(const Fingers* task) : BaseResidualFn(task) {}
+    void Residual(const mjModel* model, const mjData* data,
+                  double* residual) const override {
+      int counter = 0;
+
+      // reach
+      double* finger_a = SensorByName(model, data, "finger_a");
+      double* box = SensorByName(model, data, "object");
+      mju_sub3(residual + counter, finger_a, box);
+      counter += 3;
+      double* finger_b = SensorByName(model, data, "finger_b");
+      mju_sub3(residual + counter, finger_b, box);
+      counter += 3;
+
+      // bring
+      for (int i=0; i < 3; i++) {
+        double* object = SensorByName(model, data, std::to_string(i).c_str());
+        double* target = SensorByName(model, data,
+                                            (std::to_string(i) + "t").c_str());
+        residual[counter++] = mju_dist3(object, target);
+      }
+
+      // control
+      for (int i=0; i < model->nu; i++) {
+        residual[counter++] = data->ctrl[i];
+      }
+
+      CheckSensorDim(model, counter);
+    }
+  };
 
  protected:
   std::unique_ptr<mjpc::ResidualFn> ResidualLocked() const override {

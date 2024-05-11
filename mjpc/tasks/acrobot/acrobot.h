@@ -18,12 +18,17 @@
 #include <string>
 #include <mujoco/mujoco.h>
 #include "mjpc/task.h"
+#include "mjpc/utilities.h"
 
 namespace mjpc {
 class Acrobot : public Task {
  public:
-  std::string Name() const override;
-  std::string XmlPath() const override;
+  virtual ~Acrobot() {}
+
+  inline std::string XmlPath() const override {
+    return GetModelPath("acrobot/task.xml");
+  }
+  inline std::string Name() const override { return "Acrobot"; }
 
   class ResidualFn : public BaseResidualFn {
    public:
@@ -34,8 +39,21 @@ class Acrobot : public Task {
     //     Residual (2-3): Joint velocity
     //     Residual (4):   Control
     // -----------------------------------------------
-    void Residual(const mjModel* model, const mjData* data,
-                  double* residual) const override;
+    inline void Residual(const mjModel* model, const mjData* data,
+                         double* residual) const override {
+      // ---------- Residual (0-1) ----------
+      mjtNum* goal_xpos = &data->site_xpos[3 * 0];
+      mjtNum* tip_xpos = &data->site_xpos[3 * 1];
+      residual[0] = goal_xpos[2] - tip_xpos[2];
+      residual[1] = goal_xpos[0] - tip_xpos[0];
+
+      // ---------- Residual (2-3) ----------
+      residual[2] = data->qvel[0];
+      residual[3] = data->qvel[1];
+
+      // ---------- Residual (4) ----------
+      residual[4] = data->ctrl[0];
+    }
   };
 
   Acrobot() : residual_(this) {}

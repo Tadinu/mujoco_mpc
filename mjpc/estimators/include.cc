@@ -12,32 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <memory>
-#include <vector>
-#include "mjpc/estimators/batch.h"
-#include "mjpc/estimators/estimator.h"
 #include "mjpc/estimators/include.h"
-
 namespace mjpc {
-
-const char kEstimatorNames[] =
-    "Ground Truth\n"
-    "Kalman\n"
-    "Unscented\n"
-    "Batch";
-
-// load all available estimators
-std::vector<std::unique_ptr<mjpc::Estimator>> LoadEstimators() {
-  // planners
-  std::vector<std::unique_ptr<mjpc::Estimator>> estimators;
-
-  // add estimators
-  estimators.emplace_back(new mjpc::GroundTruth());  // ground truth state
-  estimators.emplace_back(new mjpc::Kalman());       // extended Kalman filter
-  estimators.emplace_back(new mjpc::Unscented());    // unscented Kalman filter
-  estimators.emplace_back(new mjpc::Batch());       // recursive batch filter
-
-  return estimators;
-}
 
 }  // namespace mjpc

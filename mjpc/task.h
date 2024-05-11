@@ -20,8 +20,10 @@
 #include <string>
 #include <vector>
 
+#include <absl/strings/match.h>
 #include <mujoco/mujoco.h>
 #include "mjpc/norm.h"
+#include "mjpc/utilities.h"
 
 namespace mjpc {
 
@@ -33,32 +35,95 @@ inline constexpr int kMaxCostTerms = 128;
 
 class Task;
 
+inline void MissingParameterError(const mjModel* m, int sensorid) {
+  mju_error(
+      "Cost construction from XML: Missing parameter value."
+      " sensor ID = %d (%s)",
+      sensorid, m->names + m->name_sensoradr[sensorid]);
+}
+
 // abstract class for a residual function
 class ResidualFn {
  public:
-  virtual ~ResidualFn() = default;
+  virtual ~ResidualFn(){}
 
   virtual void Residual(const mjModel* model, const mjData* data,
-                        double* residual) const = 0;
+                        double* residual) const{}
   virtual void CostTerms(double* terms, const double* residual,
-                         bool weighted) const = 0;
-  virtual double CostValue(const double* residual) const = 0;
+                         bool weighted) const{}
+  virtual double CostValue(const double* residual) const {
+    return 0;
+  }
 
   // copies weights and parameters from the Task instance. This should be
   // called from the Task class.
-  virtual void Update() = 0;
+  virtual void Update(){}
 };
 
 // base implementation for ResidualFn implementations
 class BaseResidualFn : public ResidualFn {
  public:
-  explicit BaseResidualFn(const Task* task);
-  virtual ~BaseResidualFn() = default;
+  explicit BaseResidualFn(const Task* task) : task_(task) {
+    Update();
+  }
+  virtual ~BaseResidualFn(){}
 
+  // compute weighted cost terms
   void CostTerms(double* terms, const double* residual,
-                 bool weighted) const override;
-  double CostValue(const double* residual) const override;
-  void Update() override;
+                 bool weighted) const override {
+    int f_shift = 0;
+    int p_shift = 0;
+    for (int k = 0; k < num_term_; k++) {
+      // running cost
+      terms[k] =
+          (weighted ? weight_[k] : 1) * Norm(nullptr, nullptr, residual + f_shift,
+                                            DataAt(norm_parameter_, p_shift),
+                                            dim_norm_residual_[k], norm_[k]);
+
+      // shift residual
+      f_shift += dim_norm_residual_[k];
+
+      // shift parameters
+      p_shift += num_norm_parameter_[k];
+    }
+  }
+
+  // compute weighted cost from terms
+  double CostValue(const double* residual) const override {
+    // cost terms
+    double terms[kMaxCostTerms];
+
+    // evaluate
+    this->CostTerms(terms, residual, /*weighted=*/true);
+
+    // summation of cost terms
+    double cost = 0.0;
+    for (int i = 0; i < num_term_; i++) {
+      cost += terms[i];
+    }
+
+    // exponential risk transformation
+    if (mju_abs(risk_) < kRiskNeutralTolerance) {
+      return cost;
+    } else {
+      return (mju_exp(risk_ * cost) - 1.0) / risk_;
+    }
+  }
+
+  void Update() override {
+#if 0
+    num_residual_ = task_->num_residual;
+    num_term_ = task_->num_term;
+    num_trace_ = task_->num_trace;
+    dim_norm_residual_ = task_->dim_norm_residual;
+    num_norm_parameter_ = task_->num_norm_parameter;
+    norm_ = task_->norm;
+    weight_ = task_->weight;
+    norm_parameter_ = task_->norm_parameter;
+    risk_ = task_->risk;
+    parameters_ = task_->parameters;
+#endif
+  }
 
  protected:
   int num_residual_;
@@ -78,17 +143,23 @@ class BaseResidualFn : public ResidualFn {
 class Task {
  public:
   // constructor
-  Task() = default;
-  virtual ~Task() = default;
+  Task(){}
+  virtual ~Task(){}
 
   // delegates to ResidualLocked, while holding a lock
-  std::unique_ptr<ResidualFn> Residual() const;
+  inline std::unique_ptr<ResidualFn> Residual() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return ResidualLocked();
+  }
 
   // ----- methods ----- //
   // calls Residual on the pointer returned from InternalResidual(), while
   // holding a lock
-  void Residual(const mjModel* model, const mjData* data,
-                double* residual) const;
+  inline void Residual(const mjModel* model, const mjData* data,
+                                double* residual) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    InternalResidual()->Residual(model, data, residual);
+  }
 
   // Must be called whenever parameters or weights change outside Transition or
   // Reset, so that calls to Residual use the new parameters.
@@ -104,7 +175,105 @@ class Task {
 
   // get information from model
   // calls ResetLocked and InternalResidual()->Update() while holding a lock
-  void Reset(const mjModel* model);
+  void Reset(const mjModel* model) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    // ----- defaults ----- //
+
+    // mode
+    mode = 0;
+
+    // risk value
+    risk = GetNumberOrDefault(0.0, model, "task_risk");
+
+    // set residual parameters
+    this->SetFeatureParameters(model);
+
+    // ----- set costs ----- //
+    num_term = 0;
+    num_residual = 0;
+    num_trace = 0;
+
+    // allocate memory
+    dim_norm_residual.resize(kMaxCostTerms);
+    num_norm_parameter.resize(kMaxCostTerms);
+    norm.resize(kMaxCostTerms);
+    weight.resize(kMaxCostTerms);
+    norm_parameter.resize(2 * kMaxCostTerms);
+
+    // check user sensor is first
+    if (!(model->sensor_type[0] == mjSENS_USER)) {
+      mju_error(
+          "Cost construction from XML: User sensors specifying residuals must be "
+          "specified first and sequentially\n");
+    }
+
+    for (int i = 1; true; i++) {
+      if (i == model->nsensor || model->sensor_type[i] != mjSENS_USER) {
+        num_term = i;
+        break;
+      }
+    }
+    if (num_term > kMaxCostTerms) {
+      mju_error(
+          "Number of cost terms exceeds maximum. Either: 1) reduce number of "
+          "terms 2) increase kMaxCostTerms");
+    }
+
+    // get number of traces
+    for (int i = 0; i < model->nsensor; i++) {
+      if (std::strncmp(model->names + model->name_sensoradr[i], "trace",
+                      5) == 0) {
+        num_trace += 1;
+      }
+    }
+    if (num_trace > kMaxTraces) {
+      mju_error("Number of traces should be less than 100\n");
+    }
+
+    // loop over sensors
+    int parameter_shift = 0;
+    for (int i = 0; i < num_term; i++) {
+      // residual dimension
+      num_residual += model->sensor_dim[i];
+      dim_norm_residual[i] = (int)model->sensor_dim[i];
+
+      // user data: [norm, weight, weight_lower, weight_upper, parameters...]
+      double* s = model->sensor_user + i * model->nuser_sensor;
+
+      // check number of parameters
+      int norm_parameter_dimension = NormParameterDimension(s[0]);
+      if (4 + norm_parameter_dimension > model->nuser_sensor) {
+        MissingParameterError(model, i);
+        return;
+      }
+      for (int j = 0; j < norm_parameter_dimension; j++) {
+        if (s[4 + j] <= 0.0) {
+          MissingParameterError(model, i);
+          return;
+        }
+      }
+      norm[i] = (NormType)s[0];
+
+      // check Null norm
+      if (norm[i] == -1 && dim_norm_residual[i] != 1) {
+        MissingParameterError(model, i);
+        return;
+      }
+
+      weight[i] = s[1];
+      num_norm_parameter[i] = norm_parameter_dimension;
+      mju_copy(DataAt(norm_parameter, parameter_shift), s + 4,
+              num_norm_parameter[i]);
+      parameter_shift += num_norm_parameter[i];
+    }
+
+    // set residual parameters
+    this->SetFeatureParameters(model);
+
+    ResetLocked(model);
+    InternalResidual()->Update();
+  }
 
   // calls CostTerms on the pointer returned from InternalResidual(), while
   // holding a lock
@@ -121,8 +290,8 @@ class Task {
   virtual void ModifyScene(const mjModel* model, const mjData* data,
                            mjvScene* scene) const {}
 
-  virtual std::string Name() const = 0;
-  virtual std::string XmlPath() const = 0;
+  virtual std::string Name() const { return std::string();};
+  virtual std::string XmlPath() const {return std::string();};
 
   // mode
   int mode;
@@ -148,13 +317,13 @@ class Task {
  protected:
   // returns a pointer to the ResidualFn instance that's used for physics
   // stepping and plotting, and is internal to the class
-  virtual BaseResidualFn* InternalResidual() = 0;
+  virtual BaseResidualFn* InternalResidual() { return nullptr;}
   const BaseResidualFn* InternalResidual() const {
     return const_cast<Task*>(this)->InternalResidual();
   }
   // returns an object which can compute the residual function. the function
   // can assume that a lock on mutex_ is held when it's called
-  virtual std::unique_ptr<ResidualFn> ResidualLocked() const = 0;
+  virtual std::unique_ptr<ResidualFn> ResidualLocked() const { return nullptr;}
   // implementation of Task::Transition() which can assume a lock is held.
   // in some cases the transition logic requires calling mj_forward (e.g., for
   // measuring contact forces), which will call the sensor callback, which calls
@@ -168,7 +337,34 @@ class Task {
 
  private:
   // initial residual parameters from model
-  void SetFeatureParameters(const mjModel* model);
+  void SetFeatureParameters(const mjModel* model) {
+    // set counter
+    int num_parameters = 0;
+
+    // search custom numeric in model for "residual"
+    for (int i = 0; i < model->nnumeric; i++) {
+      if (absl::StartsWith(model->names + model->name_numericadr[i],
+                          "residual_")) {
+        num_parameters += 1;
+      }
+    }
+
+    // allocate memory
+    parameters.resize(num_parameters);
+
+    // set values
+    int shift = 0;
+    for (int i = 0; i < model->nnumeric; i++) {
+      if (absl::StartsWith(model->names + model->name_numericadr[i],
+                          "residual_select_")) {
+        parameters[shift++] = DefaultResidualSelection(model, i);
+      } else if (absl::StartsWith(model->names + model->name_numericadr[i],
+                                  "residual_")) {
+        parameters[shift++] = model->numeric_data[model->numeric_adr[i]];
+      }
+    }
+  }
+
 };
 
 }  // namespace mjpc

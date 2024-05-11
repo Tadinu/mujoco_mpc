@@ -35,7 +35,36 @@ enum VisualGroup {
 
 // various IDs and values extracted from the XML model at Reset time
 struct ModelValues {
-  static ModelValues FromModel(const mjModel* model);
+  static ModelValues FromModel(const mjModel* model) {
+    ModelValues values;
+    values.robot_body_id = mj_name2id(model, mjOBJ_BODY, "link0");
+    values.gripper_site_id = mj_name2id(model, mjOBJ_SITE, "pinch");
+
+    for (const char* name :
+        {"right_pad1", "right_pad2", "left_pad1", "left_pad2"}) {
+      values.gripper_pad_geoms.push_back(mj_name2id(model, mjOBJ_GEOM, name));
+    }
+    values.left_finger_pad_geom_id =
+        mj_name2id(model, mjOBJ_GEOM, "left_pad2");
+    values.right_finger_pad_geom_id =
+        mj_name2id(model, mjOBJ_GEOM, "right_pad2");
+
+    values.gripper_actuator = mj_name2id(model, mjOBJ_ACTUATOR, "fingers");
+    values.open_gripper_ctrl =
+        model->actuator_ctrlrange[2 * values.gripper_actuator];
+    values.closed_gripper_ctrl =
+        model->actuator_ctrlrange[2 * values.gripper_actuator + 1];
+    values.gripper_ctrl_range =
+        values.closed_gripper_ctrl - values.open_gripper_ctrl;
+
+    int target_mocap_body_id = mj_name2id(model, mjOBJ_BODY, "target_mocap");
+    if (target_mocap_body_id != -1) {
+      // this mocap body isn't present in all manipulation models
+      values.target_mocap_body = model->body_mocapid[target_mocap_body_id];
+    }
+    return values;
+  }
+
 
   int robot_body_id = -1;
   int gripper_site_id = -1;
@@ -82,13 +111,34 @@ double GraspQualityCost(const mjModel* m, const mjData* d,
 
 // returns a cost term that is high if there are large forces between the robot
 // and bodies that aren't object_body_id
-double CarefulCost(const mjModel* model, const mjData* data,
-                   const ModelValues& model_vals, int object_body_id);
+inline double CarefulCost(const mjModel* model, const mjData* data,
+                          const ModelValues& model_vals, int object_body_id) {
+  double result = 0;
+  for (int i = 0; i < data->ncon; i++) {
+    int b1 = model->geom_bodyid[data->contact[i].geom1];
+    int b2 = model->geom_bodyid[data->contact[i].geom2];
+    int r1 = model->body_rootid[b1];
+    int r2 = model->body_rootid[b2];
+    if (r1 == model_vals.robot_body_id || r2 == model_vals.robot_body_id) {
+      // contact with robot
+      if (r2 == object_body_id || r1 == object_body_id) {
+        continue;  // contact with the object is okay
+      }
+      mjtNum force[6];
+      mj_contactForce(model, data, i, force);
+      result += mju_norm3(force);
+    }
+  }
+  return mju_log10(result + 1);
+}
 
 // finds a position between the gripper pads and writes it to pos
-void ComputeRobotiqHandPos(const mjModel* model, const mjData* data,
-                           const ModelValues& model_vals, double* pos);
-
+inline void ComputeRobotiqHandPos(const mjModel* model, const mjData* data,
+                                  const ModelValues& model_vals, double* pos) {
+  for (int geom_id : model_vals.gripper_pad_geoms) {
+    mju_addToScl3(pos, data->geom_xpos + 3 * geom_id, 0.25);
+  }
+}
 }  // namespace mjpc::manipulation
 
 #endif  // MJPC_MJPC_TASKS_MANIPULATION_COMMON_H_

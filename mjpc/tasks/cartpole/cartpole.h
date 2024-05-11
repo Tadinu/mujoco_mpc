@@ -15,16 +15,21 @@
 #ifndef MJPC_TASKS_CARTPOLE_CARTPOLE_H_
 #define MJPC_TASKS_CARTPOLE_CARTPOLE_H_
 
+#include <cmath>
 #include <string>
 
 #include <mujoco/mujoco.h>
 #include "mjpc/task.h"
+#include "mjpc/utilities.h"
 
 namespace mjpc {
 class Cartpole : public Task {
  public:
-  std::string Name() const override;
-  std::string XmlPath() const override;
+  Cartpole() : residual_(this) {}
+  inline std::string Name() const override {
+    return GetModelPath("cartpole/task.xml");
+  }
+  inline std::string XmlPath() const override { return "Cartpole"; }
 
   class ResidualFn : public BaseResidualFn {
    public:
@@ -37,10 +42,20 @@ class Cartpole : public Task {
     //     Residual (3): control
     // ------------------------------------------
     void Residual(const mjModel* model, const mjData* data,
-                  double* residual) const override;
-  };
+                  double* residual) const override {
+      // ---------- Vertical ----------
+      residual[0] = std::cos(data->qpos[1]) - 1;
 
-  Cartpole() : residual_(this) {}
+      // ---------- Centered ----------
+      residual[1] = data->qpos[0] - parameters_[0];
+
+      // ---------- Velocity ----------
+      residual[2] = data->qvel[1];
+
+      // ---------- Control ----------
+      residual[3] = data->ctrl[0];
+    }
+  };
 
  protected:
   std::unique_ptr<mjpc::ResidualFn> ResidualLocked() const override {
