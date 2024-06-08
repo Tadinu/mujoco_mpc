@@ -26,6 +26,28 @@ std::string Particle::XmlPath() const {
 }
 std::string Particle::Name() const { return "Particle"; }
 
+bool Particle::checkCollision(double pos[]) const {
+  //mjs_getDefault(mjs_findBody(model_, "pointmass")->element);
+  //mjs_getDefault(mjs_findBody(model_, "obstacle_1")->element);
+  int pointmass = mj_name2id(model_, mjOBJ_BODY, "pointmass");
+  int obstacle_1 = mj_name2id(model_, mjOBJ_BODY, "obstacle_1");
+
+  // loop over contacts
+  int ncon = data_->ncon;
+  for (int i = 0; i < ncon; ++i) {
+    const mjContact* con = data_->contact + i;
+    int bb[2] = {model_->geom_bodyid[con->geom[0]],
+                 model_->geom_bodyid[con->geom[1]]};
+    for (int j = 0; j < 2; ++j) {
+      if ((con->geom[j] == obstacle_1)
+          && (bb[1-j] == pointmass)) {
+          return true;
+        }
+    }
+  }
+  return false;
+}
+
 // -------- Residuals for particle task -------
 //   Number of residuals: 3
 //     Residual (0): position - goal_position

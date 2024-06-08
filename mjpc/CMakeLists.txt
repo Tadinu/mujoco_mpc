@@ -14,6 +14,9 @@
 
 set(MJPC_INSTALL_PUBLIC 0)
 
+find_package(Eigen3 REQUIRED)
+include_directories(SYSTEM ${EIGEN3_INCLUDE_DIR})
+
 add_library(threadpool STATIC)
 target_sources(
   threadpool
@@ -74,6 +77,21 @@ set(LIB_MJPC_HEADERS
     estimators/batch.h
     planners/ilqs/planner.h
     planners/ilqg/settings.h
+    planners/rmp/include/core/rmp_space.h
+    planners/rmp/include/core/rmp_state.h
+    planners/rmp/include/core/rmp_base_policy.h
+    planners/rmp/include/core/rmp_policy_value.h
+    planners/rmp/include/core/rmp_base_geometry.h
+    planners/rmp/include/planner/rmp_planner.h
+    planners/rmp/include/planner/rmp_parameters.h
+    planners/rmp/include/planner/rmp_trajectory.h
+    planners/rmp/include/planner/rmp_base_planner.h
+    planners/rmp/include/geometry/rmp_linear_geometry.h
+    planners/rmp/include/geometry/rmp_rotated_geometry_3d.h
+    planners/rmp/include/geometry/rmp_cylindrical_geometry.h
+    planners/rmp/include/policies/rmp_simple_target_policy.h
+    planners/rmp/include/eval/rmp_trapezoidal_integrator.h
+    planners/rmp/include/util/rmp_vector_range.h
     estimators/estimator.h
     estimators/unscented.h
     estimators/kalman.h
@@ -131,6 +149,8 @@ add_library(
   planners/ilqg/planner.cc
   planners/ilqg/policy.cc
   planners/ilqs/planner.cc
+  planners/rmp/src/rmp_planner.cc
+  planners/rmp/src/rmp_trajectory.cc
   estimators/batch.cc
   estimators/include.cc
   estimators/include.h
@@ -157,6 +177,7 @@ target_link_libraries(
   absl::span
   glfw
   lodepng
+  Eigen3::Eigen
   mujoco::mujoco
   threadpool
   Threads::Threads
