@@ -47,6 +47,10 @@ class Planner {
   // set state
   virtual void SetState(const State& state) = 0;
 
+  // set start/goal
+  virtual void SetStartGoal(const double* start, const double* goal) {}
+  virtual void SetStartVel(const double* start_vel) {}
+
   // optimize nominal policy
   virtual void OptimizePolicy(int horizon, ThreadPool& pool) = 0;
 
