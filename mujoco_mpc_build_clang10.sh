@@ -1,6 +1,6 @@
 #https://github.com/google-deepmind/mujoco_mpc/blob/main/.github/workflows/build.yml
 
-# Ubuntu 20.04: clang-12
+# Ubuntu 20.04: clang-10
 # Ubuntu 22.04: clang-11/12/13
 #sudo apt update
 #sudo apt install libc++-dev
@@ -9,13 +9,13 @@ mkdir -p build
 pushd build
 
 cmake .. -G Ninja \
-         -DCMAKE_C_COMPILER:STRING=clang-15 -DCMAKE_CXX_COMPILER:STRING=clang++-15 -DMUJOCO_HARDEN:BOOL=ON \
+         -DCMAKE_C_COMPILER:STRING=clang-10 -DCMAKE_CXX_COMPILER:STRING=clang++-10 -DMUJOCO_HARDEN:BOOL=ON \
 		 -DCMAKE_INSTALL_PREFIX=../release \
 		 -DCMAKE_CXX_FLAGS:STRING="-stdlib=libc++" \
 		 -DCMAKE_EXE_LINKER_FLAGS:STRING="-Wl,--no-as-needed -stdlib=libc++" \
 		 -DCMAKE_BUILD_TYPE:STRING=Release \
-		 -DMJPC_BUILD_GRPC_SERVICE:BOOL=ON
-cmake --build . -j8 --config=Release
+		 -DMJPC_BUILD_GRPC_SERVICE:BOOL=OFF
+cmake --build . -j8
 cmake --install .
 popd
 
