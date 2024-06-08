@@ -281,17 +281,22 @@ void Agent::PlanIteration(ThreadPool* pool) {
 
   // plan
   if (!allocate_enabled) {
+    auto& planner = ActivePlanner();
+    auto* task = ActiveTask();
+
     // set state
-    ActivePlanner().SetState(state);
+    planner.SetState(state);
+    planner.SetStartGoal(task->GetStartPos(), task->GetGoalPos());
 
     // copy the task's residual function parameters into a new object, which
     // remains constant during planning and doesn't require locking from the
     // rollout threads
-    residual_fn_ = ActiveTask()->Residual();
+    residual_fn_ = task->Residual();
 
     if (plan_enabled) {
       // planner policy
-      ActivePlanner().OptimizePolicy(steps_, *pool);
+      planner.OptimizePolicy(steps_, *pool);
+      planner.SetStartVel(task->GetStartVel(timestep_));
 
       // compute time
       agent_compute_time_ =
@@ -303,7 +308,7 @@ void Agent::PlanIteration(ThreadPool* pool) {
       count_ += 1;
     } else {
       // rollout nominal policy
-      ActivePlanner().NominalTrajectory(steps_, *pool);
+      planner.NominalTrajectory(steps_, *pool);
 
       // set timers
       agent_compute_time_ = 0.0;

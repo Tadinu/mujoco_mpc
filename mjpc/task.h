@@ -123,6 +123,14 @@ class Task {
 
   virtual std::string Name() const = 0;
   virtual std::string XmlPath() const = 0;
+  virtual bool checkCollision(double pos[]) const {return false;}
+
+  // model
+  mjModel* model_ = nullptr;
+  mjData* data_ = nullptr;
+  virtual const double* GetStartPos() { return nullptr;}
+  virtual const double* GetStartVel(double time) { return nullptr;}
+  virtual const double* GetGoalPos() { return nullptr; }
 
   // mode
   int mode;

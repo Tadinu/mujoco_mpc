@@ -25,6 +25,35 @@ class Particle : public Task {
  public:
   std::string Name() const override;
   std::string XmlPath() const override;
+  const double* GetStartPos() override {
+   if (model_) {
+    int start = mj_name2id(model_, mjOBJ_BODY, "pointmass");
+    return &data_->mocap_pos[model_->body_mocapid[start]];
+    //return &data_->xpos[start];
+   }
+   return nullptr;
+  }
+  const double* GetStartVel(double time) override {
+   if (model_) {
+    static double vel[3] = {0};
+    static double prev_pos[3] = {0};
+    const double* pos = GetStartPos();
+    vel[0] = (pos[0] - prev_pos[0])/time;
+    vel[1] = (pos[1] - prev_pos[1])/time;
+    vel[2] = (pos[2] - prev_pos[2])/time;
+    memcpy(prev_pos, pos, sizeof(double) * 3);
+    return &vel[0];
+   }
+   return nullptr;
+  }
+  const double* GetGoalPos() override {
+   if (model_) {
+    int goal = mj_name2id(model_, mjOBJ_BODY, "goal");
+    return &data_->mocap_pos[model_->body_mocapid[goal]];
+   }
+   return nullptr;
+  }
+  bool checkCollision(double pos[]) const override;
   class ResidualFn : public mjpc::BaseResidualFn {
    public:
     explicit ResidualFn(const Particle* task) : mjpc::BaseResidualFn(task) {}
