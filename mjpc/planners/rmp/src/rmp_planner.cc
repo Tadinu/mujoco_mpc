@@ -4,22 +4,20 @@
 #include "mjpc/planners/rmp/include/core/rmp_base_policy.h"
 #include "mjpc/planners/rmp/include/eval/rmp_trapezoidal_integrator.h"
 #include "mjpc/planners/rmp/include/geometry/rmp_linear_geometry.h"
-
 #include "mjpc/planners/rmp/include/planner/rmp_trajectory.h"
 #include "mjpc/utilities.h"
 
 /**
- * @tparam Space
+ * @tparam TSpace
  */
-template <class Space>
-void rmpcpp::RMPPlanner<Space>::integrate() {
+template <class TSpace>
+void rmpcpp::RMPPlanner<TSpace>::integrate() {
   if (!trajectory_) {
     return;
   }  // ignore if trajectory is not initalized.
 
-  LinearGeometry<Space::dim> geometry;
-  TrapezoidalIntegrator<PolicyBase<Space>, LinearGeometry<Space::dim>>
-      integrator;
+  LinearGeometry<TSpace::dim> geometry;
+  TrapezoidalIntegrator<RMPPolicyBase<TSpace>, LinearGeometry<TSpace::dim>> integrator;
 
   // start from end of current trajectory (which should always be initialized
   // when this function is called)
@@ -33,7 +31,7 @@ void rmpcpp::RMPPlanner<Space>::integrate() {
     // evaluate policies
     auto policies = this->getPolicies();
     /** Convert shared pointers to normal pointers for integration step */
-    std::vector<PolicyBase<Space> *> policiesRaw;
+    std::vector<RMPPolicyBase<TSpace>*> policiesRaw;
     policiesRaw.reserve(policies.size());
     std::transform(policies.cbegin(), policies.cend(),
                    std::back_inserter(policiesRaw),
@@ -70,12 +68,12 @@ void rmpcpp::RMPPlanner<Space>::integrate() {
 
 /**
  * Start planning run
- * @tparam Space
+ * @tparam TSpace
  * @param start
  */
-template <class Space>
-void rmpcpp::RMPPlanner<Space>::plan(const State<Space::dim> &start,
-                                     const Vector &goal) {
+template <class TSpace>
+void rmpcpp::RMPPlanner<TSpace>::plan(const State<TSpace::dim> &start,
+                                      const Vector &goal) {
   // Reset states
   this->collided_ = false;
   this->goal_reached_ = false;
@@ -90,8 +88,8 @@ void rmpcpp::RMPPlanner<Space>::plan(const State<Space::dim> &start,
   this->integrate();
 }
 
-template <class Space>
-void rmpcpp::RMPPlanner<Space>::Traces(mjvScene* scn) {
+template <class TSpace>
+void rmpcpp::RMPPlanner<TSpace>::Traces(mjvScene* scn) {
   // sample color
   float color[4];
   color[0] = 0.0;
