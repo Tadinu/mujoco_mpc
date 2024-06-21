@@ -85,6 +85,8 @@ class GeometryBase {
      * @param policy Evaluated policy
      */
     PolicyQ pull(const PolicyX policy) {
+      // RMP: f: instantaneous acceleration, A: Riemannian metric as the weight of the policy
+      // https://arxiv.org/pdf/1801.02854 - Eq 10, 11
       MatrixQ A = J_.transpose() * policy.A_ * J_;
       VectorQ f = PolicyX::pinv(A) * J_.transpose() * policy.A_ * policy.f_;
       return {f, A};
@@ -95,6 +97,7 @@ class GeometryBase {
      * @param policy Evaluated Policy
      */
     PolicyX push(const PolicyQ policy) {
+      // https://arxiv.org/pdf/1801.02854 - Eq 12
       // todo(mpantic): Check if this correct. I think its currently not used.
       auto J_pinv = J_.completeOrthogonalDecomposition().pseudoInverse();
       MatrixX A = J_pinv.transpose() * policy.A_ * J_pinv;

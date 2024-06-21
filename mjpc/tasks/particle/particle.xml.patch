@@ -13,24 +13,42 @@ diff --git a/particle_modified.xml b/particle_modified.xml
      <flag contact="disable"/>
    </option>
  
-@@ -13,9 +9,24 @@
+@@ -13,9 +9,42 @@
    </default>
  
    <worldbody>
 +    <body name="goal" mocap="true" pos="0.25 0 0.01" quat="1 0 0 0">
 +        <geom type="sphere" size=".01" contype="0" conaffinity="0" rgba="0 1 0 .5"/>
 +    </body>
++    <body name="obstacle_0" mocap="true" pos="-0.42 0 0.01" quat="1 0 0 0">
++        <geom type="sphere" name="obstacle_0" size=".01" rgba="1 0 0 .5"/>
++    </body>
 +    <body name="obstacle_1" mocap="true" pos="0.17 0 0.01" quat="1 0 0 0">
-+        <geom type="sphere" size=".01" contype="0" conaffinity="0" rgba="1 0 0 .5"/>
++        <geom type="sphere" name="obstacle_1" size=".01" rgba="1 0 0 .5"/>
 +    </body>
 +    <body name="obstacle_2" mocap="true" pos="0.1 0 0.01" quat="1 0 0 0">
-+        <geom type="sphere" size=".01" contype="0" conaffinity="0" rgba="1 0 0 .5"/>
++        <geom type="sphere" name="obstacle_2" size=".01" rgba="1 0 0 .5"/>
 +    </body>
 +    <body name="obstacle_3" mocap="true" pos="0.05 0 0.01" quat="1 0 0 0">
-+        <geom type="sphere" size=".01" contype="0" conaffinity="0" rgba="1 0 0 .5"/>
++        <geom type="sphere" name="obstacle_3" size=".01" rgba="1 0 0 .5"/>
 +    </body>
 +    <body name="obstacle_4" mocap="true" pos="-0.07 0 0.01" quat="1 0 0 0">
-+        <geom type="sphere" size=".01" contype="0" conaffinity="0" rgba="1 1 0 .5"/>
++        <geom type="sphere" name="obstacle_4" size=".01" rgba="1 0 0 .5"/>
++    </body>
++    <body name="obstacle_5" mocap="true" pos="-0.14 0 0.01" quat="1 0 0 0">
++      <geom type="sphere" name="obstacle_5" size=".01" rgba="1 0 0 .5"/>
++    </body>
++    <body name="obstacle_6" mocap="true" pos="-0.21 0 0.01" quat="1 0 0 0">
++      <geom type="sphere" name="obstacle_6" size=".01" rgba="1 0 0 .5"/>
++    </body>
++    <body name="obstacle_7" mocap="true" pos="-0.28 0 0.01" quat="1 0 0 0">
++      <geom type="sphere" name="obstacle_7" size=".01" rgba="1 0 0 .5"/>
++    </body>
++    <body name="obstacle_8" mocap="true" pos="-0.35 0 0.01" quat="1 0 0 0">
++      <geom type="sphere" name="obstacle_8" size=".01" rgba="1 0 0 .5"/>
++    </body>
++    <body name="obstacle_9" mocap="true" pos="-0.42 0 0.01" quat="1 0 0 0">
++      <geom type="sphere" name="obstacle_9" size=".01" rgba="1 0 0 .5"/>
 +    </body>
      <light name="light" pos="0 0 1"/>
      <camera name="fixed" pos="0 0 .75" quat="1 0 0 0"/>

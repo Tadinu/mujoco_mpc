@@ -113,7 +113,7 @@ void sensor(const mjModel* model, mjData* data, int stage) {
       if (sim->agent->IsPlanningModel(model)) {
         // the planning thread and rollout threads don't need
         // synchronization when using PlanningResidual.
-        const mjpc::ResidualFn* residual = sim->agent->PlanningResidual();
+        const mjpc::AbstractResidualFn* residual = sim->agent->PlanningResidual();
         residual->Residual(model, data, data->sensordata);
       } else {
         // this residual is used by the physics thread and the UI thread (for
@@ -417,6 +417,7 @@ MjpcApp::MjpcApp(std::vector<std::shared_ptr<mjpc::Task>> tasks, int task_id) {
   sim->filename = sim->agent->GetTaskXmlPath(sim->agent->gui_task_id);
   m = LoadModel(sim->agent.get(), *sim);
   if (m) d = mj_makeData(m);
+  sim->agent->SetState(d);
 
   // set home keyframe
   int home_id = mj_name2id(m, mjOBJ_KEY, "home");

@@ -60,7 +60,7 @@ class Rubik : public Task {
   };
 
  protected:
-  std::unique_ptr<mjpc::ResidualFn> ResidualLocked() const override {
+  std::unique_ptr<mjpc::AbstractResidualFn> ResidualLocked() const override {
     return std::make_unique<ResidualFn>(this, residual_.current_mode_,
                                         residual_.goal_index_);
   }

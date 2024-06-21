@@ -34,9 +34,9 @@ inline constexpr int kMaxCostTerms = 128;
 class Task;
 
 // abstract class for a residual function
-class ResidualFn {
+class AbstractResidualFn {
  public:
-  virtual ~ResidualFn() = default;
+  virtual ~AbstractResidualFn() = default;
 
   virtual void Residual(const mjModel* model, const mjData* data,
                         double* residual) const = 0;
@@ -50,7 +50,7 @@ class ResidualFn {
 };
 
 // base implementation for ResidualFn implementations
-class BaseResidualFn : public ResidualFn {
+class BaseResidualFn : public AbstractResidualFn {
  public:
   explicit BaseResidualFn(const Task* task);
   virtual ~BaseResidualFn() = default;
@@ -82,7 +82,7 @@ class Task {
   virtual ~Task() = default;
 
   // delegates to ResidualLocked, while holding a lock
-  std::unique_ptr<ResidualFn> Residual() const;
+  std::unique_ptr<AbstractResidualFn> Residual() const;
 
   // ----- methods ----- //
   // calls Residual on the pointer returned from InternalResidual(), while
@@ -128,9 +128,9 @@ class Task {
   // model
   mjModel* model_ = nullptr;
   mjData* data_ = nullptr;
-  virtual const double* GetStartPos() { return nullptr;}
-  virtual const double* GetStartVel(double time) { return nullptr;}
-  virtual const double* GetGoalPos() { return nullptr; }
+  virtual const double* GetStartPos() const { return nullptr;}
+  virtual const double* GetStartVel() const { return nullptr; }
+  virtual const double* GetGoalPos() const { return nullptr; }
 
   // mode
   int mode;
@@ -162,7 +162,7 @@ class Task {
   }
   // returns an object which can compute the residual function. the function
   // can assume that a lock on mutex_ is held when it's called
-  virtual std::unique_ptr<ResidualFn> ResidualLocked() const = 0;
+  virtual std::unique_ptr<AbstractResidualFn> ResidualLocked() const = 0;
   // implementation of Task::Transition() which can assume a lock is held.
   // in some cases the transition logic requires calling mj_forward (e.g., for
   // measuring contact forces), which will call the sensor callback, which calls
