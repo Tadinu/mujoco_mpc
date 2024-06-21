@@ -29,13 +29,13 @@ namespace rmpcpp {
  * \tparam n Dimensionality of geometry
  */
 template <class NormSpace>
-class SimpleTargetPolicy : public PolicyBase<NormSpace> {
+class SimpleTargetPolicy : public RMPPolicyBase<NormSpace> {
 
  public:
-  using Vector = typename PolicyBase<NormSpace>::Vector;
-  using Matrix = typename PolicyBase<NormSpace>::Matrix;
-  using PValue = typename PolicyBase<NormSpace>::PValue;
-  using PState = typename PolicyBase<NormSpace>::PState;
+  using Vector = typename RMPPolicyBase<NormSpace>::Vector;
+  using Matrix = typename RMPPolicyBase<NormSpace>::Matrix;
+  using PValue = typename RMPPolicyBase<NormSpace>::PValue;
+  using PState = typename RMPPolicyBase<NormSpace>::PState;
 
   /**
    * Sets up the policy.
