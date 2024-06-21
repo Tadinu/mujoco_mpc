@@ -42,7 +42,7 @@ class Bring : public Task {
   void ResetLocked(const mjModel* model) override;
 
  protected:
-  std::unique_ptr<mjpc::ResidualFn> ResidualLocked() const override {
+  std::unique_ptr<mjpc::AbstractResidualFn> ResidualLocked() const override {
     return std::make_unique<ResidualFn>(this, residual_.model_vals_);
   }
   ResidualFn* InternalResidual() override { return &residual_; }

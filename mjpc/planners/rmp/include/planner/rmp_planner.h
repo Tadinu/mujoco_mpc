@@ -53,10 +53,12 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
   }
 
   mjModel* model_ = nullptr;
+  mjData* data_ = nullptr;
   // initialize data and settings
   void Initialize(mjModel* model, const mjpc::Task& task) override {
     task_ = &task;
     model_ = model;
+    data_ = task_->data_;
 
     // dimensions
     dim_state = model->nq + model->nv + model->na;  // state dimension
@@ -92,10 +94,8 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
       this->setGoalPos({goal[0], goal[1], goal[2]});
     }
   }
-  void SetStartVel(const double* start_vel) override {
-    if(start_vel) {
-      this->setStartVel({start_vel[0], start_vel[1], start_vel[2]});
-    }
+  void SetStartVel(const double* vel) override {
+    this->setStartVel({vel[0], vel[1], vel[2]});
   }
 
   // optimize nominal policy
@@ -106,7 +106,6 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
     // plan
     Eigen::Vector3d startPos = this->getStartPos();
     Eigen::Vector3d goalPos = this->getGoalPos();
-
     State<TSpace::dim> startState(startPos, this->getStartVel());
 
     auto starttime = std::chrono::high_resolution_clock::now();
@@ -122,18 +121,39 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
   }
 
   // compute trajectory using nominal policy
-  void NominalTrajectory(int horizon, mjpc::ThreadPool& pool) override {}
+  void NominalTrajectory(int horizon, mjpc::ThreadPool& pool) override {
+    //auto nominal_policy = [](double* action, const double* state, double time) {
+    //};
+
+    // rollout nominal policy
+    //trajectory_->Rollout(nominal_policy, task_, model_,
+    //                     data_[mjpc::ThreadPool::WorkerId()].get(), state.data(),
+    //                     time, mocap.data(), userdata.data(), horizon);
+  }
 
   // set action from policy
   void ActionFromPolicy(double* action, const double* state,
                         double time, bool use_previous = false) override {
-    auto policy = std::static_pointer_cast<SimpleTargetPolicy<TSpace>>(default_target_policy2_);
-    Vector f = policy->alpha_ * policy->s(policy->space_.minus(this->getGoalPos(), this->getStartPos())) -
-               policy->beta_ * this->getStartVel();
-    action[0] = f[0]*time;
-    action[1] = f[1]*time;
-    // Clamp controls
-    mjpc::Clamp(action, model_->actuator_ctrlrange, model_->nu);
+    const auto currentPoint = static_cast<const rmpcpp::TrajectoryRMP<TSpace>*>(BestTrajectory())
+                                  ->current();
+    auto acceleration = currentPoint.acceleration;
+    auto vel = currentPoint.velocity;
+    auto pointmass_id = mj_name2id(model_, mjOBJ_BODY, "pointmass");
+    auto pointmass = model_->body_mass[pointmass_id];
+
+    double body_extent = mju_sqrt(model_->body_inertia[3*pointmass_id] / pointmass);
+    double inertia = 2/5*pointmass * pow(body_extent, 2);
+      //mjtNum I1 = model_->body_inertia[3*pointmass_id+0];
+      //mjtNum I2 = model_->body_inertia[3*pointmass_id+1];
+      //mjtNum I3 = model_->body_inertia[3*pointmass_id+2];
+
+      //mjtNum res[3];
+      //mju_cross(res, {vel[0], vel[1], vel[2]}, {I1, I2, I3});
+      action[0] = inertia * acceleration[0];
+      action[1] = inertia * acceleration[1];
+      //action[2] = Iyy * acceleration[2];
+      // Clamp controls
+      //mjpc::Clamp(action, model_->actuator_ctrlrange, model_->nu);
   }
 
   // return trajectory with best total return, or nullptr if no planning
@@ -169,7 +189,7 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
 };
 
 // explicit instantation
-template class RMPPlanner<Space<3>>;
+template class RMPPlanner<TSpace<3>>;
 template class RMPPlanner<CylindricalSpace>;
 }  // namespace rmpcpp
 

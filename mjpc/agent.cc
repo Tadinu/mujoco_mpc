@@ -206,6 +206,9 @@ void Agent::Reset(const double* initial_repeated_action) {
 
 void Agent::SetState(const mjData* data) {
   state.Set(model_, data);
+  for (const auto& task: tasks_) {
+    task->data_ = const_cast<mjData*>(data);
+  }
 }
 
 int Agent::GetTaskIdByName(std::string_view name) const {
@@ -296,7 +299,7 @@ void Agent::PlanIteration(ThreadPool* pool) {
     if (plan_enabled) {
       // planner policy
       planner.OptimizePolicy(steps_, *pool);
-      planner.SetStartVel(task->GetStartVel(timestep_));
+      planner.SetStartVel(task->GetStartVel());
 
       // compute time
       agent_compute_time_ =
