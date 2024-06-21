@@ -122,7 +122,7 @@ void BaseResidualFn::Update() {
   parameters_ = task_->parameters;
 }
 
-std::unique_ptr<ResidualFn> Task::Residual() const {
+std::unique_ptr<mjpc::AbstractResidualFn> Task::Residual() const {
   std::lock_guard<std::mutex> lock(mutex_);
   return ResidualLocked();
 }

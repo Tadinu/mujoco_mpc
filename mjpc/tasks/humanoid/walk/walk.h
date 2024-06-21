@@ -51,7 +51,7 @@ class Walk : public Task {
   std::string XmlPath() const override;
 
  protected:
-  std::unique_ptr<mjpc::ResidualFn> ResidualLocked() const override {
+  std::unique_ptr<mjpc::AbstractResidualFn> ResidualLocked() const override {
     return std::make_unique<ResidualFn>(this);
   }
   ResidualFn* InternalResidual() override { return &residual_; }

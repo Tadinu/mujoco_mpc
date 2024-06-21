@@ -5,20 +5,20 @@
 #include <random>
 
 /** Formatting of the data struct for data exporting */
-template <class Space>
-std::string rmpcpp::TrajectoryPointRMP<Space>::getHeaderFormat() {
+template <class TSpace>
+std::string rmpcpp::TrajectoryPointRMP<TSpace>::getHeaderFormat() {
   return "x y z vx vy vz ax ay az v_mag ";
 }
 template std::string
-rmpcpp::TrajectoryPointRMP<rmpcpp::Space<3>>::getHeaderFormat();
+rmpcpp::TrajectoryPointRMP<rmpcpp::TSpace<3>>::getHeaderFormat();
 
 template <>
-std::string rmpcpp::TrajectoryPointRMP<rmpcpp::Space<2>>::getHeaderFormat() {
+std::string rmpcpp::TrajectoryPointRMP<rmpcpp::TSpace<2>>::getHeaderFormat() {
   return "x y vx vy ax ay v_mag ";
 }
 
-template <class Space>
-std::string rmpcpp::TrajectoryPointRMP<Space>::format() const {
+template <class TSpace>
+std::string rmpcpp::TrajectoryPointRMP<TSpace>::format() const {
   Eigen::IOFormat format(Eigen::FullPrecision, Eigen::DontAlignCols, " ", " ",
                          "", "", " ", "");
   std::stringstream str;
@@ -28,10 +28,10 @@ std::string rmpcpp::TrajectoryPointRMP<Space>::format() const {
 }
 /**************************************************/
 
-template <class Space>
-void rmpcpp::TrajectoryRMP<Space>::addPoint(const Vector &p, const Vector &v,
-                                            const Vector &a) {
-  TrajectoryPointRMP<Space> point;
+template <class TSpace>
+void rmpcpp::TrajectoryRMP<TSpace>::addPoint(const Vector &p, const Vector &v,
+                                             const Vector &a) {
+  TrajectoryPointRMP<TSpace> point;
   point.position = p;
   point.velocity = v;
   point.acceleration = a;
@@ -39,18 +39,18 @@ void rmpcpp::TrajectoryRMP<Space>::addPoint(const Vector &p, const Vector &v,
   trajectory_data_.push_back(point);
 }
 
-template <class Space>
-int rmpcpp::TrajectoryRMP<Space>::getSegmentCount() const {
+template <class TSpace>
+int rmpcpp::TrajectoryRMP<TSpace>::getSegmentCount() const {
   return trajectory_data_.size() - 1;  // one point is not a segment yet.
 }
 
-template <class Space>
-double rmpcpp::TrajectoryRMP<Space>::getLength() const {
+template <class TSpace>
+double rmpcpp::TrajectoryRMP<TSpace>::getLength() const {
   return (trajectory_data_.size() > 0 ) ? current().cumulative_length : 0.0;
 }
 
-template <class Space>
-double rmpcpp::TrajectoryRMP<Space>::getSmoothness() const {
+template <class TSpace>
+double rmpcpp::TrajectoryRMP<TSpace>::getSmoothness() const {
   double smoothness = 0;
   for (size_t i = 2; i < trajectory_data_.size(); i++) {
     Vector A = trajectory_data_[i - 2].position;
@@ -67,14 +67,14 @@ double rmpcpp::TrajectoryRMP<Space>::getSmoothness() const {
 
 /** Cross product does not work for 2d vectors. */
 template <>
-double rmpcpp::TrajectoryRMP<rmpcpp::Space<2>>::getSmoothness() const {
+double rmpcpp::TrajectoryRMP<rmpcpp::TSpace<2>>::getSmoothness() const {
   throw std::runtime_error("Not implemented");
 }
 
-template <class Space>
-void rmpcpp::TrajectoryRMP<Space>::writeToStream(std::ofstream &file) const {
+template <class TSpace>
+void rmpcpp::TrajectoryRMP<TSpace>::writeToStream(std::ofstream &file) const {
   // write header
-  file << "i " << rmpcpp::TrajectoryPointRMP<Space>::getHeaderFormat()
+  file << "i " << rmpcpp::TrajectoryPointRMP<TSpace>::getHeaderFormat()
        << std::endl;
 
   // write lines
@@ -84,6 +84,6 @@ void rmpcpp::TrajectoryRMP<Space>::writeToStream(std::ofstream &file) const {
 }
 
 // explicit instantation
-template class rmpcpp::TrajectoryRMP<rmpcpp::Space<3>>;
+template class rmpcpp::TrajectoryRMP<rmpcpp::TSpace<3>>;
 template class rmpcpp::TrajectoryRMP<rmpcpp::CylindricalSpace>;
 

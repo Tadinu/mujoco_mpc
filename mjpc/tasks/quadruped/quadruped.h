@@ -238,7 +238,7 @@ class QuadrupedFlat : public Task {
                    mjvScene* scene) const override;
 
  protected:
-  std::unique_ptr<mjpc::ResidualFn> ResidualLocked() const override {
+  std::unique_ptr<mjpc::AbstractResidualFn> ResidualLocked() const override {
     return std::make_unique<ResidualFn>(residual_);
   }
   ResidualFn* InternalResidual() override { return &residual_; }
@@ -277,7 +277,7 @@ class QuadrupedHill : public Task {
   void TransitionLocked(mjModel* model, mjData* data) override;
 
  protected:
-  std::unique_ptr<mjpc::ResidualFn> ResidualLocked() const override {
+  std::unique_ptr<mjpc::AbstractResidualFn> ResidualLocked() const override {
     return std::make_unique<ResidualFn>(this, residual_.current_mode_);
   }
   ResidualFn* InternalResidual() override { return &residual_; }

@@ -13,9 +13,9 @@ namespace rmpcpp {
  * Struct that holds a discretized and integrated
  *  point in a RMP trajectory.
  */
-template <class Space>
+template <class TSpace>
 struct TrajectoryPointRMP {
-  using Vector = Eigen::Matrix<double, Space::dim, 1>;
+  using Vector = Eigen::Matrix<double, TSpace::dim, 1>;
   Vector position;
   Vector velocity;
   Vector acceleration;
@@ -28,16 +28,16 @@ struct TrajectoryPointRMP {
 /*
  * Class that holds a full trajectory (vector of points)
  */
-template <class Space>
+template <class TSpace>
 class TrajectoryRMP : public mjpc::Trajectory {
-  using Vector = Eigen::Matrix<double, Space::dim, 1>;
+  using Vector = Eigen::Matrix<double, TSpace::dim, 1>;
 
  public:
-  TrajectoryPointRMP<Space> start() const {
-    return (trajectory_data_.size() > 0) ? trajectory_data_[0] : TrajectoryPointRMP<Space>();
+  TrajectoryPointRMP<TSpace> start() const {
+    return (trajectory_data_.size() > 0) ? trajectory_data_[0] : TrajectoryPointRMP<TSpace>();
   }
-  TrajectoryPointRMP<Space> current() const {
-    return (trajectory_data_.size() > 0) ? trajectory_data_.back() : TrajectoryPointRMP<Space>();
+  TrajectoryPointRMP<TSpace> current() const {
+    return (trajectory_data_.size() > 0) ? trajectory_data_.back() : TrajectoryPointRMP<TSpace>();
   }
 
   void addPoint(const Vector& p, const Vector& v, const Vector& a = Vector::Zero());
@@ -46,10 +46,10 @@ class TrajectoryRMP : public mjpc::Trajectory {
   double getSmoothness() const;
   double getLength() const;
 
-  inline const TrajectoryPointRMP<Space> operator[](int i) const {
+  inline const TrajectoryPointRMP<TSpace> operator[](int i) const {
     return trajectory_data_[i];
   };
-  inline TrajectoryPointRMP<Space>& operator[](int i) {
+  inline TrajectoryPointRMP<TSpace>& operator[](int i) {
     return trajectory_data_[i];
   };
 
@@ -60,7 +60,7 @@ class TrajectoryRMP : public mjpc::Trajectory {
   void writeToStream(std::ofstream& file) const;
 
  private:
-  std::vector<TrajectoryPointRMP<Space>> trajectory_data_;
+  std::vector<TrajectoryPointRMP<TSpace>> trajectory_data_;
 };
 
 }  // namespace rmpcpp

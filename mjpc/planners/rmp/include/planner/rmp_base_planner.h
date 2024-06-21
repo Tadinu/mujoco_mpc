@@ -15,23 +15,23 @@ namespace rmpcpp {
 
 /**
  * Base class for a RMP planner
- * @tparam Space
+ * @tparam TSpace
  */
-template <class Space>
+template <class TSpace>
 class RMPPlannerBase : public mjpc::Planner {
  public:
-  using Vector = Eigen::Matrix<double, Space::dim, 1>;
+  using Vector = Eigen::Matrix<double, TSpace::dim, 1>;
 
   RMPPlannerBase() = default;
   virtual ~RMPPlannerBase() = default;
-  virtual std::vector<std::shared_ptr<RMPPolicyBase<Space>>> getPolicies()
+  virtual std::vector<std::shared_ptr<RMPPolicyBase<TSpace>>> getPolicies()
   {
-      std::vector<std::shared_ptr<RMPPolicyBase<Space>>> policies;
+      std::vector<std::shared_ptr<RMPPolicyBase<TSpace>>> policies;
       return policies;
   }
 
   /** Pure virtual */
-  virtual void plan(const State<Space::dim>& start,
+  virtual void plan(const State<TSpace::dim>& start,
                     const Vector& end) = 0;
 
   Vector getGoalPos() const
@@ -65,7 +65,7 @@ class RMPPlannerBase : public mjpc::Planner {
 
   virtual bool checkMotion(const Vector& s1, const Vector& s2) const = 0;
   virtual bool hasTrajectory() const = 0;
-  virtual const std::shared_ptr<TrajectoryRMP<Space>> getTrajectory() const = 0;
+  virtual const std::shared_ptr<TrajectoryRMP<TSpace>> getTrajectory() const = 0;
 
   virtual bool collision(const Vector& pos) {
       return false;
