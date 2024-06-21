@@ -25,7 +25,7 @@ namespace rmpcpp {
  * Represents a mathematical space with a corresponding norm and distance
  * @tparam n Dimensionality
  */
-template <int n>
+template<int n>
 class Space {
  public:
   using Vector = Eigen::Matrix<double, n, 1>;
@@ -34,11 +34,8 @@ class Space {
 
   virtual double norm(Vector v) { return v.norm(); }
 
-  const static int dim;
+  static constexpr int dim = n;
 };
-
-template <int n>
-const int Space<n>::dim = n;
 
 /**
  * Represents a cylindrical space with angular wrap around in the y-axis

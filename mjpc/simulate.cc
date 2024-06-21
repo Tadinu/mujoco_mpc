@@ -94,7 +94,7 @@ const mjuiDef defFile[] = {
 
 // help strings
 const char help_content[] =
-  "Space\n"
+  "TSpace\n"
   "+  -\n"
   "Right arrow\n"
   "[  ]\n"

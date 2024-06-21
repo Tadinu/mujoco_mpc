@@ -9,12 +9,12 @@ mkdir -p build
 pushd build
 
 cmake .. -G Ninja \
-         -DCMAKE_C_COMPILER:STRING=clang-10 -DCMAKE_CXX_COMPILER:STRING=clang++-10 -DMUJOCO_HARDEN:BOOL=ON \
-		 -DCMAKE_INSTALL_PREFIX=../release \
-		 -DCMAKE_CXX_FLAGS:STRING="-stdlib=libc++" \
-		 -DCMAKE_EXE_LINKER_FLAGS:STRING="-Wl,--no-as-needed -stdlib=libc++" \
-		 -DCMAKE_BUILD_TYPE:STRING=Release \
-		 -DMJPC_BUILD_GRPC_SERVICE:BOOL=OFF
+      -DCMAKE_C_COMPILER:STRING=clang-10 -DCMAKE_CXX_COMPILER:STRING=clang++-10 -DMUJOCO_HARDEN:BOOL=ON \
+		  -DCMAKE_INSTALL_PREFIX=../release \
+		  -DCMAKE_CXX_FLAGS:STRING="-stdlib=libc++" \
+		  -DCMAKE_EXE_LINKER_FLAGS:STRING="-Wl,--no-as-needed -stdlib=libc++" \
+		  -DCMAKE_BUILD_TYPE:STRING=Release \
+		  -DMJPC_BUILD_GRPC_SERVICE:BOOL=OFF
 cmake --build . -j8
 cmake --install .
 popd

@@ -12,39 +12,39 @@
 namespace rmpcpp {
 /**
  * The planner class is the top-level entity that handles all planning
- * @tparam Space Space in which the world is defined (from rmpcpp/core/space)
+ * @tparam TSpace TSpace in which the world is defined (from rmpcpp/core/space)
  */
-template <class Space>
-class RMPPlanner : public PlannerBase<Space> {
-  using Vector = Eigen::Matrix<double, Space::dim, 1>;
+template <class TSpace>
+class RMPPlanner : public RMPPlannerBase<TSpace> {
+  using Vector = Eigen::Matrix<double, TSpace::dim, 1>;
 
  public:
-  friend class TrajectoryRMP<Space>;
-  const int dim = Space::dim;
+  friend class TrajectoryRMP<TSpace>;
+  static constexpr int dim = TSpace::dim;
   RMPPlanner() {}
   ~RMPPlanner() = default;
 
-  std::shared_ptr<PolicyBase<Space>> default_target_policy_ =
-    std::make_shared<SimpleTargetPolicy<Space>>(Eigen::Vector3d{2.0, M_PI_2, 0.0},
-                                                Eigen::Matrix3d::Identity(), 1.0, 2.0, 0.05);
-  std::shared_ptr<PolicyBase<Space>> default_target_policy2_ =
-    std::make_shared<SimpleTargetPolicy<Space>>(Eigen::Vector3d{3.0, 0, 0.0},
-                                                Eigen::Vector3d({1.0, 0.0, 0.0}).asDiagonal(), 10.0, 22.0, 0.05);
-  std::vector<std::shared_ptr<PolicyBase<Space>>> getPolicies() override
+  std::shared_ptr<RMPPolicyBase<TSpace>> default_target_policy_ =
+    std::make_shared<SimpleTargetPolicy<TSpace>>(Eigen::Vector3d{2.0, M_PI_2, 0.0},
+                                                 Eigen::Matrix3d::Identity(), 1.0, 2.0, 0.05);
+  std::shared_ptr<RMPPolicyBase<TSpace>> default_target_policy2_ =
+    std::make_shared<SimpleTargetPolicy<TSpace>>(Eigen::Vector3d{3.0, 0, 0.0},
+                                                 Eigen::Vector3d({1.0, 0.0, 0.0}).asDiagonal(), 10.0, 22.0, 0.05);
+  std::vector<std::shared_ptr<RMPPolicyBase<TSpace>>> getPolicies() override
   {
-    std::vector<std::shared_ptr<PolicyBase<Space>>> policies;
+    std::vector<std::shared_ptr<RMPPolicyBase<TSpace>>> policies;
     policies.push_back(default_target_policy_);
     policies.push_back(default_target_policy2_);
     return policies;
   }
 
-  const std::shared_ptr<TrajectoryRMP<Space>> getTrajectory() const override {
+  const std::shared_ptr<TrajectoryRMP<TSpace>> getTrajectory() const override {
     return trajectory_;  // only valid if planner has run.
   };
 
   bool hasTrajectory() const override { return trajectory_.operator bool(); }
 
-  void plan(const rmpcpp::State<Space::dim>& start,
+  void plan(const rmpcpp::State<TSpace::dim>& start,
             const Vector& goal) override;
 
   const mjpc::Task* task_ = nullptr;
@@ -68,7 +68,7 @@ class RMPPlanner : public PlannerBase<Space> {
         mju_max(mju_max(mju_max(dim_state, dim_state_derivative), dim_action),
                 model->nuser_sensor);
 
-    trajectory_ = std::make_unique<TrajectoryRMP<Space>>();
+    trajectory_ = std::make_unique<TrajectoryRMP<TSpace>>();
   }
 
   // allocate memory
@@ -107,7 +107,7 @@ class RMPPlanner : public PlannerBase<Space> {
     Eigen::Vector3d startPos = this->getStartPos();
     Eigen::Vector3d goalPos = this->getGoalPos();
 
-    State<Space::dim> startState(startPos, this->getStartVel());
+    State<TSpace::dim> startState(startPos, this->getStartVel());
 
     auto starttime = std::chrono::high_resolution_clock::now();
     plan(startState, goalPos);
@@ -127,7 +127,7 @@ class RMPPlanner : public PlannerBase<Space> {
   // set action from policy
   void ActionFromPolicy(double* action, const double* state,
                         double time, bool use_previous = false) override {
-    auto policy = std::static_pointer_cast<SimpleTargetPolicy<Space>>(default_target_policy2_);
+    auto policy = std::static_pointer_cast<SimpleTargetPolicy<TSpace>>(default_target_policy2_);
     Vector f = policy->alpha_ * policy->s(policy->space_.minus(this->getGoalPos(), this->getStartPos())) -
                policy->beta_ * this->getStartVel();
     action[0] = f[0]*time;
@@ -158,7 +158,7 @@ class RMPPlanner : public PlannerBase<Space> {
   void integrate();
 
   ParametersRMP parameters_;
-  std::shared_ptr<TrajectoryRMP<Space>> trajectory_;
+  std::shared_ptr<TrajectoryRMP<TSpace>> trajectory_;
 
   // dimensions
   int dim_state;             // state
