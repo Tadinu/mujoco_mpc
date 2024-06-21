@@ -34,20 +34,20 @@ namespace rmpcpp {
  *
  * Q is generally used as configuration space, and X as task space.
  *
- *  \tparam k Dimensionality of Task Space \f$ \mathcal{X} \f$
- *  \tparam d Dimensionality of Config Space \f$ \mathcal{Q} \f$
+ *  \tparam k Dimensionality of Task TSpace \f$ \mathcal{X} \f$
+ *  \tparam d Dimensionality of Config TSpace \f$ \mathcal{Q} \f$
  *
  */
 template <int k, int d>
 class GeometryBase {
  public:
-  /// Type alias for a Vector belonging to task Space X
+  /// Type alias for a Vector belonging to task TSpace X
   using MatrixX = Eigen::Matrix<double, k, k>;
   using VectorX = Eigen::Matrix<double, k, 1>;
   using PolicyX = PolicyValue<k>;
   using StateX = State<k>;
 
-  /// Type alias for a Vector belonging to Config Space Q
+  /// Type alias for a Vector belonging to Config TSpace Q
   using MatrixQ = Eigen::Matrix<double, d, d>;
   using VectorQ = Eigen::Matrix<double, d, 1>;
   using PolicyQ = PolicyValue<d>;
@@ -76,7 +76,7 @@ class GeometryBase {
      * @param policy_noneval Non-evaluated policy to pull
      */
     template <class NormSpace>
-    PolicyQ pull(PolicyBase<NormSpace> &policy_noneval) {
+    PolicyQ pull(RMPPolicyBase<NormSpace> &policy_noneval) {
       return pull(policy_noneval.evaluateAt(state_));
     }
 

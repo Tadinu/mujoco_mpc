@@ -18,15 +18,15 @@ namespace rmpcpp {
  * @tparam Space
  */
 template <class Space>
-class PlannerBase : public mjpc::Planner {
+class RMPPlannerBase : public mjpc::Planner {
  public:
   using Vector = Eigen::Matrix<double, Space::dim, 1>;
 
-  PlannerBase() = default;
-  virtual ~PlannerBase() = default;
-  virtual std::vector<std::shared_ptr<PolicyBase<Space>>> getPolicies()
+  RMPPlannerBase() = default;
+  virtual ~RMPPlannerBase() = default;
+  virtual std::vector<std::shared_ptr<RMPPolicyBase<Space>>> getPolicies()
   {
-      std::vector<std::shared_ptr<PolicyBase<Space>>> policies;
+      std::vector<std::shared_ptr<RMPPolicyBase<Space>>> policies;
       return policies;
   }
 

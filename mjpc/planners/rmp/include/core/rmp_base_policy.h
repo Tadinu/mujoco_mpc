@@ -20,14 +20,14 @@
 #ifndef RMPCPP_CORE_POLICY_BASE_H_
 #define RMPCPP_CORE_POLICY_BASE_H_
 
-#include "mjpc/planners/rmp/include/core/rmp_policy_value.h"
-#include "mjpc/planners/rmp/include/core/rmp_space.h"
-#include "mjpc/planners/rmp/include/core/rmp_state.h"
-
 #include <Eigen/Dense>
 #include <Eigen/QR>
 #include <iostream>
 #include <memory>
+
+#include "mjpc/planners/rmp/include/core/rmp_policy_value.h"
+#include "mjpc/planners/rmp/include/core/rmp_space.h"
+#include "mjpc/planners/rmp/include/core/rmp_state.h"
 
 // Macro to mark unused variables s.t. no unused warning appears.
 #define ACK_UNUSED(expr) \
@@ -43,17 +43,17 @@ namespace rmpcpp {
  *
  * Implements all mathematical base operations on RMPs.
  *
- * \tparam NormSpace Space in which the policy is active (defines dimensionality
+ * \tparam TNormSpace TSpace in which the policy is active (defines dimensionality
  * and distance norm)
  */
-template <class NormSpace>
-class PolicyBase {
+template <class TNormSpace>
+class RMPPolicyBase {
  public:
-  const static int n;
-  using Matrix = Eigen::Matrix<double, NormSpace::dim, NormSpace::dim>;
-  using Vector = Eigen::Matrix<double, NormSpace::dim, 1>;
-  using PValue = PolicyValue<NormSpace::dim>;
-  using PState = State<NormSpace::dim>;
+  static constexpr int n = TNormSpace::dim;
+  using Matrix = Eigen::Matrix<double, TNormSpace::dim, TNormSpace::dim>;
+  using Vector = Eigen::Matrix<double, TNormSpace::dim, 1>;
+  using PValue = PolicyValue<TNormSpace::dim>;
+  using PState = State<TNormSpace::dim>;
 
   // to be implemented in derivatives.
   virtual PValue evaluateAt(const PState&) = 0;
@@ -62,7 +62,7 @@ class PolicyBase {
   virtual void startEvaluateAsync(const PState&){}; // As a default derivatives don't have to implement this
   virtual void abortEvaluateAsync(){};
 
-  virtual ~PolicyBase() = default;
+  virtual ~RMPPolicyBase() = default;
   /**
    * Setter for metric A
    * @param A Metric
@@ -70,15 +70,11 @@ class PolicyBase {
   inline void setA(Matrix A) { A_static_ = A; }
 
  public:
-  PolicyBase() {}
+  RMPPolicyBase() = default;
 
-  NormSpace space_;
+  TNormSpace space_;
   Matrix A_static_;
 };
-
-template <class NormSpace>
-const int PolicyBase<NormSpace>::n = NormSpace::dim;
-
 }  // namespace rmpcpp
 
 #endif  // RMPCPP_CORE_POLICY_BASE_H_
