@@ -25,28 +25,29 @@ class Particle : public Task {
  public:
   std::string Name() const override;
   std::string XmlPath() const override;
-  const double* GetStartPos() override {
+  const double* GetStartPos() const override {
    if (model_) {
-    int start = mj_name2id(model_, mjOBJ_BODY, "pointmass");
-    return &data_->mocap_pos[model_->body_mocapid[start]];
-    //return &data_->xpos[start];
+#if 0 // Unclear why xpos & geom_xpos are not correct???
+    return &data_->xpos[mj_name2id(model_, mjOBJ_BODY, "pointmass")];
+    return &data_->geom_xpos[mj_name2id(model_, mjOBJ_GEOM, "pointmass")];
+#endif
+    int site_start = mj_name2id(model_, mjOBJ_SITE, "tip");
+    return &data_->site_xpos[site_start];
    }
    return nullptr;
   }
-  const double* GetStartVel(double time) override {
-   if (model_) {
-    static double vel[3] = {0};
-    static double prev_pos[3] = {0};
-    const double* pos = GetStartPos();
-    vel[0] = (pos[0] - prev_pos[0])/time;
-    vel[1] = (pos[1] - prev_pos[1])/time;
-    vel[2] = (pos[2] - prev_pos[2])/time;
-    memcpy(prev_pos, pos, sizeof(double) * 3);
-    return &vel[0];
-   }
-   return nullptr;
+  const double* GetStartVel() const override {
+    if (model_) {
+      static double lvel[3] = {0};
+      mjtNum vel[6];
+      auto pointmass_id = mj_name2id(model_, mjOBJ_BODY, "pointmass");
+      mj_objectVelocity(model_, data_, mjOBJ_BODY, pointmass_id, vel, 0);
+      memcpy(lvel, vel, sizeof(mjtNum) * 3);
+      return &lvel[0];
+    }
+    return nullptr;
   }
-  const double* GetGoalPos() override {
+  const double* GetGoalPos() const override {
    if (model_) {
     int goal = mj_name2id(model_, mjOBJ_BODY, "goal");
     return &data_->mocap_pos[model_->body_mocapid[goal]];
@@ -70,23 +71,24 @@ class Particle : public Task {
   void TransitionLocked(mjModel* model, mjData* data) override;
 
  protected:
-  std::unique_ptr<mjpc::ResidualFn> ResidualLocked() const override {
+  std::unique_ptr<mjpc::AbstractResidualFn> ResidualLocked() const override {
     return std::make_unique<ResidualFn>(this);
   }
-  ResidualFn* InternalResidual() override { return &residual_; }
+  BaseResidualFn* InternalResidual() override { return &residual_; }
 
  private:
   ResidualFn residual_;
 };
 
 // The same task, but the goal mocap body doesn't move.
-class ParticleFixed : public Task {
+class ParticleFixed : public Particle {
  public:
   std::string Name() const override;
   std::string XmlPath() const override;
-  class ResidualFn : public mjpc::BaseResidualFn {
+
+  class FixedResidualFn : public mjpc::BaseResidualFn {
    public:
-    explicit ResidualFn(const ParticleFixed* task)
+    explicit FixedResidualFn(const ParticleFixed* task)
         : mjpc::BaseResidualFn(task) {}
     // -------- Residuals for particle task -------
     //   Number of residuals: 3
@@ -98,15 +100,15 @@ class ParticleFixed : public Task {
                   double* residual) const override;
   };
   ParticleFixed() : residual_(this) {}
-
- protected:
-  std::unique_ptr<mjpc::ResidualFn> ResidualLocked() const override {
-    return std::make_unique<ResidualFn>(this);
+  void TransitionLocked(mjModel* model, mjData* data) override {}
+protected:
+  std::unique_ptr<mjpc::AbstractResidualFn> ResidualLocked() const override {
+    return std::make_unique<FixedResidualFn>(this);
   }
-  ResidualFn* InternalResidual() override { return &residual_; }
+  BaseResidualFn* InternalResidual() override { return &residual_; }
 
- private:
-  ResidualFn residual_;
+private:
+  FixedResidualFn residual_;
 };
 }  // namespace mjpc
 

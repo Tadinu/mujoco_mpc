@@ -15,6 +15,7 @@
 #include "mjpc/tasks/particle/particle.h"
 
 #include <string>
+#include <vector>
 
 #include <mujoco/mujoco.h>
 #include "mjpc/utilities.h"
@@ -29,8 +30,19 @@ std::string Particle::Name() const { return "Particle"; }
 bool Particle::checkCollision(double pos[]) const {
   //mjs_getDefault(mjs_findBody(model_, "pointmass")->element);
   //mjs_getDefault(mjs_findBody(model_, "obstacle_1")->element);
-  int pointmass = mj_name2id(model_, mjOBJ_BODY, "pointmass");
-  int obstacle_1 = mj_name2id(model_, mjOBJ_BODY, "obstacle_1");
+  static int pointmass = mj_name2id(model_, mjOBJ_BODY, "pointmass");
+  static auto obstacles = [this] () {
+    std::array<int, 7> obstacles = {0};
+    for (auto i = 0; i < obstacles.size(); ++i) {
+      std::ostringstream obstacle_name;
+      obstacle_name << "obstacle_" << i;
+      obstacles[i] = mj_name2id(model_, mjOBJ_BODY, obstacle_name.str().c_str());
+    }
+    return obstacles;
+  }();
+  static auto has_obstacle = [](int obstacle_id) {
+      return std::find(std::begin(obstacles), std::end(obstacles), obstacle_id) != std::end(obstacles);
+  };
 
   // loop over contacts
   int ncon = data_->ncon;
@@ -39,7 +51,7 @@ bool Particle::checkCollision(double pos[]) const {
     int bb[2] = {model_->geom_bodyid[con->geom[0]],
                  model_->geom_bodyid[con->geom[1]]};
     for (int j = 0; j < 2; ++j) {
-      if ((con->geom[j] == obstacle_1)
+      if (has_obstacle(con->geom[j])
           && (bb[1-j] == pointmass)) {
           return true;
         }
@@ -91,11 +103,10 @@ std::string ParticleFixed::XmlPath() const {
 }
 std::string ParticleFixed::Name() const { return "ParticleFixed"; }
 
-void ParticleFixed::ResidualFn::Residual(const mjModel* model,
-                                         const mjData* data,
-                                         double* residual) const {
+void ParticleFixed::FixedResidualFn::Residual(const mjModel* model,
+                                              const mjData* data,
+                                              double* residual) const {
   double goal[2]{data->mocap_pos[0], data->mocap_pos[1]};
   ResidualImpl(model, data, goal, residual);
 }
-
 }  // namespace mjpc

@@ -43,13 +43,13 @@ class SimpleTargetPolicy : public RMPPolicyBase<NormSpace> {
    * A is the metric to be used.
    * alpha, beta and c are tuning parameters.
    */
-  SimpleTargetPolicy(Vector target, Matrix A, double alpha, double beta,
+  SimpleTargetPolicy(const Vector& target, const Matrix& A, double alpha, double beta,
                      double c)
       : target_(target), alpha_(alpha), beta_(beta), c_(c) {
     this->A_static_ = A;
   }
 
-  SimpleTargetPolicy(Vector target) : target_(target) {}
+  SimpleTargetPolicy(const Vector& target) : target_(target) {}
 
   virtual PValue evaluateAt(const PState &state) {
     Vector f = alpha_ * s(this->space_.minus(target_, state.pos_)) -
@@ -67,7 +67,7 @@ class SimpleTargetPolicy : public RMPPolicyBase<NormSpace> {
   /**
    *  Normalization helper function.
    */
-  inline Vector s(Vector x) { return x / h(this->space_.norm(x)); }
+  inline Vector s(const Vector& v) { return v / h(this->space_.norm(v)); }
 
   /**
    * Softmax helper function

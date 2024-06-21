@@ -90,22 +90,11 @@ void rmpcpp::RMPPlanner<TSpace>::plan(const State<TSpace::dim> &start,
 
 template <class TSpace>
 void rmpcpp::RMPPlanner<TSpace>::Traces(mjvScene* scn) {
-  // sample color
-  float color[4];
-  color[0] = 0.0;
-  color[1] = 1.0;
-  color[2] = 0.0;
-  color[3] = 1.0;
-
-  Eigen::Vector3d startPos = this->getStartPos();
-  Eigen::Vector3d goalPos = this->getGoalPos();
-
   const auto current = trajectory_->current().position;
   const auto start = trajectory_->start().position;
   // make geometry
-  mjpc::AddConnector(scn, mjGEOM_LINE, 5,
-                     (mjtNum []){startPos[0], startPos[1], startPos[2]},
-                     (mjtNum []){goalPos[0], goalPos[1], goalPos[2]}, color);
+  mjpc::AddConnector(scn, mjGEOM_LINE, 5, task_->GetStartPos(),
+                     task_->GetGoalPos(), (float[]){0.0, 1.0, 0.0, 1.0});
 
   mjpc::AddConnector(scn, mjGEOM_LINE, 5,
                    (mjtNum []){start[0], start[1], 0.01},

@@ -61,7 +61,7 @@ class OP3 : public Task {
   constexpr static double kModeHeight[2] = {0.38, 0.57};
 
  protected:
-  std::unique_ptr<mjpc::ResidualFn> ResidualLocked() const override {
+  std::unique_ptr<mjpc::AbstractResidualFn> ResidualLocked() const override {
     return std::make_unique<ResidualFn>(this, residual_.current_mode_);
   }
   ResidualFn* InternalResidual() override { return &residual_; }
