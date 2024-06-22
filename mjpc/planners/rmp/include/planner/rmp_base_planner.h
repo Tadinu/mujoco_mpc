@@ -34,8 +34,7 @@ class RMPPlannerBase : public mjpc::Planner {
   virtual void plan(const State<TSpace::dim>& start,
                     const Vector& end) = 0;
 
-  Vector getGoalPos() const
-  {
+  Vector getGoalPos() const {
     return goal;
   }
 
@@ -43,8 +42,7 @@ class RMPPlannerBase : public mjpc::Planner {
     goal = new_goal;
   }
 
-  Vector getStartPos() const
-  {
+  Vector getStartPos() const {
     return start;
   }
 
@@ -52,8 +50,7 @@ class RMPPlannerBase : public mjpc::Planner {
     start = new_start;
   }
 
-  Vector getStartVel() const
-  {
+  Vector getStartVel() const {
     return start_vel;
   }
 
@@ -63,13 +60,10 @@ class RMPPlannerBase : public mjpc::Planner {
 
   bool success() const { return goal_reached_ && !diverged_ && !collided_; };
 
-  virtual bool checkMotion(const Vector& s1, const Vector& s2) const = 0;
+  virtual bool checkBlocking(const Vector& s1, const Vector& s2) const = 0;
   virtual bool hasTrajectory() const = 0;
   virtual const std::shared_ptr<TrajectoryRMP<TSpace>> getTrajectory() const = 0;
 
-  virtual bool collision(const Vector& pos) {
-      return false;
-  }
   virtual double distanceToObstacle(const Vector& pos) {
       return 0;
   }
@@ -79,7 +73,7 @@ class RMPPlannerBase : public mjpc::Planner {
   }
 
  protected:
-  double goal_tolerance_ = 0.05;
+  double goal_tolerance_ = 0.005;
   bool collided_ = false;
   bool goal_reached_ = false;
   bool diverged_ = false;
