@@ -43,6 +43,7 @@ class TrajectoryRMP : public mjpc::Trajectory {
   void addPoint(const Vector& p, const Vector& v, const Vector& a = Vector::Zero());
 
   int getSegmentCount() const;
+  int getWaypointsCount() const;
   double getSmoothness() const;
   double getLength() const;
 

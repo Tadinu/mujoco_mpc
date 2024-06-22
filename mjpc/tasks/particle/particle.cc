@@ -40,19 +40,22 @@ bool Particle::checkCollision(double pos[]) const {
     }
     return obstacles;
   }();
-  static auto has_obstacle = [](int obstacle_id) {
-      return std::find(std::begin(obstacles), std::end(obstacles), obstacle_id) != std::end(obstacles);
+  static auto is_obstacle = [](int obj_id) {
+      return std::find(std::begin(obstacles), std::end(obstacles), obj_id) != std::end(obstacles);
   };
 
   // loop over contacts
   int ncon = data_->ncon;
   for (int i = 0; i < ncon; ++i) {
+    std::cout << "COLLISION NUM:" << i << ncon << std::endl;
     const mjContact* con = data_->contact + i;
     int bb[2] = {model_->geom_bodyid[con->geom[0]],
                  model_->geom_bodyid[con->geom[1]]};
+    std::cout << "bb[2]:" << bb[0] << bb[1] << std::endl;
     for (int j = 0; j < 2; ++j) {
-      if (has_obstacle(con->geom[j])
+      if (is_obstacle(con->geom[j])
           && (bb[1-j] == pointmass)) {
+          std::cout << "COLLIDING:" << con->geom[j] << std::endl;
           return true;
         }
     }

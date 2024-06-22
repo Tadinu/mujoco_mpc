@@ -23,6 +23,13 @@
 
 namespace rmpcpp {
 
+template<int dim, typename T = double, typename Vector=Eigen::Matrix<T, dim, 1>>
+Vector vectorFromScalarArray(const T* scalarArray) {
+  Vector v;
+  memcpy(v.data(), scalarArray, sizeof(T) *dim);
+  return v;
+}
+
 /**
  * Range iterator for multi-dimensional vectors.
  * By supplying a start vector, an end vector and and increment vector,

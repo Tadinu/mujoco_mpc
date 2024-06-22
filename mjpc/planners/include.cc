@@ -53,6 +53,7 @@ std::vector<std::unique_ptr<mjpc::Planner>> LoadPlanners() {
   planners.emplace_back(new mjpc::CrossEntropyPlanner);
   planners.emplace_back(new mjpc::SampleGradientPlanner);
   planners.emplace_back(new rmpcpp::RMPPlanner<rmpcpp::CylindricalSpace>);
+  //planners.emplace_back(new rmpcpp::RMPPlanner<rmpcpp::Space<2>>);
   return planners;
 }
 

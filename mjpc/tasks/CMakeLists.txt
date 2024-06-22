@@ -40,12 +40,12 @@ add_custom_target(
           ${CMAKE_CURRENT_BINARY_DIR}/humanoid/humanoid.xml
           <${CMAKE_CURRENT_SOURCE_DIR}/humanoid/humanoid.xml.patch
   # particle
-  COMMAND ${CMAKE_COMMAND} -E copy
-          ${dm_control_SOURCE_DIR}/dm_control/suite/point_mass.xml
-          ${CMAKE_CURRENT_BINARY_DIR}/particle/particle.xml
-  COMMAND patch -o ${CMAKE_CURRENT_BINARY_DIR}/particle/particle_modified.xml
-          ${CMAKE_CURRENT_BINARY_DIR}/particle/particle.xml
-          <${CMAKE_CURRENT_SOURCE_DIR}/particle/particle.xml.patch
+  #COMMAND ${CMAKE_COMMAND} -E copy
+  #        ${dm_control_SOURCE_DIR}/dm_control/suite/point_mass.xml
+  #        ${CMAKE_CURRENT_BINARY_DIR}/particle/particle.xml
+  #COMMAND patch -o ${CMAKE_CURRENT_BINARY_DIR}/particle/particle_modified.xml
+  #        ${CMAKE_CURRENT_BINARY_DIR}/particle/particle.xml
+  #        <${CMAKE_CURRENT_SOURCE_DIR}/particle/particle.xml.patch
   # swimmer
   COMMAND ${CMAKE_COMMAND} -E copy
           ${dm_control_SOURCE_DIR}/dm_control/suite/swimmer.xml
