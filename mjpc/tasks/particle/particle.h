@@ -27,8 +27,8 @@ class Particle : public Task {
   std::string XmlPath() const override;
   const double* GetStartPos() const override {
    if (model_) {
-#if 0 // Unclear why xpos & geom_xpos are not correct???
-    return &data_->xpos[mj_name2id(model_, mjOBJ_BODY, "pointmass")];
+#if 0 // Unclear why xipos(mjOBJ_BODY) xpos(mjOBJ_BODY) & geom_xpos are not correct???
+    return &data_->xipos[mj_name2id(model_, mjOBJ_BODY, "pointmass")];
     return &data_->geom_xpos[mj_name2id(model_, mjOBJ_GEOM, "pointmass")];
 #endif
     int site_start = mj_name2id(model_, mjOBJ_SITE, "tip");
@@ -39,10 +39,14 @@ class Particle : public Task {
   const double* GetStartVel() const override {
     if (model_) {
       static double lvel[3] = {0};
-      mjtNum vel[6];
       auto pointmass_id = mj_name2id(model_, mjOBJ_BODY, "pointmass");
+#if 1
+      memcpy(lvel, &data_->cvel[6*pointmass_id+3], sizeof(mjtNum) * 3);
+#else
+      mjtNum vel[6];
       mj_objectVelocity(model_, data_, mjOBJ_BODY, pointmass_id, vel, 0);
-      memcpy(lvel, vel, sizeof(mjtNum) * 3);
+      memcpy(lvel, &vel[3], sizeof(mjtNum) * 3);
+#endif
       return &lvel[0];
     }
     return nullptr;

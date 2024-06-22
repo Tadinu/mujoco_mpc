@@ -13,7 +13,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
+ * You should have received SenRMPSimpleTargetPolicya copy of the GNU General Public License
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
 
@@ -37,6 +37,7 @@ class SimpleTargetPolicy : public RMPPolicyBase<NormSpace> {
   using PValue = typename RMPPolicyBase<NormSpace>::PValue;
   using PState = typename RMPPolicyBase<NormSpace>::PState;
 
+ SimpleTargetPolicy() {}
   /**
    * Sets up the policy.
    * target is the target to move to.
@@ -50,6 +51,15 @@ class SimpleTargetPolicy : public RMPPolicyBase<NormSpace> {
   }
 
   SimpleTargetPolicy(const Vector& target) : target_(target) {}
+
+  void operator()(const Vector& target, const Matrix& A, double alpha, double beta,
+                 double c) {
+   this->target_ = target;
+   this->alpha_ = alpha;
+   this->beta_ = beta;
+   this->c_ = c;
+   this->A_static_ = A;
+  }
 
   virtual PValue evaluateAt(const PState &state) {
     Vector f = alpha_ * s(this->space_.minus(target_, state.pos_)) -
@@ -76,7 +86,7 @@ class SimpleTargetPolicy : public RMPPolicyBase<NormSpace> {
     return (z + c_ * log(1 + exp(-2 * c_ * z)));
   }
 
-  Vector target_;
+  Vector target_ = Vector::Zero();
   double alpha_{1.0}, beta_{8.0}, c_{0.005};
 };
 

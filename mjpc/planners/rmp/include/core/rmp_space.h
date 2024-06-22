@@ -26,7 +26,7 @@ namespace rmpcpp {
  * @tparam n Dimensionality
  */
 template<int n>
-class TSpace {
+class Space {
  public:
   using Vector = Eigen::Matrix<double, n, 1>;
 
@@ -40,7 +40,7 @@ class TSpace {
 /**
  * Represents a cylindrical space with angular wrap around in the y-axis
  */
-class CylindricalSpace : public TSpace<3> {
+class CylindricalSpace : public Space<3> {
  public:
   virtual Vector minus(const Vector& v1, const Vector& v2) {
     Vector dist = v1 - v2;
