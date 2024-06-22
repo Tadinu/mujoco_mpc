@@ -10,10 +10,10 @@ std::string rmpcpp::TrajectoryPointRMP<TSpace>::getHeaderFormat() {
   return "x y z vx vy vz ax ay az v_mag ";
 }
 template std::string
-rmpcpp::TrajectoryPointRMP<rmpcpp::TSpace<3>>::getHeaderFormat();
+rmpcpp::TrajectoryPointRMP<rmpcpp::Space<3>>::getHeaderFormat();
 
 template <>
-std::string rmpcpp::TrajectoryPointRMP<rmpcpp::TSpace<2>>::getHeaderFormat() {
+std::string rmpcpp::TrajectoryPointRMP<rmpcpp::Space<2>>::getHeaderFormat() {
   return "x y vx vy ax ay v_mag ";
 }
 
@@ -45,6 +45,11 @@ int rmpcpp::TrajectoryRMP<TSpace>::getSegmentCount() const {
 }
 
 template <class TSpace>
+int rmpcpp::TrajectoryRMP<TSpace>::getWaypointsCount() const {
+  return trajectory_data_.size();
+}
+
+template <class TSpace>
 double rmpcpp::TrajectoryRMP<TSpace>::getLength() const {
   return (trajectory_data_.size() > 0 ) ? current().cumulative_length : 0.0;
 }
@@ -67,7 +72,7 @@ double rmpcpp::TrajectoryRMP<TSpace>::getSmoothness() const {
 
 /** Cross product does not work for 2d vectors. */
 template <>
-double rmpcpp::TrajectoryRMP<rmpcpp::TSpace<2>>::getSmoothness() const {
+double rmpcpp::TrajectoryRMP<rmpcpp::Space<2>>::getSmoothness() const {
   throw std::runtime_error("Not implemented");
 }
 
@@ -84,6 +89,7 @@ void rmpcpp::TrajectoryRMP<TSpace>::writeToStream(std::ofstream &file) const {
 }
 
 // explicit instantation
-template class rmpcpp::TrajectoryRMP<rmpcpp::TSpace<3>>;
+template class rmpcpp::TrajectoryRMP<rmpcpp::Space<3>>;
+template class rmpcpp::TrajectoryRMP<rmpcpp::Space<2>>;
 template class rmpcpp::TrajectoryRMP<rmpcpp::CylindricalSpace>;
 

@@ -73,7 +73,7 @@ class RMPPolicyBase {
   RMPPolicyBase() = default;
 
   TNormSpace space_;
-  Matrix A_static_;
+  Matrix A_static_ = Matrix::Identity();
 };
 }  // namespace rmpcpp
 

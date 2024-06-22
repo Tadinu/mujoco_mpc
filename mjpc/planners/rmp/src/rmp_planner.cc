@@ -27,6 +27,7 @@ void rmpcpp::RMPPlanner<TSpace>::integrate() {
   // reset state
   size_t num_steps = 0;
 
+  // Built a list of waypoints leading to goal without collision or divergence
   while (!this->collided_ && !this->goal_reached_ && !this->diverged_) {
     // evaluate policies
     auto policies = this->getPolicies();
@@ -46,13 +47,12 @@ void rmpcpp::RMPPlanner<TSpace>::integrate() {
 
     // update exit conditions
     /** Collision check */
-    if (!this->checkMotion(trajectory_->current().position,
-                           position)) {
+    if (this->checkBlocking(trajectory_->current().position, position)) {
       this->collided_ = true;
     }
 
-    if ((position - this->getGoalPos()).norm() <
-        this->goal_tolerance_) {
+    // this->getGoalPos()
+    if ((position - this->getGoalPos()).norm() < this->goal_tolerance_) {
       this->goal_reached_ = true;
     }
 
@@ -78,6 +78,7 @@ void rmpcpp::RMPPlanner<TSpace>::plan(const State<TSpace::dim> &start,
   this->collided_ = false;
   this->goal_reached_ = false;
   this->diverged_ = false;
+
   trajectory_->clearData();
   trajectory_->addPoint(start.pos_, start.vel_);
 
@@ -90,13 +91,17 @@ void rmpcpp::RMPPlanner<TSpace>::plan(const State<TSpace::dim> &start,
 
 template <class TSpace>
 void rmpcpp::RMPPlanner<TSpace>::Traces(mjvScene* scn) {
-  const auto current = trajectory_->current().position;
-  const auto start = trajectory_->start().position;
+  static constexpr float GREEN[] = {0.0, 1.0, 0.0, 1.0};
+  static constexpr float RED[] = {1.0, 0.0, 0.0, 1.0};
   // make geometry
-  mjpc::AddConnector(scn, mjGEOM_LINE, 5, task_->GetStartPos(),
-                     task_->GetGoalPos(), (float[]){0.0, 1.0, 0.0, 1.0});
+  mjpc::AddConnector(scn, mjGEOM_LINE, 5, this->getStartPos().data(),
+                     this->getGoalPos().data(), GREEN);
 
-  mjpc::AddConnector(scn, mjGEOM_LINE, 5,
-                   (mjtNum []){start[0], start[1], 0.01},
-                   (mjtNum []){current[0], current[1], 0.01}, (float[]){1.0, 0.0, 0.0, 1.0});
+  for(auto i = 0; i < trajectory_->getWaypointsCount() - 1; ++i) {
+    const auto point_i = (*trajectory_)[i].position;
+    const auto point_i_1 = (*trajectory_)[i+1].position;
+    mjpc::AddConnector(scn, mjGEOM_LINE, 5,
+                       (mjtNum []){point_i[0], point_i[1], 0.01},
+                       (mjtNum []){point_i_1[0], point_i_1[1], 0.01}, RED);
+  }
 }
