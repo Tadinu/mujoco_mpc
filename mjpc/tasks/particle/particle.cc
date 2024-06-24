@@ -18,7 +18,7 @@
 #include <vector>
 
 #include <mujoco/mujoco.h>
-#include "mjpc/utilities.h"
+#include "mjpc/planners/rmp/include/planner/rmp_base_planner.h"
 
 namespace mjpc {
 
@@ -27,25 +27,48 @@ std::string Particle::XmlPath() const {
 }
 std::string Particle::Name() const { return "Particle"; }
 
-bool Particle::checkCollision(double pos[]) const {
-  //mjs_getDefault(mjs_findBody(model_, "pointmass")->element);
-  //mjs_getDefault(mjs_findBody(model_, "obstacle_1")->element);
-  static int pointmass = mj_name2id(model_, mjOBJ_BODY, "pointmass");
-  static auto obstacles = [this] () {
-    std::array<int, 7> obstacles = {0};
-    for (auto i = 0; i < obstacles.size(); ++i) {
+bool Particle::CheckBlocking(const double start[], const double end[]) const {
+#if 0
+  // CHECK OVERLAPPING
+  double vec[3]; mju_sub3(vec, end, start);
+  for (auto i = 0; i < 9; ++i) {
+    std::ostringstream obstacle_name;
+    obstacle_name << "obstacle_" << i;
+    auto obstacle_i_id = mj_name2id(model_, mjOBJ_BODY, obstacle_name.str().c_str());
+    auto obstacle_geom_i_id = mj_name2id(model_, mjOBJ_GEOM, obstacle_name.str().c_str());
+    // add if ray-zone intersection (always true when con->pos inside zone)
+    if (mju_rayGeom(&data_->xpos[3*obstacle_i_id], &data_->xmat[9*obstacle_i_id],
+                    &model_->geom_size[3*obstacle_geom_i_id],
+                    start, vec,
+                    mjGEOM_SPHERE) >= 0) {
+#if RMP_DRAW_TRAJECTORY_COLLISION
+      static constexpr float RED[] = {1.0, 0.0, 0.0, 1.0};
+      mjpc::AddConnector(scn, mjGEOM_LINE, 100, start, end, RED);
+#endif
+      static constexpr float YELLOW[] = {1.0, 1.0, 0.0, 1.0};
+      SetGeomColor(obstacle_geom_i_id, YELLOW);
+      return true;
+    }
+  }
+#else
+  // CHECK COLLISION
+  static int rigidmass_id = GetTargetObjectId();
+  static auto obstacles_id = [this] () {
+    std::array<int, 9> obstacles_id = {0};
+    for (auto i = 0; i < obstacles_id.size(); ++i) {
       std::ostringstream obstacle_name;
       obstacle_name << "obstacle_" << i;
-      obstacles[i] = mj_name2id(model_, mjOBJ_BODY, obstacle_name.str().c_str());
+      obstacles_id[i] = mj_name2id(model_, mjOBJ_BODY, obstacle_name.str().c_str());
     }
-    return obstacles;
+    return obstacles_id;
   }();
   static auto is_obstacle = [](int obj_id) {
-      return std::find(std::begin(obstacles), std::end(obstacles), obj_id) != std::end(obstacles);
+    return std::find(std::begin(obstacles_id), std::end(obstacles_id), obj_id) != std::end(obstacles_id);
   };
 
   // loop over contacts
   int ncon = data_->ncon;
+  std::cout << "COLLISION NUM:" << ncon << std::endl;
   for (int i = 0; i < ncon; ++i) {
     std::cout << "COLLISION NUM:" << i << ncon << std::endl;
     const mjContact* con = data_->contact + i;
@@ -54,12 +77,13 @@ bool Particle::checkCollision(double pos[]) const {
     std::cout << "bb[2]:" << bb[0] << bb[1] << std::endl;
     for (int j = 0; j < 2; ++j) {
       if (is_obstacle(con->geom[j])
-          && (bb[1-j] == pointmass)) {
+          && (bb[1-j] == rigidmass_id)) {
           std::cout << "COLLIDING:" << con->geom[j] << std::endl;
           return true;
         }
     }
   }
+#endif
   return false;
 }
 
@@ -94,11 +118,12 @@ void Particle::ResidualFn::Residual(const mjModel* model, const mjData* data,
 
 void Particle::TransitionLocked(mjModel* model, mjData* data) {
   // some Lissajous curve
-  double goal[2]{0.25 * mju_sin(data->time), 0.25 * mju_cos(data->time / mjPI)};
+  double goal_curve_pos[2] = {0.25 * mju_sin(data->time),
+                              0.25 * mju_cos(data->time / mjPI)};
 
   // update mocap position
-  data->mocap_pos[0] = goal[0];
-  data->mocap_pos[1] = goal[1];
+  SetGoalPos(goal_curve_pos);
+  MoveObstacles();
 }
 
 std::string ParticleFixed::XmlPath() const {
@@ -109,7 +134,6 @@ std::string ParticleFixed::Name() const { return "ParticleFixed"; }
 void ParticleFixed::FixedResidualFn::Residual(const mjModel* model,
                                               const mjData* data,
                                               double* residual) const {
-  double goal[2]{data->mocap_pos[0], data->mocap_pos[1]};
-  ResidualImpl(model, data, goal, residual);
+  ResidualImpl(model, data, particle_fixed_task->GetGoalPos(), residual);
 }
 }  // namespace mjpc

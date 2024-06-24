@@ -123,14 +123,22 @@ class Task {
 
   virtual std::string Name() const = 0;
   virtual std::string XmlPath() const = 0;
-  virtual bool checkCollision(double pos[]) const {return false;}
+  virtual int GetTargetObjectId() const { return -1; }
+  virtual bool CheckBlocking(const double start[], const double end[]) const {return false;}
 
   // model
   mjModel* model_ = nullptr;
   mjData* data_ = nullptr;
+  mjvScene* scn = nullptr;
   virtual const double* GetStartPos() const { return nullptr;}
   virtual const double* GetStartVel() const { return nullptr; }
   virtual const double* GetGoalPos() const { return nullptr; }
+
+  void SetGeomColor(uint geom_id, const float* rgba) const {
+    if (scn && (geom_id < model_->ngeom)) {
+      memcpy(scn->geoms[geom_id].rgba, rgba, sizeof(float) * 4);
+    }
+  }
 
   // mode
   int mode;

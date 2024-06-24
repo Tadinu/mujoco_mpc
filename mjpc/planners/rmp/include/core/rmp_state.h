@@ -27,21 +27,21 @@ namespace rmpcpp {
 /**
  * Represents a state with multiple derivates.
  * Currently implemented: Position + Velocity
- * @tparam n Dimensionality.
+ * @tparam d Dimensionality.
  */
-template <int n>
+template <int d>
 class State {
-  using Vector = Eigen::Matrix<double, n, 1>;
+  using VectorQ = Eigen::Matrix<double, d, 1>;
 
  public:
   State() {}
 
-  State(const Vector pos) : pos_(pos) {}
+  State(const VectorQ& pos) : pos_(pos) {}
 
-  State(const Vector &pos, const Vector &vel) : pos_(pos), vel_(vel) {}
+  State(const VectorQ& pos, const VectorQ& vel) : pos_(pos), vel_(vel) {}
 
-  Vector pos_{Vector::Zero()};
-  Vector vel_{Vector::Zero()};
+  VectorQ pos_ = VectorQ::Zero();
+  VectorQ vel_ = VectorQ::Zero();
 
   // more derivatives to be added later
 };
