@@ -11,6 +11,12 @@
 #include "mjpc/planners/rmp/include/core/rmp_state.h"
 #include "mjpc/planners/rmp/include/policies/rmp_simple_target_policy.h"
 
+#define RMP_USE_LINEAR_GEOMETRY (1)
+#define RMP_DRAW_START_GOAL (0)
+#define RMP_DRAW_VELOCITY (1)
+#define RMP_DRAW_TRAJECTORY (1)
+#define RMP_DRAW_TRAJECTORY_COLLISION (1)
+
 namespace rmpcpp {
 
 /**
@@ -20,7 +26,9 @@ namespace rmpcpp {
 template <class TSpace>
 class RMPPlannerBase : public mjpc::Planner {
  public:
-  using Vector = Eigen::Matrix<double, TSpace::dim, 1>;
+  using VectorX = Eigen::Matrix<double, TSpace::dim, 1>;
+  using VectorQ = Eigen::Matrix<double, TSpace::dim, 1>;
+  using Matrix = Eigen::Matrix<double, TSpace::dim, TSpace::dim>;
 
   RMPPlannerBase() = default;
   virtual ~RMPPlannerBase() = default;
@@ -31,45 +39,44 @@ class RMPPlannerBase : public mjpc::Planner {
   }
 
   /** Pure virtual */
-  virtual void plan(const State<TSpace::dim>& start,
-                    const Vector& end) = 0;
+  virtual void plan(const State<TSpace::dim>& start) = 0;
 
-  Vector getGoalPos() const {
+  VectorQ getGoalPos() const {
     return goal;
   }
 
-  void setGoalPos(const Vector& new_goal) {
+  void setGoalPos(const VectorQ & new_goal) {
     goal = new_goal;
   }
 
-  Vector getStartPos() const {
+  VectorQ getStartPos() const {
     return start;
   }
 
-  void setStartPos(const Vector& new_start) {
+  void setStartPos(const VectorQ & new_start) {
     start = new_start;
   }
 
-  Vector getStartVel() const {
+  VectorQ getStartVel() const {
     return start_vel;
   }
 
-  void setStartVel(const Vector& new_start_vel) {
+  void setStartVel(const VectorQ & new_start_vel) {
     start_vel = new_start_vel;
   }
 
   bool success() const { return goal_reached_ && !diverged_ && !collided_; };
 
-  virtual bool checkBlocking(const Vector& s1, const Vector& s2) const = 0;
+  virtual bool checkBlocking(const VectorQ & s1, const VectorQ & s2) const = 0;
   virtual bool hasTrajectory() const = 0;
   virtual const std::shared_ptr<TrajectoryRMP<TSpace>> getTrajectory() const = 0;
 
-  virtual double distanceToObstacle(const Vector& pos) {
+  virtual double distanceToObstacle(const VectorQ & pos) {
       return 0;
   }
 
-  virtual Vector gradientToObstacle(const Vector& pos) {
-      return Vector::Zero();
+  virtual VectorQ gradientToObstacle(const VectorQ & pos) {
+      return VectorQ::Zero();
   }
 
  protected:
@@ -77,9 +84,9 @@ class RMPPlannerBase : public mjpc::Planner {
   bool collided_ = false;
   bool goal_reached_ = false;
   bool diverged_ = false;
-  Vector goal = Vector::Zero();
-  Vector start = Vector::Zero();
-  Vector start_vel = Vector::Zero();
+  VectorQ goal = VectorQ::Zero();
+  VectorQ start = VectorQ::Zero();
+  VectorQ start_vel = VectorQ::Zero();
 };
 
 }  // namespace rmpcpp

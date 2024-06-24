@@ -569,6 +569,7 @@ void Agent::ModifyScene(mjvScene* scn) {
 
   // sample traces
   ActivePlanner().Traces(scn);
+  ActiveTask()->scn = scn;
 }
 
 // graphical user interface elements for agent and task
