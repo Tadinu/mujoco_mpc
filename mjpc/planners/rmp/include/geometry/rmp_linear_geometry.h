@@ -33,28 +33,43 @@ class LinearGeometry : public GeometryBase<d, d> {
  public:
   // type alias for readability.
   using base = GeometryBase<d, d>;
+  using VectorX = typename base::VectorX;
+  using VectorQ = typename base::VectorQ;
   using StateX = typename base::StateX;
   using StateQ = typename base::StateQ;
+  using J_phi = typename base::J_phi;
 
   /**
    * Return jacobian. As the spaces are equal, this
    * is always identity.
    */
-  virtual typename base::J_phi J(const StateX&) const {
-    return base::J_phi::Identity();
+  virtual J_phi J(const StateX&) const {
+    return J_phi::Identity();
   }
 
   /**
-   * Convert position.
+   * Convert vector Q->X
+   * As the spaces are equal, they are the same too.
+   */
+  virtual VectorX convertPosToX(const VectorQ &vector_q) const { return vector_q; }
+
+  /**
+   * Convert state Q->X
    * As the spaces are equal, they are the same too.
    */
   virtual StateX convertToX(const StateQ &state_q) const { return state_q; }
 
   /**
-   * Convert position.
+   * Convert state X->Q
    * As the spaces are equal, they are the same too.
    */
   virtual StateQ convertToQ(const StateX &state_x) const { return state_x; }
+
+  /**
+   * Convert vector X->Q
+   * As the spaces are equal, they are the same too.
+   */
+  virtual VectorQ convertPosToQ(const VectorX &vector_x) const { return vector_x; }
 };
 }  // namespace rmpcpp
 #endif  // RMPCPP_GEOMETRY_LINEAR_GEOMETRY_H_

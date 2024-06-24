@@ -6,7 +6,11 @@
 #include "mjpc/planners/rmp/include/core/rmp_space.h"
 #include "mjpc/planners/rmp/include/planner/rmp_parameters.h"
 #include "mjpc/planners/rmp/include/planner/rmp_base_planner.h"
+#include "mjpc/planners/rmp/include/geometry/rmp_linear_geometry.h"
+#include "mjpc/planners/rmp/include/geometry/rmp_cylindrical_geometry.h"
+#include "mjpc/planners/rmp/include/geometry/rmp_rotated_geometry_3d.h"
 #include "mjpc/planners/rmp/include/planner/rmp_trajectory.h"
+#include "mjpc/planners/rmp/include/eval/rmp_trapezoidal_integrator.h"
 #include "mjpc/planners/rmp/include/util/rmp_vector_range.h"
 #include "mjpc/utilities.h"
 
@@ -17,8 +21,9 @@ namespace rmpcpp {
  */
 template <class TSpace>
 class RMPPlanner : public RMPPlannerBase<TSpace> {
-  using Vector = Eigen::Matrix<double, TSpace::dim, 1>;
-  using Matrix = Eigen::Matrix<double, TSpace::dim, TSpace::dim>;
+  using VectorX = typename RMPPlannerBase<TSpace>::VectorX;
+  using VectorQ = typename RMPPlannerBase<TSpace>::VectorQ;
+  using Matrix = typename RMPPlannerBase<TSpace>::Matrix;
 
  public:
   friend class TrajectoryRMP<TSpace>;
@@ -26,19 +31,27 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
   RMPPlanner() {}
   ~RMPPlanner() = default;
 
+  using RiemannianGeometry =
+#if RMP_USE_LINEAR_GEOMETRY
+      LinearGeometry<TSpace::dim>;
+#else
+      CylindricalGeometry;
+#endif
+  RiemannianGeometry geometry_;
+
   std::vector<std::shared_ptr<RMPPolicyBase<TSpace>>> getPolicies() override
   {
     std::vector<std::shared_ptr<RMPPolicyBase<TSpace>>> policies;
-    static auto default_target_policy_ = std::make_shared<SimpleTargetPolicy<TSpace>>();
-    (*default_target_policy_)(this->getGoalPos(),
-                              Matrix::Identity(), 1.0, 2.0, 0.05);
+    static auto default_target_policy = std::make_shared<SimpleTargetPolicy<TSpace>>();
+    (*default_target_policy)(this->getGoalPos(),
+                             Matrix::Identity(), 1.0, 2.0, 0.05);
 
-    static auto default_target_policy2_ = std::make_shared<SimpleTargetPolicy<TSpace>>();
-    (*default_target_policy2_)(this->getGoalPos(),
-                               Vector::UnitX().asDiagonal(), 10.0, 22.0, 0.05);
+    static auto default_target_policy2 = std::make_shared<SimpleTargetPolicy<TSpace>>();
+    (*default_target_policy2)(this->getGoalPos(),
+                              VectorQ::UnitX().asDiagonal(), 10.0, 22.0, 0.05);
 
-    policies.push_back(default_target_policy_);
-    policies.push_back(default_target_policy2_);
+    policies.push_back(default_target_policy);
+    policies.push_back(default_target_policy2);
     return policies;
   }
 
@@ -48,20 +61,21 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
 
   bool hasTrajectory() const override { return trajectory_.operator bool(); }
 
-  void plan(const rmpcpp::State<TSpace::dim>& start,
-            const Vector& goal) override;
+  void plan(const rmpcpp::State<TSpace::dim>& start) override;
 
   const mjpc::Task* task_ = nullptr;
-  bool checkBlocking(const Vector& s1, const Vector& s2) const override {
-      if ((s2 - s1).norm() < 0.0001) {
+  bool checkBlocking(const VectorQ& start, const VectorQ& end) const override {
+#if 0
+      if ((end - start).norm() < 0.0001) {
         // Raycasting is inconsistent if they're almost on top of each other -> NOT blocking
         return false;
       }
-      double pos1[TSpace::dim];
-      memcpy(pos1, s1.data(), sizeof(double) * TSpace::dim);
-      double pos2[TSpace::dim];
-      memcpy(pos2, s2.data(), sizeof(double) * TSpace::dim);
-      return task_ ? task_->checkCollision(pos1) || task_->checkCollision(pos2): true;
+#endif
+      double start_pos[TSpace::dim];
+      mju_copy(start_pos, geometry_.convertPosToX(start).data(), TSpace::dim);
+      double end_pos[TSpace::dim];
+      mju_copy(end_pos, geometry_.convertPosToX(end).data(), TSpace::dim);
+      return task_ ? task_->CheckBlocking(start_pos, end_pos) : false;
   }
 
   mjModel* model_ = nullptr;
@@ -100,14 +114,14 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
   void SetState(const mjpc::State& state)  override {}
   void SetStartGoal(const double* start, const double* goal) override {
     if(start) {
-      this->setStartPos(rmpcpp::vectorFromScalarArray<TSpace::dim>(start));
+      this->setStartPos(geometry_.convertPosToQ(rmpcpp::vectorFromScalarArray<TSpace::dim>(start)));
     }
     if(goal) {
-      this->setGoalPos(rmpcpp::vectorFromScalarArray<TSpace::dim>(goal));
+      this->setGoalPos(geometry_.convertPosToQ(rmpcpp::vectorFromScalarArray<TSpace::dim>(goal)));
     }
   }
   void SetStartVel(const double* vel) override {
-    this->setStartVel(rmpcpp::vectorFromScalarArray<TSpace::dim>(vel));
+    this->setStartVel(geometry_.convertPosToQ(rmpcpp::vectorFromScalarArray<TSpace::dim>(vel)));
   }
 
   // optimize nominal policy
@@ -116,15 +130,13 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
     this->NominalTrajectory(horizon, pool);
 
     // plan
-    Vector startPos = this->getStartPos();
-    Vector goalPos = this->getGoalPos();
-    State<TSpace::dim> startState(startPos, this->getStartVel());
+    State<TSpace::dim> startState(this->getStartPos(), this->getStartVel());
 
 #if 1
-    plan(startState, goalPos);
+    plan(startState);
 #else
     auto starttime = std::chrono::high_resolution_clock::now();
-    plan(startState, goalPos);
+    plan(startState);
     auto endtime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
         endtime - starttime);
@@ -150,32 +162,32 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
   // set action from policy
   void ActionFromPolicy(double* action, const double* state,
                         double time, bool use_previous = false) override {
-    const auto currentPoint = static_cast<const TrajectoryRMP<TSpace>*>(BestTrajectory())
-                                  ->current();
+    const auto* best_trajectory = static_cast<const TrajectoryRMP<TSpace>*>(BestTrajectory());
+    auto currentPoint = best_trajectory->current();
 #if 1
-    const auto& vel = currentPoint.velocity;
-    action[0] = vel[0];
-    action[1] = vel[1];
+    const auto& velq = currentPoint.velocity;
+    action[0] = velq[0];
+    action[1] = velq[1];
 #else
-    const auto& acceleration = currentPoint.acceleration;
-    auto pointmass_id = mj_name2id(model_, mjOBJ_BODY, "pointmass");
-    auto pointmass = model_->body_mass[pointmass_id];
+    const auto& accelq = currentPoint.acceleration;
+    const auto pointmass_id = task_->GetTargetObjectId();
+    const auto pointmass = model_->body_mass[pointmass_id];
+    const auto& linear_inertia = pointmass;
 
-    auto body_inertia = model_->body_inertia[3*pointmass_id];
-    auto body_extent = mju_sqrt(body_inertia / pointmass);
-    auto inertia = 0.4*pointmass * mju_pow(body_extent, 2);
-      //mjtNum I1 = model_->body_inertia[3*pointmass_id+0];
-      //mjtNum I2 = model_->body_inertia[3*pointmass_id+1];
-      //mjtNum I3 = model_->body_inertia[3*pointmass_id+2];
+    //auto body_inertia = model_->body_inertia[3*pointmass_id];
+    // auto body_extent = 0.01; //mju_sqrt(body_inertia / pointmass);
+    //auto rotationalInertia = 0.4 * pointmass * mju_pow(body_extent, 2);
+    //mjtNum I1 = model_->body_inertia[3*pointmass_id+0];
+    //mjtNum I2 = model_->body_inertia[3*pointmass_id+1];
+    //mjtNum I3 = model_->body_inertia[3*pointmass_id+2];
 
-      //mjtNum res[3];
-      //mju_cross(res, {vel[0], vel[1], vel[2]}, {I1, I2, I3});
-      action[0] = 1000*inertia * acceleration[0];
-      action[1] = 1000*inertia * acceleration[1];
-      //action[2] = Iyy * acceleration[2];
+    //NOTE: Depending on which dofs the action ctrl is configured in xml, eg: linear movement only uses linear_inertia only
+    action[0] = linear_inertia * accelq[0];
+    action[1] = linear_inertia * accelq[1];
+    //action[2] = linear_inertia * accelq[2];
 #endif
-      // Clamp controls
-      mjpc::Clamp(action, model_->actuator_ctrlrange, model_->nu);
+    // Clamp controls
+    mjpc::Clamp(action, model_->actuator_ctrlrange, model_->nu);
   }
 
   // return trajectory with best total return, or nullptr if no planning
@@ -190,8 +202,8 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
 
   // planner-specific plots
   void Plots(mjvFigure* fig_planner, mjvFigure* fig_timer,
-                     int planner_shift, int timer_shift, int planning,
-                     int* shift) override {}
+             int planner_shift, int timer_shift, int planning,
+             int* shift) override {}
 
   // return number of parameters optimized by planner
   int NumParameters() override {return 0;}
@@ -199,6 +211,7 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
  private:
   void integrate();
 
+  TrapezoidalIntegrator<RMPPolicyBase<TSpace>, RiemannianGeometry> integrator_;
   ParametersRMP parameters_;
   std::shared_ptr<TrajectoryRMP<TSpace>> trajectory_;
 
@@ -212,7 +225,7 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
 
 // explicit instantation
 template class RMPPlanner<Space<3>>;
-template class RMPPlanner<Space<2>>;
+//template class RMPPlanner<Space<2>>;
 template class RMPPlanner<CylindricalSpace>;
 }  // namespace rmpcpp
 
