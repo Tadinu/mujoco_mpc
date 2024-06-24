@@ -15,10 +15,10 @@ namespace rmpcpp {
  */
 template <class TSpace>
 struct TrajectoryPointRMP {
-  using Vector = Eigen::Matrix<double, TSpace::dim, 1>;
-  Vector position;
-  Vector velocity;
-  Vector acceleration;
+  using VectorQ = Eigen::Matrix<double, TSpace::dim, 1>;
+  VectorQ position;
+  VectorQ velocity;
+  VectorQ acceleration;
   double cumulative_length = 0.0;  // Cumulative length of this trajectory
 
   static std::string getHeaderFormat();
@@ -30,7 +30,7 @@ struct TrajectoryPointRMP {
  */
 template <class TSpace>
 class TrajectoryRMP : public mjpc::Trajectory {
-  using Vector = Eigen::Matrix<double, TSpace::dim, 1>;
+  using VectorQ = Eigen::Matrix<double, TSpace::dim, 1>;
 
  public:
   TrajectoryPointRMP<TSpace> start() const {
@@ -40,7 +40,7 @@ class TrajectoryRMP : public mjpc::Trajectory {
     return (trajectory_data_.size() > 0) ? trajectory_data_.back() : TrajectoryPointRMP<TSpace>();
   }
 
-  void addPoint(const Vector& p, const Vector& v, const Vector& a = Vector::Zero());
+  void addPoint(const VectorQ& p, const VectorQ& v, const VectorQ& a = VectorQ::Zero());
 
   int getSegmentCount() const;
   int getWaypointsCount() const;

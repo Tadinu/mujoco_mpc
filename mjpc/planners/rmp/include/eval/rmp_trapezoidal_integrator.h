@@ -66,6 +66,8 @@ class TrapezoidalIntegrator {
     current_vel_ = velocity;
     distance_ = 0.0;
     done_ = false;
+    last_acc_ = Vector_q::Zero();
+    last_metric_ = Matrix_q::Zero();
   }
 
   /**
@@ -111,7 +113,7 @@ class TrapezoidalIntegrator {
     return current_pos_;
   }
   Vector_q forwardIntegrateFixed(typename TPolicy::PValue policy, TGeometry& /*geometry*/,
-                            float dt) {
+                                 float dt) {
     // relative start and end of integration
     const float a = 0.0;
     const float b = dt;
@@ -168,7 +170,7 @@ class TrapezoidalIntegrator {
     acc = last_acc_;
   }
 
- private:
+private:
   bool done_ = false;
   double distance_ = 0.0;
   Vector_q current_pos_ = Vector_q::Zero();

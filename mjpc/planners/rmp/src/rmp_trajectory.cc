@@ -29,8 +29,8 @@ std::string rmpcpp::TrajectoryPointRMP<TSpace>::format() const {
 /**************************************************/
 
 template <class TSpace>
-void rmpcpp::TrajectoryRMP<TSpace>::addPoint(const Vector &p, const Vector &v,
-                                             const Vector &a) {
+void rmpcpp::TrajectoryRMP<TSpace>::addPoint(const VectorQ &p, const VectorQ &v,
+                                             const VectorQ &a) {
   TrajectoryPointRMP<TSpace> point;
   point.position = p;
   point.velocity = v;
@@ -58,9 +58,9 @@ template <class TSpace>
 double rmpcpp::TrajectoryRMP<TSpace>::getSmoothness() const {
   double smoothness = 0;
   for (size_t i = 2; i < trajectory_data_.size(); i++) {
-    Vector A = trajectory_data_[i - 2].position;
-    Vector B = trajectory_data_[i - 1].position;
-    Vector C = trajectory_data_[i].position;
+    auto A = trajectory_data_[i - 2].position;
+    auto B = trajectory_data_[i - 1].position;
+    auto C = trajectory_data_[i].position;
     A = B - A;
     B = C - B;
     smoothness += 1 - 1 / M_PI * atan2((A.cross(B)).norm(), A.dot(B));

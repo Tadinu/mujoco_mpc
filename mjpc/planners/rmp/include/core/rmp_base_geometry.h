@@ -17,8 +17,8 @@
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RMPCPP_CORE_GEOMETRY_BASE_H_
-#define RMPCPP_CORE_GEOMETRY_BASE_H_
+#ifndef RMPCPP_BASE_GEOMETRY_BASE_H_
+#define RMPCPP_BASE_GEOMETRY_BASE_H_
 
 #include "mjpc/planners/rmp/include/core/rmp_base_policy.h"
 #include "mjpc/planners/rmp/include/core/rmp_policy_value.h"
@@ -41,13 +41,13 @@ namespace rmpcpp {
 template <int k, int d>
 class GeometryBase {
  public:
-  /// Type alias for a Vector belonging to task TSpace X
+  /// Type alias for a Vector belonging to task Space X
   using MatrixX = Eigen::Matrix<double, k, k>;
   using VectorX = Eigen::Matrix<double, k, 1>;
   using PolicyX = PolicyValue<k>;
   using StateX = State<k>;
 
-  /// Type alias for a Vector belonging to Config TSpace Q
+  /// Type alias for a Vector belonging to Config Space Q
   using MatrixQ = Eigen::Matrix<double, d, d>;
   using VectorQ = Eigen::Matrix<double, d, 1>;
   using PolicyQ = PolicyValue<d>;
@@ -65,7 +65,7 @@ class GeometryBase {
     /// Corresponding Jacobian at this state
     J_phi J_;
 
-    /// Position/Velocity at which thhis geometry is valid
+    /// Position/Velocity at which this geometry is valid
     StateX state_;
 
    public:
@@ -76,8 +76,8 @@ class GeometryBase {
      * @param policy_noneval Non-evaluated policy to pull
      */
     template <class NormSpace>
-    PolicyQ pull(RMPPolicyBase<NormSpace> &policy_noneval) {
-      return pull(policy_noneval.evaluateAt(state_));
+    PolicyQ pull(RMPPolicyBase<NormSpace> &noneval_policy) {
+      return pull(noneval_policy.evaluateAt(state_));
     }
 
     /**
@@ -107,10 +107,10 @@ class GeometryBase {
   };
 
   /// Static accessor for dimension K of X
-  const static int K;
+  static constexpr int K = k;
 
   /// Static accessor for dimension D of Q
-  const static int D;
+  static constexpr int D = d;
 
   /**
    * Creats a fully parametrized geometry for the given state
@@ -122,17 +122,27 @@ class GeometryBase {
 
   /**
    * To be implemented in derived classes.
+   * Performs position from Q to X.
+   */
+  virtual VectorX convertPosToX(const VectorQ &vector_q) const = 0;
+
+  /**
+   * To be implemented in derived classes.
    * Performs coordinate conversion from Q to X.
-   * Note: Not guaranteed to be implemented correctly for all geometries.
    */
   virtual StateX convertToX(const StateQ &state_q) const = 0;
 
   /**
    * To be implemented in derived classes.
    * Performs coordinate conversion from X to Q.
-   * Note: Not guaranteed to be implemented correctly for all geometries.
    */
   virtual StateQ convertToQ(const StateX &state_x) const = 0;
+
+  /**
+   * To be implemented in derived classes.
+   * Performs position conversion from X to Q.
+   */
+  virtual VectorQ convertPosToQ(const VectorX &vector_x) const = 0;
 
   /**
    * To be implemented in derived classes.
@@ -140,13 +150,6 @@ class GeometryBase {
    */
   virtual J_phi J(const StateX&) const = 0;
 };
-
-template <int k, int d>
-const int GeometryBase<k, d>::K = k;
-
-template <int k, int d>
-const int GeometryBase<k, d>::D = d;
-
 }  // namespace rmpcpp
 
-#endif  // RMPCPP_CORE_GEOMETRY_BASE_H_
+#endif  // RMPCPP_BASE_GEOMETRY_BASE_H_

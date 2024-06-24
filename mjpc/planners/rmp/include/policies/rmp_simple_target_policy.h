@@ -25,14 +25,13 @@
 namespace rmpcpp {
 
 /**
- * Defines a simple n dimensional target policy, as described in [1].
- * \tparam n Dimensionality of geometry
+ * Defines a simple dimensional target policy, as described in [1].
  */
 template <class NormSpace>
 class SimpleTargetPolicy : public RMPPolicyBase<NormSpace> {
 
  public:
-  using Vector = typename RMPPolicyBase<NormSpace>::Vector;
+  using VectorQ = typename RMPPolicyBase<NormSpace>::VectorQ;
   using Matrix = typename RMPPolicyBase<NormSpace>::Matrix;
   using PValue = typename RMPPolicyBase<NormSpace>::PValue;
   using PState = typename RMPPolicyBase<NormSpace>::PState;
@@ -44,40 +43,40 @@ class SimpleTargetPolicy : public RMPPolicyBase<NormSpace> {
    * A is the metric to be used.
    * alpha, beta and c are tuning parameters.
    */
-  SimpleTargetPolicy(const Vector& target, const Matrix& A, double alpha, double beta,
-                     double c)
+  SimpleTargetPolicy(const VectorQ& target, const Matrix& A,
+                     double alpha, double beta, double c)
       : target_(target), alpha_(alpha), beta_(beta), c_(c) {
     this->A_static_ = A;
   }
 
-  SimpleTargetPolicy(const Vector& target) : target_(target) {}
+  SimpleTargetPolicy(const VectorQ& target) : target_(target) {}
 
-  void operator()(const Vector& target, const Matrix& A, double alpha, double beta,
-                 double c) {
-   this->target_ = target;
-   this->alpha_ = alpha;
-   this->beta_ = beta;
-   this->c_ = c;
-   this->A_static_ = A;
+  void operator()(const VectorQ& target, const Matrix& A, double alpha, double beta,
+                  double c) {
+    this->target_ = target;
+    this->alpha_ = alpha;
+    this->beta_ = beta;
+    this->c_ = c;
+    this->A_static_ = A;
   }
 
   virtual PValue evaluateAt(const PState &state) {
-    Vector f = alpha_ * s(this->space_.minus(target_, state.pos_)) -
-               beta_ * state.vel_;
+    VectorQ f = alpha_ * soft_norm(this->space_.minus(target_, state.pos_)) -
+                beta_ * state.vel_;
     return {f, this->A_static_};
   }
 
   void updateParams(double alpha, double beta, double c){
-   alpha_ = alpha;
-   beta_ = beta;
-   c_ = c;
+    alpha_ = alpha;
+    beta_ = beta;
+    c_ = c;
   }
 
- public:
+public:
   /**
    *  Normalization helper function.
    */
-  inline Vector s(const Vector& v) { return v / h(this->space_.norm(v)); }
+  inline VectorQ soft_norm(const VectorQ& v) { return v / h(this->space_.norm(v)); }
 
   /**
    * Softmax helper function
@@ -86,7 +85,7 @@ class SimpleTargetPolicy : public RMPPolicyBase<NormSpace> {
     return (z + c_ * log(1 + exp(-2 * c_ * z)));
   }
 
-  Vector target_ = Vector::Zero();
+  VectorQ target_ = VectorQ::Zero();
   double alpha_{1.0}, beta_{8.0}, c_{0.005};
 };
 

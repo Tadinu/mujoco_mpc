@@ -10,8 +10,11 @@ class RotatedGeometry3d : public GeometryBase<3, 3> {
  public:
   // type alias for readability.
   using base = GeometryBase<3, 3>;
-  using StateX = typename base::StateX;
-  using StateQ = typename base::StateQ;
+  using VectorX = base::VectorX;
+  using VectorQ = base::VectorQ;
+  using StateX = base::StateX;
+  using StateQ = base::StateQ;
+  using J_phi = base::J_phi;
 
   inline void setRotation(const Eigen::Matrix3d &rotation) {
     R_x_q_ = rotation;
@@ -20,12 +23,14 @@ class RotatedGeometry3d : public GeometryBase<3, 3> {
   /**
    * Return jacobian. simply the rotation matrix;
    */
-  inline virtual typename base::J_phi J(const StateX&) const { return R_x_q_; }
+  inline virtual J_phi J(const StateX&) const { return R_x_q_; }
 
+  inline virtual VectorX convertPosToX(const VectorQ &vector_q) const { return R_x_q_ * vector_q; }
   inline virtual StateX convertToX(const StateQ &state_q) const {
     return {R_x_q_ * state_q.pos_, R_x_q_ * state_q.vel_};
   }
 
+  inline virtual VectorQ convertPosToQ(const VectorX &vector_x) const { return R_x_q_.transpose() * vector_x; }
   inline virtual StateQ convertToQ(const StateX &state_x) const {
     return {R_x_q_.transpose() * state_x.pos_,
             R_x_q_.transpose() * state_x.vel_};

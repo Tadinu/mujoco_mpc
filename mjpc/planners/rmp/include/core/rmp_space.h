@@ -23,18 +23,18 @@ namespace rmpcpp {
 
 /**
  * Represents a mathematical space with a corresponding norm and distance
- * @tparam n Dimensionality
+ * @tparam d Dimensionality
  */
-template<int n>
+template<int d>
 class Space {
  public:
-  using Vector = Eigen::Matrix<double, n, 1>;
+  using Vector = Eigen::Matrix<double, d, 1>;
 
   virtual Vector minus(const Vector& v1, const Vector& v2) { return v1 - v2; }
 
   virtual double norm(const Vector& v) { return v.norm(); }
 
-  static constexpr int dim = n;
+  static constexpr int dim = d;
 };
 
 /**

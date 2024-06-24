@@ -23,9 +23,9 @@
 
 namespace rmpcpp {
 
-template<int dim, typename T = double, typename Vector=Eigen::Matrix<T, dim, 1>>
-Vector vectorFromScalarArray(const T* scalarArray) {
-  Vector v;
+template<int dim, typename T = double, typename TVector=Eigen::Matrix<T, dim, 1>>
+TVector vectorFromScalarArray(const T* scalarArray) {
+  TVector v;
   memcpy(v.data(), scalarArray, sizeof(T) *dim);
   return v;
 }
@@ -35,9 +35,9 @@ Vector vectorFromScalarArray(const T* scalarArray) {
  * By supplying a start vector, an end vector and and increment vector,
  * this returns an iterator that goes steps through the resulting regular grid.
  *
- * @tparam Vector Inherited from Eigen::Vectord. Defines size.
+ * @tparam TVector Inherited from Eigen::Vectord. Defines size.
  */
-template <class Vector>
+template <class TVector>
 class VectorRange {
  public:
   /**
@@ -62,10 +62,10 @@ class VectorRange {
   class ConstVectorRangeIterator {
    public:
     typedef ConstVectorRangeIterator self_type;
-    typedef Vector value_type;
+    typedef TVector value_type;
     typedef std::forward_iterator_tag iterator_category;
 
-    ConstVectorRangeIterator(const VectorRange<Vector>* parent, Vector current)
+    ConstVectorRangeIterator(const VectorRange<TVector>* parent, const TVector& current)
         : current_(current), parent_(parent) {}
 
     self_type operator++() {
@@ -90,8 +90,8 @@ class VectorRange {
     }
 
    private:
-    Vector current_;
-    const VectorRange<Vector>* parent_;
+     TVector current_;
+    const VectorRange<TVector>* parent_;
   };
 
   /**
@@ -100,7 +100,7 @@ class VectorRange {
    * @param end  End position (sort of the "right lower corner" of a grid)
    * @param inc  Increments for each dimension.
    */
-  VectorRange(const Vector& start, const Vector& end, const Vector& inc)
+  VectorRange(const TVector& start, const TVector& end, const TVector& inc)
       : start_range_(start), end_range_(end), inc_(inc) {
     // calculates how many individual increments in each dimension happen to reach
     // the end
@@ -133,7 +133,7 @@ class VectorRange {
    * Returns the first iterator element.
    * Corresponds to all ticks in the vector to be zero.
    */
-  ConstVectorRangeIterator begin() const { return ConstVectorRangeIterator(this, Vector::Zero()); }
+  ConstVectorRangeIterator begin() const { return ConstVectorRangeIterator(this, TVector::Zero()); }
 
   /**
    * Returns the end marker (last element + 1)
@@ -145,15 +145,15 @@ class VectorRange {
    * Converts the current position of the loop (ticks)
    * to the value this represents.
    */
-  Vector getValue(Vector& ticks) const {
+   TVector getValue(TVector& ticks) const {
     return start_range_ + (ticks.array() * inc_.array()).matrix();
   }
 
   /**
    *  Returns the next tick vector based on a current position.
    */
-  Vector getNext(Vector& current_ticks) const {
-    Vector next(current_ticks);
+  TVector getNext(TVector& current_ticks) const {
+    TVector next(current_ticks);
     next[0]++;
 
     uint i = 0;
@@ -169,9 +169,9 @@ class VectorRange {
     return next;
   }
 
-  const Vector start_range_, end_range_, inc_;
-  Vector ticks_;  ///< integer ticks to increment through
-  Vector ticks_plus_one_;
+  const TVector start_range_, end_range_, inc_;
+  TVector ticks_;  ///< integer ticks to increment through
+  TVector ticks_plus_one_;
 };
 
 }  // namespace rmpcpp

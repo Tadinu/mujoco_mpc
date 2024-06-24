@@ -32,39 +32,54 @@ namespace rmpcpp {
  * Q Configuration space coordinates are: x,y,z
  */
 class CylindricalGeometry : public GeometryBase<3, 3> {
+public:
   // type alias for readability.
   using base = GeometryBase<3, 3>;
+  using VectorX = base::VectorX;
+  using VectorQ = base::VectorQ;
+  using StateX = base::StateX;
+  using StateQ = base::StateQ;
+  using J_phi = base::J_phi;
 
  protected:
   /**
    * Return jacobian.
    */
-  virtual typename base::J_phi J(const typename base::StateX &state) const {
-    base::J_phi mtx_j(base::J_phi::Identity());
+  virtual J_phi J(const StateX &state_x) const {
+    J_phi mtx_j(J_phi::Identity());
 
-    base::VectorQ q;
+    //base::VectorQ q;
 
-    mtx_j(0, 0) = cos(state.pos_.y());
-    mtx_j(0, 1) = sin(state.pos_.y());
-    mtx_j(1, 0) = -state.pos_.x() * sin(state.pos_.y());
-    mtx_j(1, 1) = state.pos_.x() * cos(state.pos_.y());
+    mtx_j(0, 0) = cos(state_x.pos_.y());
+    mtx_j(0, 1) = sin(state_x.pos_.y());
+    mtx_j(1, 0) = -state_x.pos_.x() * sin(state_x.pos_.y());
+    mtx_j(1, 1) = state_x.pos_.x() * cos(state_x.pos_.y());
     // Rest is taken care of by the identity initializer.
     return mtx_j;
   }
 
  public:
+  virtual VectorX convertPosToX(const VectorQ &pos_q) const {
+    // Standard formula for cylindrical coordinates
+    VectorX pos_x;
+
+    // rho
+    pos_x.x() = pos_q.template topRows<2>().norm();  // sqrt(x^2+y^2)
+
+    // theta
+    pos_x.y() = atan2(pos_q.y(), pos_q.x());
+
+    // z
+    pos_x.z() = pos_q.z();
+
+    return pos_x;
+  }
+
   virtual StateX convertToX(const StateQ &state_q) const {
     // Standard formula for cylindrical coordinates
     StateX state_x;
 
-    // rho
-    state_x.pos_.x() = state_q.pos_.topRows<2>().norm();  // sqrt(x^2+y^2)
-
-    // theta
-    state_x.pos_.y() = atan2(state_q.pos_.y(), state_q.pos_.x());
-
-    // z
-    state_x.pos_.z() = state_q.pos_.z();
+    state_x.pos_ = convertPosToX(state_q.pos_);
 
     // J(state_x) only works because we know J only uses position...
     state_x.vel_ = J(state_x) * state_q.vel_;
@@ -72,18 +87,26 @@ class CylindricalGeometry : public GeometryBase<3, 3> {
     return state_x;
   }
 
+  virtual VectorQ convertPosToQ(const VectorX &vector_x) const {
+    // Standard formula for cylindrical coordinates
+    VectorQ vector_q;
+
+    // rho
+    vector_q.x() = vector_x.x() * cos(vector_x.y());
+
+    // theta
+    vector_q.y() = vector_x.x() * sin(vector_x.y());
+
+    // z
+    vector_q.z() = vector_x.z();
+    return vector_q;
+  }
+
   virtual StateQ convertToQ(const StateX &state_x) const {
     // Standard formula for cylindrical coordinates
     StateQ state_q;
-
-    // rho
-    state_q.pos_.x() = state_x.pos_.x() * cos(state_x.pos_.y());
-
-    // theta
-    state_q.pos_.y() = state_x.pos_.x() * sin(state_x.pos_.y());
-
-    // z
-    state_q.pos_.z() = state_x.pos_.z();
+    state_q.pos_ = convertPosToQ(state_x.pos_);
+    state_q.vel_ = J(state_q) * state_x.vel_;
 
     return state_q;
   }

@@ -51,7 +51,7 @@ class RMPPolicyBase {
  public:
   static constexpr int n = TNormSpace::dim;
   using Matrix = Eigen::Matrix<double, TNormSpace::dim, TNormSpace::dim>;
-  using Vector = Eigen::Matrix<double, TNormSpace::dim, 1>;
+  using VectorQ = Eigen::Matrix<double, TNormSpace::dim, 1>;
   using PValue = PolicyValue<TNormSpace::dim>;
   using PState = State<TNormSpace::dim>;
 
