@@ -6,14 +6,15 @@
  */
 template <class TSpace>
 void rmpcpp::RMPPlanner<TSpace>::integrate() {
+  // ignore if trajectory is not initialized
   if (!trajectory_) {
     return;
-  }  // ignore if trajectory is not initalized.
+  }
 
   // start from end of current trajectory (which should always be initialized
   // when this function is called)
-  integrator_.resetTo(trajectory_->current().position,
-                      trajectory_->current().velocity);
+  integrator_.resetTo(trajectory_->hasData() ? trajectory_->current().position : GetStartPos(),
+                      trajectory_->hasData() ? trajectory_->current().velocity : GetStartVel());
 
   // reset state
   size_t num_steps = 0;
@@ -37,8 +38,12 @@ void rmpcpp::RMPPlanner<TSpace>::integrate() {
     integrator_.getState(next_position, next_velocity, next_acceleration);
 
     // update exit conditions
-    /** Collision check */
-    if (this->checkBlocking(trajectory_->current().position, next_position)) {
+    // Meant to be moved so not defined const here
+    RMPWaypoint<TSpace> next_waypoint = {.position = next_position,
+                                         .velocity = next_velocity,
+                                         .acceleration = next_acceleration};
+    // collision check
+    if (trajectory_->hasData() && this->checkBlocking(trajectory_->current().position, next_position)) {
       this->collided_ = true;
     }
 
@@ -53,8 +58,9 @@ void rmpcpp::RMPPlanner<TSpace>::integrate() {
 
     num_steps++;
     // store results
-    trajectory_->addPoint(next_position, next_velocity, next_acceleration);
+    trajectory_->addPoint(std::move(next_waypoint));
   }
+  trajectory_->setCollided(this->collided_);
 }
 
 /**
@@ -63,33 +69,78 @@ void rmpcpp::RMPPlanner<TSpace>::integrate() {
  * @param start
  */
 template <class TSpace>
-void rmpcpp::RMPPlanner<TSpace>::plan(const State<TSpace::dim> &start) {
+void rmpcpp::RMPPlanner<TSpace>::plan() {
   // Reset states
   this->collided_ = false;
   this->goal_reached_ = false;
   this->diverged_ = false;
 
   trajectory_->clearData();
-  trajectory_->addPoint(start.pos_, start.vel_);
+  trajectory_->addPoint(GetStartPos(), GetStartVel());
 
   // run integrator
   this->integrate();
 }
 
+template<class TSpace>
+void rmpcpp::RMPPlanner<TSpace>::DrawTrajectoryCurrent(const mjpc::Trajectory* trajectory, const float* color)
+{
+  const auto* rmp_trajectory = static_cast<const RMPTrajectory<TSpace>*>(trajectory);
+  auto currentPoint = rmp_trajectory->current();
+  static constexpr float ORANGE[] = {1.0, 165.0/255.0, 0.0, 1.0};
+  if (!color) {
+    color = ORANGE;
+  }
+  const auto curPos = geometry_.convertPosToX(currentPoint.position);
+  const auto curVel = geometry_.convertPosToX(currentPoint.velocity);
+  mjpc::AddConnector(task_->scn, mjGEOM_ARROW, 0.005, curPos.data(),
+                     VectorX(curPos + curVel.norm() * curVel).data(), color);
+}
+
+template<class TSpace>
+void rmpcpp::RMPPlanner<TSpace>::DrawTrajectory(const mjpc::Trajectory* trajectory, const float* color)
+{
+  const auto* rmp_trajectory = static_cast<const RMPTrajectory<TSpace>*>(trajectory);
+  static constexpr float RED[] = {1.0, 0.0, 0.0, 1.0};
+  if (!color) {
+    color = RED;
+  }
+  for(auto i = 0; i < rmp_trajectory->getWaypointsCount() - 1; ++i) {
+    const auto point_i = geometry_.convertPosToX((*rmp_trajectory)[i].position);
+    const auto point_i_1 = geometry_.convertPosToX((*rmp_trajectory)[i+1].position);
+    mjpc::AddConnector(task_->scn, mjGEOM_LINE, 5,
+                       point_i.data(),
+                       point_i_1.data(), color);
+  }
+}
+
 template <class TSpace>
 void rmpcpp::RMPPlanner<TSpace>::Traces(mjvScene* scn) {
-  //static constexpr float PINK[] = {1.0, 192.0/255.0,203.0/255.0, 1.0};
-
+  //static constexpr float PINK[] = {1.0, 192.0/255.0,203.0/255.0, 1.0}
 #if RMP_DRAW_VELOCITY
-  const auto* best_trajectory = static_cast<const TrajectoryRMP<TSpace>*>(BestTrajectory());
-  auto currentPoint = best_trajectory->current();
-  static constexpr float ORANGE[] = {1.0, 165.0/255.0, 0.0, 1.0};
-  //static constexpr float ORANGE[] = {0.0, 0.0, 1.0, 1.0};
-  auto curPos = geometry_.convertPosToX(currentPoint.position);
-  auto curVel = geometry_.convertPosToX(currentPoint.velocity);
-  curVel.normalize();
-  mjpc::AddConnector(task_->scn, mjGEOM_ARROW, 0.005, curPos.data(),
-                     VectorX(curPos + 0.05 * curVel).data(), ORANGE);
+  DrawTrajectoryCurrent(BestTrajectory());
+#endif
+
+#if RMP_DRAW_TRACE_RAYS
+  static const int OBSTACLES_NUM = task_->OBSTACLES_NUM;
+  static const int PTS_NUM = task_->TRACE_RAYS_NUM;
+
+  if (task_->ray_start.size() && task_->ray_end.size()) {
+    static constexpr float PINK[] = {1.0, 0.5, 1.0, 0.5};
+    for (auto i = 0; i < OBSTACLES_NUM; ++i) {
+      for (auto j = 0; j < PTS_NUM; ++j) {
+        mjpc::AddConnector(scn, mjGEOM_LINE, 0.3,
+                           task_->ray_start.data() + i * PTS_NUM + 3 * j,
+                           task_->ray_end.data() + i * PTS_NUM + 3 * j, PINK);
+      }
+    }
+    task_->ray_start.fill(0.);
+    task_->ray_end.fill(0.);
+  }
+#endif
+
+#if RMP_DRAW_TRAJECTORY
+  DrawTrajectory(trajectory_.get());
 #endif
 
 #if RMP_DRAW_START_GOAL
@@ -99,16 +150,5 @@ void rmpcpp::RMPPlanner<TSpace>::Traces(mjvScene* scn) {
   static constexpr float GREEN[] = {0.0, 1.0, 0.0, 1.0};
   mjpc::AddConnector(scn, mjGEOM_LINE, 5, start_pos.data(),
                      goal_pos.data(), GREEN);
-#endif
-
-#if RMP_DRAW_TRAJECTORY
-  static constexpr float RED[] = {1.0, 0.0, 0.0, 1.0};
-  for(auto i = 0; i < trajectory_->getWaypointsCount() - 1; ++i) {
-    const auto point_i = geometry_.convertPosToX((*trajectory_)[i].position);
-    const auto point_i_1 = geometry_.convertPosToX((*trajectory_)[i+1].position);
-    mjpc::AddConnector(scn, mjGEOM_LINE, 5,
-                       point_i.data(),
-                       point_i_1.data(), RED);
-  }
 #endif
 }

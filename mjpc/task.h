@@ -15,6 +15,7 @@
 #ifndef MJPC_TASK_H_
 #define MJPC_TASK_H_
 
+#include <array>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -123,8 +124,10 @@ class Task {
 
   virtual std::string Name() const = 0;
   virtual std::string XmlPath() const = 0;
+  static constexpr int TRACE_RAYS_NUM = 10;
+  static constexpr int OBSTACLES_NUM = 10;
   virtual int GetTargetObjectId() const { return -1; }
-  virtual bool CheckBlocking(const double start[], const double end[]) const {return false;}
+  virtual bool CheckBlocking(const double start[], const double end[]) {return false;}
 
   // model
   mjModel* model_ = nullptr;
@@ -160,7 +163,8 @@ class Task {
 
   // residual parameters
   std::vector<double> parameters;
-
+  std::array<mjtNum, 3 * OBSTACLES_NUM * TRACE_RAYS_NUM> ray_start = {0.};
+  std::array<mjtNum, 3 * OBSTACLES_NUM * TRACE_RAYS_NUM> ray_end = {0.};
  protected:
   // returns a pointer to the ResidualFn instance that's used for physics
   // stepping and plotting, and is internal to the class

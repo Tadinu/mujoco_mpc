@@ -14,8 +14,8 @@
 #define RMP_USE_LINEAR_GEOMETRY (1)
 #define RMP_DRAW_START_GOAL (0)
 #define RMP_DRAW_VELOCITY (1)
-#define RMP_DRAW_TRAJECTORY (1)
-#define RMP_DRAW_TRAJECTORY_COLLISION (1)
+#define RMP_DRAW_TRAJECTORY (0)
+#define RMP_DRAW_TRACE_RAYS (1)
 
 namespace rmpcpp {
 
@@ -39,7 +39,7 @@ class RMPPlannerBase : public mjpc::Planner {
   }
 
   /** Pure virtual */
-  virtual void plan(const State<TSpace::dim>& start) = 0;
+  virtual void plan() = 0;
 
   VectorQ getGoalPos() const {
     return goal;
@@ -67,9 +67,9 @@ class RMPPlannerBase : public mjpc::Planner {
 
   bool success() const { return goal_reached_ && !diverged_ && !collided_; };
 
-  virtual bool checkBlocking(const VectorQ & s1, const VectorQ & s2) const = 0;
+  virtual bool checkBlocking(const VectorQ& s1, const VectorQ& s2) = 0;
   virtual bool hasTrajectory() const = 0;
-  virtual const std::shared_ptr<TrajectoryRMP<TSpace>> getTrajectory() const = 0;
+  virtual const std::shared_ptr<RMPTrajectory<TSpace>> getTrajectory() const = 0;
 
   virtual double distanceToObstacle(const VectorQ & pos) {
       return 0;
