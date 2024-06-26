@@ -99,7 +99,7 @@ class GeometryBase {
     PolicyX push(const PolicyQ policy) {
       // https://arxiv.org/pdf/1801.02854 - Eq 12
       // todo(mpantic): Check if this correct. I think its currently not used.
-      auto J_pinv = J_.completeOrthogonalDecomposition().pseudoInverse();
+      auto J_pinv = PolicyX::pinv(J_);
       MatrixX A = J_pinv.transpose() * policy.A_ * J_pinv;
       VectorX f = J_ * policy.f_;
       return {f, A};

@@ -27,34 +27,53 @@ std::string Particle::XmlPath() const {
 }
 std::string Particle::Name() const { return "Particle"; }
 
-bool Particle::CheckBlocking(const double start[], const double end[]) const {
-#if 0
+bool Particle::CheckBlocking(const double start[], const double end[]) {
+#if 1
+  static constexpr double TRACE_DELTA = 2*M_PI/ TRACE_RAYS_NUM;
+
   // CHECK OVERLAPPING
   double vec[3]; mju_sub3(vec, end, start);
-  for (auto i = 0; i < 9; ++i) {
+  double obstacle_size[3];
+  for (auto i = 0; i < OBSTACLES_NUM; ++i) {
     std::ostringstream obstacle_name;
     obstacle_name << "obstacle_" << i;
     auto obstacle_i_id = mj_name2id(model_, mjOBJ_BODY, obstacle_name.str().c_str());
     auto obstacle_geom_i_id = mj_name2id(model_, mjOBJ_GEOM, obstacle_name.str().c_str());
-    // add if ray-zone intersection (always true when con->pos inside zone)
-    if (mju_rayGeom(&data_->xpos[3*obstacle_i_id], &data_->xmat[9*obstacle_i_id],
-                    &model_->geom_size[3*obstacle_geom_i_id],
-                    start, vec,
-                    mjGEOM_SPHERE) >= 0) {
-#if RMP_DRAW_TRAJECTORY_COLLISION
-      static constexpr float RED[] = {1.0, 0.0, 0.0, 1.0};
-      mjpc::AddConnector(scn, mjGEOM_LINE, 100, start, end, RED);
+    mju_scl(obstacle_size, &model_->geom_size[3*obstacle_geom_i_id], 2.0, 3);
+
+    static const double particle_size = [this]() {
+      auto particle_geom_id = mj_name2id(model_, mjOBJ_GEOM, "rigidmass");
+      return model_->geom_size[3*particle_geom_id];
+    }();
+    for (auto j = 0; j < TRACE_RAYS_NUM; ++j)
+    {
+      mjtNum pt[3];
+      pt[0] = start[0] + particle_size * mju_sin(j* TRACE_DELTA);
+      pt[1] = start[1] + particle_size * mju_cos(j* TRACE_DELTA);
+      pt[2] = start[2];
+
+#if RMP_DRAW_TRACE_RAYS
+      mju_copy3(ray_start.data() + i * TRACE_RAYS_NUM + 3 * j, pt);
+      mju_add3(ray_end.data() + i * TRACE_RAYS_NUM + 3 * j, pt, vec);
 #endif
-      static constexpr float YELLOW[] = {1.0, 1.0, 0.0, 1.0};
-      SetGeomColor(obstacle_geom_i_id, YELLOW);
-      return true;
+
+      // add if ray-zone intersection (always true when con->pos inside zone)
+      if (mju_rayGeom(&data_->xpos[3*obstacle_i_id], &data_->xmat[9*obstacle_i_id],
+                      obstacle_size,
+                      pt, vec,
+                      mjGEOM_SPHERE) != -1) {
+        static constexpr float YELLOW[] = {1.0, 1.0, 0.0, 1.0};
+        SetGeomColor(obstacle_geom_i_id, YELLOW);
+        return true;
+      }
     }
   }
+  return false;
 #else
   // CHECK COLLISION
   static int rigidmass_id = GetTargetObjectId();
   static auto obstacles_id = [this] () {
-    std::array<int, 9> obstacles_id = {0};
+    std::array<int, OBSTACLES_NUM> obstacles_id = {0};
     for (auto i = 0; i < obstacles_id.size(); ++i) {
       std::ostringstream obstacle_name;
       obstacle_name << "obstacle_" << i;

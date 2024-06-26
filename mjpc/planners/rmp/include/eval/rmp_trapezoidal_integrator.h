@@ -45,10 +45,10 @@ class TrapezoidalIntegrator {
                       TGeometry>::value,
       "Geometry must inherit from GeometryBase with correct dimensionality");
 
-  using Vector_x = typename TGeometry::VectorX;
-  using Matrix_x = typename TGeometry::MatrixX;
-  using Vector_q = typename TGeometry::VectorQ;
-  using Matrix_q = typename TGeometry::MatrixQ;
+  using VectorX = typename TGeometry::VectorX;
+  using MatrixX = typename TGeometry::MatrixX;
+  using VectorQ = typename TGeometry::VectorQ;
+  using MatrixQ = typename TGeometry::MatrixQ;
   using StateQ = typename TGeometry::StateQ;
   using StateX = typename TGeometry::StateX;
 
@@ -60,29 +60,29 @@ class TrapezoidalIntegrator {
   /**
    *  Reset integrator to a specific state.
    */
-  void resetTo(const Vector_q position,
-               const Vector_q velocity = Vector_q::Zero()) {
+  void resetTo(const VectorQ& position,
+               const VectorQ& velocity = VectorQ::Zero()) {
     current_pos_ = position;
     current_vel_ = velocity;
     distance_ = 0.0;
     done_ = false;
-    last_acc_ = Vector_q::Zero();
-    last_metric_ = Matrix_q::Zero();
+    //last_acc_ = VectorQ::Zero();
+    //last_metric_ = MatrixQ::Zero();
   }
 
   /**
    * Advance by dt and return position in configuration space.
    */
-  Vector_q forwardIntegrate(std::vector<TPolicy*> policies, TGeometry& geometry,
-                            float dt) {
+  VectorQ forwardIntegrate(const std::vector<TPolicy*>& policies, TGeometry& geometry,
+                           float dt) {
     // relative start and end of integration
     const float a = 0.0;
     const float b = dt;
 
     // get position in manifold
-    Vector_x pos_x, x_dot;
-    Vector_q acc_b, vel_b, acc_a, vel_a;
-    Vector_q dist_increment;
+    VectorX pos_x, x_dot;
+    VectorQ acc_b, vel_b, acc_a, vel_a;
+    VectorQ dist_increment;
     acc_a = last_acc_;
     vel_a = current_vel_;
 
@@ -112,16 +112,16 @@ class TrapezoidalIntegrator {
 
     return current_pos_;
   }
-  Vector_q forwardIntegrateFixed(typename TPolicy::PValue policy, TGeometry& /*geometry*/,
+  VectorQ forwardIntegrateFixed(typename TPolicy::PValue policy, TGeometry& /*geometry*/,
                                  float dt) {
     // relative start and end of integration
     const float a = 0.0;
     const float b = dt;
 
     // get position in manifold
-    Vector_x pos_x, x_dot;
-    Vector_q acc_b, vel_b, acc_a, vel_a;
-    Vector_q dist_increment;
+    VectorX pos_x, x_dot;
+    VectorQ acc_b, vel_b, acc_a, vel_a;
+    VectorQ dist_increment;
     acc_a = last_acc_;
     vel_a = current_vel_;
 
@@ -157,14 +157,14 @@ class TrapezoidalIntegrator {
    */
   double totalDistance() { return distance_; }
 
-  Vector_q getPos() { return current_pos_; }
+  VectorQ getPos() { return current_pos_; }
 
-  Vector_q getVel() { return current_vel_; }
-  Vector_q getAcc() { return last_acc_; }
+  VectorQ getVel() { return current_vel_; }
+  VectorQ getAcc() { return last_acc_; }
 
-  Matrix_q getMetric() { return last_metric_; }
+  MatrixQ getMetric() { return last_metric_; }
 
-  void getState(Vector_q& pos, Vector_q& vel, Vector_q& acc) {
+  void getState(VectorQ& pos, VectorQ& vel, VectorQ& acc) {
     pos = current_pos_;
     vel = current_vel_;
     acc = last_acc_;
@@ -173,10 +173,10 @@ class TrapezoidalIntegrator {
 private:
   bool done_ = false;
   double distance_ = 0.0;
-  Vector_q current_pos_ = Vector_q::Zero();
-  Vector_q current_vel_ = Vector_q::Zero();
-  Vector_q last_acc_ = Vector_q::Zero();
-  Matrix_q last_metric_ = Matrix_q::Zero();
+  VectorQ current_pos_ = VectorQ::Zero();
+  VectorQ current_vel_ = VectorQ::Zero();
+  VectorQ last_acc_ = VectorQ::Zero();
+  MatrixQ last_metric_ = MatrixQ::Zero();
 };
 
 }  // namespace rmpcpp

@@ -26,7 +26,7 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
   using Matrix = typename RMPPlannerBase<TSpace>::Matrix;
 
  public:
-  friend class TrajectoryRMP<TSpace>;
+  friend class RMPTrajectory<TSpace>;
   static constexpr int dim = TSpace::dim;
   RMPPlanner() {}
   ~RMPPlanner() = default;
@@ -49,22 +49,37 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
     static auto default_target_policy2 = std::make_shared<SimpleTargetPolicy<TSpace>>();
     (*default_target_policy2)(this->getGoalPos(),
                               VectorQ::UnitX().asDiagonal(), 10.0, 22.0, 0.05);
+#if 1
+    static std::vector<std::shared_ptr<SimpleTargetPolicy<TSpace>>> sub_policies(10, std::make_shared<SimpleTargetPolicy<TSpace>>());
+
+    for(auto i = 0; i < sub_policies.size()/2; ++i) {
+      (*sub_policies[i])(this->getGoalPos(),
+                         VectorQ::UnitY().asDiagonal(), i, 2*i, 0.05);
+      policies.push_back(sub_policies[i]);
+    }
+    for(auto i = sub_policies.size()/2; i < sub_policies.size(); ++i) {
+      (*sub_policies[i])(this->getGoalPos(),
+                         Matrix::Identity(), i, 2*i, 0.05);
+      policies.push_back(sub_policies[i]);
+    }
+#endif
 
     policies.push_back(default_target_policy);
     policies.push_back(default_target_policy2);
     return policies;
   }
 
-  const std::shared_ptr<TrajectoryRMP<TSpace>> getTrajectory() const override {
+  const std::shared_ptr<RMPTrajectory<TSpace>> getTrajectory() const override {
     return trajectory_;  // only valid if planner has run.
   };
 
   bool hasTrajectory() const override { return trajectory_.operator bool(); }
 
-  void plan(const rmpcpp::State<TSpace::dim>& start) override;
+  // Plan a path from start -> goal
+  void plan() override;
 
-  const mjpc::Task* task_ = nullptr;
-  bool checkBlocking(const VectorQ& start, const VectorQ& end) const override {
+  mjpc::Task* task_ = nullptr;
+  bool checkBlocking(const VectorQ& start, const VectorQ& end) override {
 #if 0
       if ((end - start).norm() < 0.0001) {
         // Raycasting is inconsistent if they're almost on top of each other -> NOT blocking
@@ -82,7 +97,7 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
   mjData* data_ = nullptr;
   // initialize data and settings
   void Initialize(mjModel* model, const mjpc::Task& task) override {
-    task_ = &task;
+    task_ = const_cast<mjpc::Task*>(&task);
     model_ = model;
     data_ = task_->data_;
 
@@ -96,7 +111,7 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
         mju_max(mju_max(mju_max(dim_state, dim_state_derivative), dim_action),
                 model->nuser_sensor);
 
-    trajectory_ = std::make_unique<TrajectoryRMP<TSpace>>();
+    trajectory_ = std::make_shared<RMPTrajectory<TSpace>>();
   }
 
   // allocate memory
@@ -124,19 +139,27 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
     this->setStartVel(geometry_.convertPosToQ(rmpcpp::vectorFromScalarArray<TSpace::dim>(vel)));
   }
 
+  VectorQ GetStartPos() const
+  {
+    return geometry_.convertPosToQ(vectorFromScalarArray<3>(task_->GetStartPos()));
+  }
+
+  VectorQ GetStartVel() const
+  {
+    return geometry_.convertPosToQ(vectorFromScalarArray<3>(task_->GetStartVel()));
+  }
+
   // optimize nominal policy
   void OptimizePolicy(int horizon, mjpc::ThreadPool& pool)  override {
     // get nominal trajectory
     this->NominalTrajectory(horizon, pool);
 
     // plan
-    State<TSpace::dim> startState(this->getStartPos(), this->getStartVel());
-
 #if 1
-    plan(startState);
+    plan();
 #else
     auto starttime = std::chrono::high_resolution_clock::now();
-    plan(startState);
+    plan();
     auto endtime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
         endtime - starttime);
@@ -162,10 +185,10 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
   // set action from policy
   void ActionFromPolicy(double* action, const double* state,
                         double time, bool use_previous = false) override {
-    const auto* best_trajectory = static_cast<const TrajectoryRMP<TSpace>*>(BestTrajectory());
+    const auto* best_trajectory = static_cast<const RMPTrajectory<TSpace>*>(BestTrajectory());
     auto currentPoint = best_trajectory->current();
 #if 1
-    const auto& velq = currentPoint.velocity;
+    const auto& velq = geometry_.convertPosToX(currentPoint.velocity);
     action[0] = velq[0];
     action[1] = velq[1];
 #else
@@ -193,6 +216,8 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
   // return trajectory with best total return, or nullptr if no planning
   // iteration has completed
   const mjpc::Trajectory* BestTrajectory() override { return trajectory_.get();}
+  void DrawTrajectoryCurrent(const mjpc::Trajectory* trajectory, const float* color = nullptr);
+  void DrawTrajectory(const mjpc::Trajectory* trajectory, const float* color = nullptr);
 
   // visualize planner-specific traces
   void Traces(mjvScene* scn) override;
@@ -213,7 +238,7 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
 
   TrapezoidalIntegrator<RMPPolicyBase<TSpace>, RiemannianGeometry> integrator_;
   ParametersRMP parameters_;
-  std::shared_ptr<TrajectoryRMP<TSpace>> trajectory_;
+  std::shared_ptr<RMPTrajectory<TSpace>> trajectory_;
 
   // dimensions
   int dim_state;             // state

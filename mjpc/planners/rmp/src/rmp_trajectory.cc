@@ -6,19 +6,19 @@
 
 /** Formatting of the data struct for data exporting */
 template <class TSpace>
-std::string rmpcpp::TrajectoryPointRMP<TSpace>::getHeaderFormat() {
+std::string rmpcpp::RMPWaypoint<TSpace>::getHeaderFormat() {
   return "x y z vx vy vz ax ay az v_mag ";
 }
 template std::string
-rmpcpp::TrajectoryPointRMP<rmpcpp::Space<3>>::getHeaderFormat();
+rmpcpp::RMPWaypoint<rmpcpp::Space<3>>::getHeaderFormat();
 
 template <>
-std::string rmpcpp::TrajectoryPointRMP<rmpcpp::Space<2>>::getHeaderFormat() {
+std::string rmpcpp::RMPWaypoint<rmpcpp::Space<2>>::getHeaderFormat() {
   return "x y vx vy ax ay v_mag ";
 }
 
 template <class TSpace>
-std::string rmpcpp::TrajectoryPointRMP<TSpace>::format() const {
+std::string rmpcpp::RMPWaypoint<TSpace>::format() const {
   Eigen::IOFormat format(Eigen::FullPrecision, Eigen::DontAlignCols, " ", " ",
                          "", "", " ", "");
   std::stringstream str;
@@ -29,33 +29,46 @@ std::string rmpcpp::TrajectoryPointRMP<TSpace>::format() const {
 /**************************************************/
 
 template <class TSpace>
-void rmpcpp::TrajectoryRMP<TSpace>::addPoint(const VectorQ &p, const VectorQ &v,
+void rmpcpp::RMPTrajectory<TSpace>::addPoint(const VectorQ &p, const VectorQ &v,
                                              const VectorQ &a) {
-  TrajectoryPointRMP<TSpace> point;
+  RMPWaypoint<TSpace> point;
   point.position = p;
   point.velocity = v;
   point.acceleration = a;
-  point.cumulative_length = getLength() + (current().position - p).norm();
-  trajectory_data_.push_back(point);
+  addPoint(std::move(point));
 }
 
 template <class TSpace>
-int rmpcpp::TrajectoryRMP<TSpace>::getSegmentCount() const {
+void rmpcpp::RMPTrajectory<TSpace>::addPoint(const RMPWaypoint<TSpace>& point)
+{
+  auto new_point = point;
+  addPoint(std::move(new_point));
+}
+
+template <class TSpace>
+void rmpcpp::RMPTrajectory<TSpace>::addPoint(RMPWaypoint<TSpace>&& point)
+{
+  point.cumulative_length = getLength() + (current().position - point.position).norm();
+  trajectory_data_.push_back(std::move(point));
+}
+
+template <class TSpace>
+int rmpcpp::RMPTrajectory<TSpace>::getSegmentCount() const {
   return trajectory_data_.size() - 1;  // one point is not a segment yet.
 }
 
 template <class TSpace>
-int rmpcpp::TrajectoryRMP<TSpace>::getWaypointsCount() const {
+int rmpcpp::RMPTrajectory<TSpace>::getWaypointsCount() const {
   return trajectory_data_.size();
 }
 
 template <class TSpace>
-double rmpcpp::TrajectoryRMP<TSpace>::getLength() const {
+double rmpcpp::RMPTrajectory<TSpace>::getLength() const {
   return (trajectory_data_.size() > 0 ) ? current().cumulative_length : 0.0;
 }
 
 template <class TSpace>
-double rmpcpp::TrajectoryRMP<TSpace>::getSmoothness() const {
+double rmpcpp::RMPTrajectory<TSpace>::getSmoothness() const {
   double smoothness = 0;
   for (size_t i = 2; i < trajectory_data_.size(); i++) {
     auto A = trajectory_data_[i - 2].position;
@@ -72,14 +85,14 @@ double rmpcpp::TrajectoryRMP<TSpace>::getSmoothness() const {
 
 /** Cross product does not work for 2d vectors. */
 template <>
-double rmpcpp::TrajectoryRMP<rmpcpp::Space<2>>::getSmoothness() const {
+double rmpcpp::RMPTrajectory<rmpcpp::Space<2>>::getSmoothness() const {
   throw std::runtime_error("Not implemented");
 }
 
 template <class TSpace>
-void rmpcpp::TrajectoryRMP<TSpace>::writeToStream(std::ofstream &file) const {
+void rmpcpp::RMPTrajectory<TSpace>::writeToStream(std::ofstream &file) const {
   // write header
-  file << "i " << rmpcpp::TrajectoryPointRMP<TSpace>::getHeaderFormat()
+  file << "i " << rmpcpp::RMPWaypoint<TSpace>::getHeaderFormat()
        << std::endl;
 
   // write lines
@@ -89,7 +102,7 @@ void rmpcpp::TrajectoryRMP<TSpace>::writeToStream(std::ofstream &file) const {
 }
 
 // explicit instantation
-template class rmpcpp::TrajectoryRMP<rmpcpp::Space<3>>;
-template class rmpcpp::TrajectoryRMP<rmpcpp::Space<2>>;
-template class rmpcpp::TrajectoryRMP<rmpcpp::CylindricalSpace>;
+template class rmpcpp::RMPTrajectory<rmpcpp::Space<3>>;
+template class rmpcpp::RMPTrajectory<rmpcpp::Space<2>>;
+template class rmpcpp::RMPTrajectory<rmpcpp::CylindricalSpace>;
 
