@@ -59,14 +59,14 @@ class PolicyValue {
   /**
    * Sum operator as defined in eq. 9 in [1].
    */
-  static PolicyValue sum(const std::vector<PolicyValue> RMPBases) {
+  static PolicyValue sum(const std::vector<PolicyValue>& RMPBases) {
     Matrix sum_ai = Matrix::Zero();
     Vector sum_ai_fi = Vector::Zero();
 
     // sum up terms
-    for (const auto &RMPBase : RMPBases) {
-      sum_ai += RMPBase.A_;
-      sum_ai_fi += RMPBase.A_ * RMPBase.f_;
+    for (const auto &rmpBase : RMPBases) {
+      sum_ai += rmpBase.A_;
+      sum_ai_fi += rmpBase.A_ * rmpBase.f_;
     }
 
     auto f_summed = pinv(sum_ai) * sum_ai_fi;

@@ -22,6 +22,11 @@
 #include <mujoco/mujoco.h>
 #include "mjpc/task.h"
 
+// Dynamical Movement Primitives: Learning Attractor Models for Motor Behaviors
+// https://ieeexplore.ieee.org/document/6797340
+// https://homes.cs.washington.edu/~todorov/courses/amath579/reading/DynamicPrimitives.pdf
+// https://studywolf.wordpress.com/2013/11/16/dynamic-movement-primitives-part-1-the-basics
+// https://studywolf.wordpress.com/2016/05/13/dynamic-movement-primitives-part-4-avoiding-obstacles
 namespace mjpc {
 class Particle : public Task {
  public:
@@ -88,7 +93,7 @@ class Particle : public Task {
   const double* GetGoalPos() const override {
     return GetBodyMocapPos(model_, data_, "goal");
   }
-  bool CheckBlocking(const double start[], const double end[]) const override;
+  bool CheckBlocking(const double start[], const double end[]) override;
   class ResidualFn : public mjpc::BaseResidualFn {
    public:
     explicit ResidualFn(const Particle* task)
@@ -109,9 +114,9 @@ class Particle : public Task {
   void TransitionLocked(mjModel* model, mjData* data) override;
 
   virtual void MoveObstacles() {
-    for(auto i = 1; i < 10; ++i) {
-      double obstacle_curve_pos[2] = {0.1 * log(i+1) * mju_sin(0.2*i * data_->time),
-                                      0.1 * log(i+1) * mju_cos(0.2*i * data_->time)};
+    for(auto i = 1; i < (OBSTACLES_NUM+1); ++i) {
+      double obstacle_curve_pos[2] = {0.05 * log(i+1) * mju_sin(0.2*i * data_->time),
+                                      0.05 * log(i+1) * mju_cos(0.2*i * data_->time)};
       std::ostringstream obstacle_name;
       obstacle_name << "obstacle_" << (i - 1);
       SetBodyMocapPos(model_, data_, obstacle_name.str().c_str(), obstacle_curve_pos);

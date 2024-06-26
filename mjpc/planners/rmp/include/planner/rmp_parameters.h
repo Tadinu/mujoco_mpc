@@ -75,7 +75,7 @@ struct ParametersRMP {
   PolicyType policy_type;
   double dt = 0.04;
   double r = 5.0;
-  int max_length = 20;
+  int max_length = 100;
   int max_steps = 2000;
   double truncation_distance_vox = 1.0f;
 
