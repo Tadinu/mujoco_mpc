@@ -15,7 +15,9 @@ namespace rmpcpp {
 template <class TSpace>
 struct RMPWaypoint {
   using VectorQ = Eigen::Matrix<double, TSpace::dim, 1>;
+  using MatrixQ = Eigen::Matrix<double, TSpace::dim, TSpace::dim>;
   VectorQ position;
+  MatrixQ rotation;
   VectorQ velocity;
   VectorQ acceleration;
   double cumulative_length = 0.0;  // Cumulative length of this trajectory

@@ -30,6 +30,17 @@ TVector vectorFromScalarArray(const T* scalarArray) {
   return v;
 }
 
+template<int dim, typename T = double,
+         typename TMatrix=Eigen::Matrix<T, dim, dim>,
+         typename TQuat=Eigen::Quaternion<T>>
+TMatrix matrixFromScalarArray(const T* scalarQuat) {
+  TQuat quat(scalarQuat[0],
+             scalarQuat[1],
+             scalarQuat[2],
+             scalarQuat[3]);
+  return quat.toRotationMatrix();
+}
+
 /**
  * Range iterator for multi-dimensional vectors.
  * By supplying a start vector, an end vector and and increment vector,
