@@ -61,13 +61,15 @@ class TrapezoidalIntegrator {
    *  Reset integrator to a specific state.
    */
   void resetTo(const VectorQ& position,
-               const VectorQ& velocity = VectorQ::Zero()) {
+               const VectorQ& velocity,
+               std::vector<StateX>&& obstacle_statesX) {
     current_pos_ = position;
     current_vel_ = velocity;
     distance_ = 0.0;
     done_ = false;
-    //last_acc_ = VectorQ::Zero();
+    //last_acc_ = Vector::Zero();
     //last_metric_ = MatrixQ::Zero();
+    current_obstacle_statesX_ = std::move(obstacle_statesX);
   }
 
   /**
@@ -87,13 +89,14 @@ class TrapezoidalIntegrator {
     vel_a = current_vel_;
 
     // Convert current Configuration space position -> Task space
-    StateQ current_stateQ{current_pos_, current_vel_};
+    StateQ current_stateQ{.pos_ = current_pos_, .vel_ = current_vel_};
     StateX current_stateX = geometry.convertToX(current_stateQ);
 
     // evaluate all policy and get new accelerations
     std::vector<typename TPolicy::PValue> evaluated_policies;
-    for (TPolicy* policy : policies) {
-      evaluated_policies.push_back(geometry.at(current_stateX).pull(*policy));
+    for (auto* policy : policies) {
+      evaluated_policies.push_back(geometry.createParametrized(current_stateX,
+                                                               current_obstacle_statesX_).pull(policy));
     }
 
     PolicyValue pval = TPolicy::PValue::sum(evaluated_policies);
@@ -177,6 +180,7 @@ private:
   VectorQ current_vel_ = VectorQ::Zero();
   VectorQ last_acc_ = VectorQ::Zero();
   MatrixQ last_metric_ = MatrixQ::Zero();
+  std::vector<StateX> current_obstacle_statesX_;
 };
 
 }  // namespace rmpcpp

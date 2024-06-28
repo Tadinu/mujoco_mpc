@@ -11,7 +11,7 @@ class RotatedGeometry3d : public GeometryBase<3, 3> {
   // type alias for readability.
   using base = GeometryBase<3, 3>;
   using VectorX = base::VectorX;
-  using VectorQ = base::VectorQ;
+  using Vector = base::VectorQ;
   using StateX = base::StateX;
   using StateQ = base::StateQ;
   using J_phi = base::J_phi;
@@ -27,13 +27,14 @@ class RotatedGeometry3d : public GeometryBase<3, 3> {
 
   inline virtual VectorX convertPosToX(const VectorQ &vector_q) const { return R_x_q_ * vector_q; }
   inline virtual StateX convertToX(const StateQ &state_q) const {
-    return {R_x_q_ * state_q.pos_, R_x_q_ * state_q.vel_};
+    return {.pos_ = R_x_q_ * state_q.pos_,
+            .vel_ = R_x_q_ * state_q.vel_};
   }
 
   inline virtual VectorQ convertPosToQ(const VectorX &vector_x) const { return R_x_q_.transpose() * vector_x; }
   inline virtual StateQ convertToQ(const StateX &state_x) const {
-    return {R_x_q_.transpose() * state_x.pos_,
-            R_x_q_.transpose() * state_x.vel_};
+    return {.pos_ = R_x_q_.transpose() * state_x.pos_,
+            .vel_ = R_x_q_.transpose() * state_x.vel_};
   }
 
  private:

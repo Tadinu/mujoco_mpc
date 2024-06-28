@@ -12,10 +12,16 @@
 #include "mjpc/planners/rmp/include/policies/rmp_simple_target_policy.h"
 
 #define RMP_USE_LINEAR_GEOMETRY (1)
+#define RMP_USE_ACTUATOR_VELOCITY (1)
+#define RMP_USE_ACTUATOR_MOTOR (!RMP_USE_ACTUATOR_VELOCITY)
+#define RMP_BLOCKING_OBSTACLES_RATIO (0.2)
+#define RMP_DISTANCE_TRACE_RAYS_NUM (200)
+
 #define RMP_DRAW_START_GOAL (0)
 #define RMP_DRAW_VELOCITY (1)
 #define RMP_DRAW_TRAJECTORY (0)
-#define RMP_DRAW_TRACE_RAYS (1)
+#define RMP_DRAW_BLOCKING_TRACE_RAYS (0)
+#define RMP_DRAW_DISTANCE_TRACE_RAYS (0)
 
 namespace rmpcpp {
 
@@ -41,30 +47,6 @@ class RMPPlannerBase : public mjpc::Planner {
   /** Pure virtual */
   virtual void plan() = 0;
 
-  VectorQ getGoalPos() const {
-    return goal;
-  }
-
-  void setGoalPos(const VectorQ & new_goal) {
-    goal = new_goal;
-  }
-
-  VectorQ getStartPos() const {
-    return start;
-  }
-
-  void setStartPos(const VectorQ & new_start) {
-    start = new_start;
-  }
-
-  VectorQ getStartVel() const {
-    return start_vel;
-  }
-
-  void setStartVel(const VectorQ & new_start_vel) {
-    start_vel = new_start_vel;
-  }
-
   bool success() const { return goal_reached_ && !diverged_ && !collided_; };
 
   virtual bool checkBlocking(const VectorQ& s1, const VectorQ& s2) = 0;
@@ -84,9 +66,6 @@ class RMPPlannerBase : public mjpc::Planner {
   bool collided_ = false;
   bool goal_reached_ = false;
   bool diverged_ = false;
-  VectorQ goal = VectorQ::Zero();
-  VectorQ start = VectorQ::Zero();
-  VectorQ start_vel = VectorQ::Zero();
 };
 
 }  // namespace rmpcpp

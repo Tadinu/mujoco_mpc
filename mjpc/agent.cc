@@ -289,7 +289,6 @@ void Agent::PlanIteration(ThreadPool* pool) {
 
     // set state
     planner.SetState(state);
-    planner.SetStartGoal(task->GetStartPos(), task->GetGoalPos());
 
     // copy the task's residual function parameters into a new object, which
     // remains constant during planning and doesn't require locking from the
@@ -299,7 +298,6 @@ void Agent::PlanIteration(ThreadPool* pool) {
     if (plan_enabled) {
       // planner policy
       planner.OptimizePolicy(steps_, *pool);
-      planner.SetStartVel(task->GetStartVel());
 
       // compute time
       agent_compute_time_ =
@@ -531,7 +529,7 @@ void Agent::ModifyScene(mjvScene* scn) {
 
   // sample traces
   ActivePlanner().Traces(scn);
-  ActiveTask()->scn = scn;
+  ActiveTask()->scene_ = scn;
 }
 
 // graphical user interface elements for agent and task

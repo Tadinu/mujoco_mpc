@@ -127,19 +127,20 @@ class Task {
   static constexpr int TRACE_RAYS_NUM = 10;
   static constexpr int OBSTACLES_NUM = 10;
   virtual int GetTargetObjectId() const { return -1; }
+  virtual int GetTargetObjectGeomId() const { return -1; }
   virtual bool CheckBlocking(const double start[], const double end[]) {return false;}
 
   // model
   mjModel* model_ = nullptr;
   mjData* data_ = nullptr;
-  mjvScene* scn = nullptr;
+  mjvScene* scene_ = nullptr;
   virtual const double* GetStartPos() const { return nullptr;}
   virtual const double* GetStartVel() const { return nullptr; }
   virtual const double* GetGoalPos() const { return nullptr; }
 
   void SetGeomColor(uint geom_id, const float* rgba) const {
-    if (scn && (geom_id < model_->ngeom)) {
-      memcpy(scn->geoms[geom_id].rgba, rgba, sizeof(float) * 4);
+    if (scene_ && (geom_id < model_->ngeom)) {
+      memcpy(scene_->geoms[geom_id].rgba, rgba, sizeof(float) * 4);
     }
   }
 

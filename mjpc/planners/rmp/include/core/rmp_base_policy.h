@@ -51,15 +51,15 @@ class RMPPolicyBase {
  public:
   static constexpr int n = TNormSpace::dim;
   using Matrix = Eigen::Matrix<double, TNormSpace::dim, TNormSpace::dim>;
-  using VectorQ = Eigen::Matrix<double, TNormSpace::dim, 1>;
+  using Vector = Eigen::Matrix<double, TNormSpace::dim, 1>;
   using PValue = PolicyValue<TNormSpace::dim>;
   using PState = State<TNormSpace::dim>;
 
   // to be implemented in derivatives.
-  virtual PValue evaluateAt(const PState&) = 0;
+  virtual PValue evaluateAt(const PState& /*agent_state*/, const std::vector<PState>& /*obstacle_states*/) = 0;
   /** Asynchronous start of evaluation. If implemented will make a subsequent (blocking) call to evaluateAt
    * (with the same state) faster. */
-  virtual void startEvaluateAsync(const PState&){}; // As a default derivatives don't have to implement this
+  virtual void startEvaluateAsync(const PState&, const std::vector<PState>& obstacle_states){}; // As a default derivatives don't have to implement this
   virtual void abortEvaluateAsync(){};
 
   virtual ~RMPPolicyBase() = default;
@@ -72,8 +72,16 @@ class RMPPolicyBase {
  public:
   RMPPolicyBase() = default;
 
+  mjvScene* scene_ = nullptr;
   TNormSpace space_;
   Matrix A_static_ = Matrix::Identity();
+
+  struct RayTrace {
+   Vector ray_start;
+   Vector ray_end;
+   double distance = 0.;
+  };
+  std::vector<RayTrace> raytraces_;
 };
 }  // namespace rmpcpp
 

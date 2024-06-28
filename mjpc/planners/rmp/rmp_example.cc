@@ -15,9 +15,9 @@ int main(int argc, char *argv[]) {
   Eigen::Matrix3d metric2 = Eigen::Vector3d({1.0, 0.0, 0.0}).asDiagonal();
 
   // Create two independent policies
-  rmpcpp::SimpleTargetPolicy<rmpcpp::CylindricalSpace> targetPolicy(
+  const rmpcpp::SimpleTargetPolicy<rmpcpp::CylindricalSpace> targetPolicy(
       target, metric, 1.0, 2.0, 0.05);
-  rmpcpp::SimpleTargetPolicy<rmpcpp::CylindricalSpace> targetPolicy2(
+  const rmpcpp::SimpleTargetPolicy<rmpcpp::CylindricalSpace> targetPolicy2(
       target2, metric2, 10.0, 22.0, 0.05);
 
   // Create two independent geometries for test
@@ -28,8 +28,8 @@ int main(int argc, char *argv[]) {
   rmpcpp::State<3> state_q({1.0, M_PI_4, 0.0});
   rmpcpp::State<3> state_B({10.0, M_PI_4, 0.0});
 
-  auto pullvalue = geometry.at(state_q).pull(targetPolicy);
-  auto pullvalue_B = geometry_B.at(state_B).pull(targetPolicy2);
+  auto pullvalue = geometry.at(state_q).pull(&targetPolicy);
+  auto pullvalue_B = geometry_B.at(state_B).pull(&targetPolicy2);
 
   auto result = pullvalue + pullvalue_B;
 

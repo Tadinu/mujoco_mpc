@@ -34,17 +34,21 @@ bool Particle::CheckBlocking(const double start[], const double end[]) {
   // CHECK OVERLAPPING
   double vec[3]; mju_sub3(vec, end, start);
   double obstacle_size[3];
+  int block_obstacles_count = 0;
+  bool blocked = false;
   for (auto i = 0; i < OBSTACLES_NUM; ++i) {
+    blocked = false;
     std::ostringstream obstacle_name;
     obstacle_name << "obstacle_" << i;
     auto obstacle_i_id = mj_name2id(model_, mjOBJ_BODY, obstacle_name.str().c_str());
     auto obstacle_geom_i_id = mj_name2id(model_, mjOBJ_GEOM, obstacle_name.str().c_str());
-    mju_scl(obstacle_size, &model_->geom_size[3*obstacle_geom_i_id], 2.0, 3);
+    mju_scl(obstacle_size, &model_->geom_size[3*obstacle_geom_i_id], 3.0, 3);
 
     static const double particle_size = [this]() {
-      auto particle_geom_id = mj_name2id(model_, mjOBJ_GEOM, "rigidmass");
+      auto particle_geom_id = GetTargetObjectGeomId();
       return model_->geom_size[3*particle_geom_id];
     }();
+
     for (auto j = 0; j < TRACE_RAYS_NUM; ++j)
     {
       mjtNum pt[3];
@@ -52,7 +56,7 @@ bool Particle::CheckBlocking(const double start[], const double end[]) {
       pt[1] = start[1] + particle_size * mju_cos(j* TRACE_DELTA);
       pt[2] = start[2];
 
-#if RMP_DRAW_TRACE_RAYS
+#if RMP_DRAW_BLOCKING_TRACE_RAYS
       mju_copy3(ray_start.data() + i * TRACE_RAYS_NUM + 3 * j, pt);
       mju_add3(ray_end.data() + i * TRACE_RAYS_NUM + 3 * j, pt, vec);
 #endif
@@ -64,8 +68,16 @@ bool Particle::CheckBlocking(const double start[], const double end[]) {
                       mjGEOM_SPHERE) != -1) {
         static constexpr float YELLOW[] = {1.0, 1.0, 0.0, 1.0};
         SetGeomColor(obstacle_geom_i_id, YELLOW);
-        return true;
+        if (block_obstacles_count/float(OBSTACLES_NUM) >= RMP_BLOCKING_OBSTACLES_RATIO) {
+          return true;
+        }
+        blocked = true;
+        break;
       }
+    }
+
+    if (blocked) {
+      ++block_obstacles_count;
     }
   }
   return false;

@@ -7,7 +7,7 @@
  * Most of the default values here all get overridden by the parser class.
  */
 
-enum PolicyType { SIMPLE_ESDF, RAYCASTING_CUDA };
+enum PolicyType { SIMPLE_ESDF, RAYCASTING };
 
 struct WorldPolicyParameters {
   WorldPolicyParameters() = default;
@@ -27,42 +27,42 @@ struct EsdfPolicyParameters : WorldPolicyParameters {
 };
 
 struct RaycastingCudaPolicyParameters : WorldPolicyParameters {
-  float eta_rep = 22.0;   // Gets multiplied by a gain factor from the parser
-  float eta_damp = 35.0;  // Gets multiplied by a gain factor from the parser
-  float v_rep = 2.0;
-  float v_damp = 2.0;
-  float epsilon_damp = 0.1;
-  float c_softmax_obstacle = 0.2;
-  float r = 5.0;
+  double eta_rep = 22.0;   // Gets multiplied by a gain factor from the parser
+  double eta_damp = 35.0;  // Gets multiplied by a gain factor from the parser
+  double v_rep = 2.0;
+  double v_damp = 2.0;
+  double epsilon_damp = 0.1;
+  double c_softmax_obstacle = 0.2;
+  double r = 5.0;
   bool metric = true;
 
-  float lin_rep = 1.0;
+  double lin_rep = 1.0;
 
-  float alpha_goal = 10;
-  float beta_goal = 20;
-  float gamma_goal = 0.02;
-  float metric_goal = 1.0;
+  double alpha_goal = 10;
+  double beta_goal = 20;
+  double gamma_goal = 0.02;
+  double metric_goal = 1.0;
 
-  float a_fsp = 1e-4;
-  float eta_fsp = 0;
+  double a_fsp = 1e-4;
+  double eta_fsp = 0;
 
   int N_sqrt = 32;  // square root of number of rays. Has to be divisible by
                     // blocksize TODO: deal with non divisibility
-  float surface_distance_epsilon_vox = 0.1f;
+  double surface_distance_epsilon_vox = 0.1;
   int max_steps = 100;
-  double truncation_distance_vox = 1.0f;
+  double truncation_distance_vox = 1.0;
 };
 
 struct ParametersRMP {
-  ParametersRMP() : ParametersRMP(RAYCASTING_CUDA){};
-  explicit ParametersRMP(PolicyType T) {
+  ParametersRMP() : ParametersRMP(RAYCASTING){};
+  explicit ParametersRMP(const PolicyType T) {
     policy_type = T;
     switch (T) {
       case SIMPLE_ESDF:
         worldPolicyParameters = new EsdfPolicyParameters();
         ((EsdfPolicyParameters*)worldPolicyParameters)->r = r;
         break;
-      case RAYCASTING_CUDA:
+      case RAYCASTING:
         worldPolicyParameters = new RaycastingCudaPolicyParameters();
         ((RaycastingCudaPolicyParameters*)worldPolicyParameters)
             ->truncation_distance_vox = truncation_distance_vox;

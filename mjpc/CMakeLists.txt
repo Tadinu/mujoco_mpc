@@ -90,6 +90,7 @@ set(LIB_MJPC_HEADERS
     planners/rmp/include/geometry/rmp_rotated_geometry_3d.h
     planners/rmp/include/geometry/rmp_cylindrical_geometry.h
     planners/rmp/include/policies/rmp_simple_target_policy.h
+    planners/rmp/include/policies/rmp_raycasting_policy.h
     planners/rmp/include/eval/rmp_trapezoidal_integrator.h
     planners/rmp/include/util/rmp_vector_range.h
     estimators/estimator.h
@@ -151,6 +152,7 @@ add_library(
   planners/ilqs/planner.cc
   planners/rmp/src/rmp_planner.cc
   planners/rmp/src/rmp_trajectory.cc
+  planners/rmp/src/rmp_raycasting_policy.cc
   estimators/batch.cc
   estimators/include.cc
   estimators/include.h

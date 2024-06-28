@@ -103,6 +103,6 @@ void rmpcpp::RMPTrajectory<TSpace>::writeToStream(std::ofstream &file) const {
 
 // explicit instantation
 template class rmpcpp::RMPTrajectory<rmpcpp::Space<3>>;
-template class rmpcpp::RMPTrajectory<rmpcpp::Space<2>>;
+//template class rmpcpp::RMPTrajectory<rmpcpp::Space<2>>;
 template class rmpcpp::RMPTrajectory<rmpcpp::CylindricalSpace>;
 

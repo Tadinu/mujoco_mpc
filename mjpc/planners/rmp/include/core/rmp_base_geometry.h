@@ -62,32 +62,37 @@ class GeometryBase {
    * Internal class, as it is built by GeometryBase only
    */
   class ParametrizedGeometry {
-    /// Corresponding Jacobian at this state
+    // Corresponding Jacobian at this state
     J_phi J_;
 
-    /// Position/Velocity at which this geometry is valid
+    // Position/Velocity of agent at which this geometry is valid
     StateX state_;
 
+    // Obstacle states
+    std::vector<StateX> obstacle_states_;
+
    public:
-    ParametrizedGeometry(J_phi J, StateX state) : J_(J), state_(state) {}
+    ParametrizedGeometry(const J_phi& J, const StateX& agent_state,
+                         const std::vector<StateX>& obstacle_states) :
+      J_(J), state_(agent_state), obstacle_states_(obstacle_states) {}
 
     /**
      * Evaluates a given policy and then pulls it.
      * @param policy_noneval Non-evaluated policy to pull
      */
-    template <class NormSpace>
-    PolicyQ pull(RMPPolicyBase<NormSpace> &noneval_policy) {
-      return pull(noneval_policy.evaluateAt(state_));
+    template <class TNormSpace>
+    PolicyQ pull(RMPPolicyBase<TNormSpace>* noneval_policyX) {
+      return pull(noneval_policyX->evaluateAt(state_, obstacle_states_));
     }
 
     /**
      * Takes an evaluated policy and pulls it
      * @param policy Evaluated policy
      */
-    PolicyQ pull(const PolicyX policy) {
+    PolicyQ pull(const PolicyX& policy) {
       // RMP: f: instantaneous acceleration, A: Riemannian metric as the weight of the policy
       // https://arxiv.org/pdf/1801.02854 - Eq 10, 11
-      MatrixQ A = J_.transpose() * policy.A_ * J_;
+      MatrixQ A = J_.transpose() * policy.A_ * J_; // Pullback metric
       VectorQ f = PolicyX::pinv(A) * J_.transpose() * policy.A_ * policy.f_;
       return {f, A};
     }
@@ -99,8 +104,9 @@ class GeometryBase {
     PolicyX push(const PolicyQ policy) {
       // https://arxiv.org/pdf/1801.02854 - Eq 12
       // todo(mpantic): Check if this correct. I think its currently not used.
+      MatrixX B = J_.transpose() * policy.A_ * J_; // Pushforward metric
       auto J_pinv = PolicyX::pinv(J_);
-      MatrixX A = J_pinv.transpose() * policy.A_ * J_pinv;
+      MatrixX A = J_pinv.transpose() * B * J_pinv;
       VectorX f = J_ * policy.f_;
       return {f, A};
     }
@@ -113,11 +119,12 @@ class GeometryBase {
   static constexpr int D = d;
 
   /**
-   * Creats a fully parametrized geometry for the given state
-   * @param state State to parametrize for
+   * Create a fully parametrized geometry for the agent & obstacles
+   * @param state Agent state to parametrize
+   * @param obstacle_states States of obstacles to parametrize
    */
-  ParametrizedGeometry at(StateX state) {
-    return ParametrizedGeometry(J(state), state);
+  ParametrizedGeometry createParametrized(const StateX& agent_state, const std::vector<StateX>& obstacle_states) {
+    return ParametrizedGeometry(J(agent_state), agent_state, obstacle_states);
   }
 
   /**

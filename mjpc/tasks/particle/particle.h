@@ -33,6 +33,7 @@ class Particle : public Task {
   std::string Name() const override;
   std::string XmlPath() const override;
   virtual int GetTargetObjectId() const override { return mj_name2id(model_, mjOBJ_BODY, "rigidmass"); }
+  virtual int GetTargetObjectGeomId() const override { return mj_name2id(model_, mjOBJ_GEOM, "rigidmass"); }
   const double* GetStartPos() const override {
    if (model_) {
 #if 1
@@ -71,21 +72,15 @@ class Particle : public Task {
                               const char* body_name, const double* pos) {
     if (model && data) {
       int bodyMocapId = GetBodyMocapId(model, body_name);
-      data->mocap_pos[3*bodyMocapId] = pos[0]; // x
-      data->mocap_pos[3*bodyMocapId + 1] = pos[1]; // y
-      //data->mocap_pos[3*bodyMocapId + 2] = 0.1; // z
+      mju_copy3(&data->mocap_pos[3*bodyMocapId], pos);
+      data->mocap_pos[3*bodyMocapId+2] = 0.01;
       //std::cout << body_name << ":" << bodyMocapId << " " << pos[0] << " " << pos[1] << std::endl;
     }
   }
   static double* GetBodyMocapPos(const mjModel* model, const mjData* data,
                                  const char* body_name) {
     int bodyMocapId = GetBodyMocapId(model, body_name);
-    static double pos[2] = {0};
-    if (data) {
-      pos[0] = data->mocap_pos[bodyMocapId],
-      pos[1] = data->mocap_pos[bodyMocapId + 1];
-    }
-    return pos;
+    return &data->mocap_pos[3*bodyMocapId];
   }
   void SetGoalPos(const double* pos) {
     SetBodyMocapPos(model_, data_, "goal", pos);
