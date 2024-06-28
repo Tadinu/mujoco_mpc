@@ -12,6 +12,8 @@
 #include "mjpc/planners/rmp/include/planner/rmp_trajectory.h"
 #include "mjpc/planners/rmp/include/eval/rmp_trapezoidal_integrator.h"
 #include "mjpc/planners/rmp/include/util/rmp_vector_range.h"
+#include "mjpc/planners/rmp/include/policies/rmp_simple_target_policy.h"
+#include "mjpc/planners/rmp/include/policies/rmp_raycasting_policy.h"
 #include "mjpc/utilities.h"
 
 namespace rmpcpp {
@@ -38,34 +40,28 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
       CylindricalGeometry;
 #endif
   RiemannianGeometry geometry_;
+  using StateX = typename RiemannianGeometry::StateX;
 
   std::vector<std::shared_ptr<RMPPolicyBase<TSpace>>> getPolicies() override
   {
     std::vector<std::shared_ptr<RMPPolicyBase<TSpace>>> policies;
-    static auto default_target_policy = std::make_shared<SimpleTargetPolicy<TSpace>>();
-    (*default_target_policy)(this->getGoalPos(),
-                             Matrix::Identity(), 1.0, 2.0, 0.05);
-
-    static auto default_target_policy2 = std::make_shared<SimpleTargetPolicy<TSpace>>();
-    (*default_target_policy2)(this->getGoalPos(),
-                              VectorQ::UnitX().asDiagonal(), 10.0, 22.0, 0.05);
 #if 1
-    static std::vector<std::shared_ptr<SimpleTargetPolicy<TSpace>>> sub_policies(10, std::make_shared<SimpleTargetPolicy<TSpace>>());
+    const auto goal_pos = vectorFromScalarArray<TSpace::dim>(task_->GetGoalPos());
+    static auto simple_target_policy = std::make_shared<SimpleTargetPolicy<TSpace>>();
+    (*simple_target_policy)(goal_pos,
+                            Matrix::Identity(), 1.0, 2.0, 0.05);
 
-    for(auto i = 0; i < sub_policies.size()/2; ++i) {
-      (*sub_policies[i])(this->getGoalPos(),
-                         VectorQ::UnitY().asDiagonal(), i, 2*i, 0.05);
-      policies.push_back(sub_policies[i]);
-    }
-    for(auto i = sub_policies.size()/2; i < sub_policies.size(); ++i) {
-      (*sub_policies[i])(this->getGoalPos(),
-                         Matrix::Identity(), i, 2*i, 0.05);
-      policies.push_back(sub_policies[i]);
-    }
+    static auto simple_target_policy2 = std::make_shared<SimpleTargetPolicy<TSpace>>();
+    (*simple_target_policy2)(goal_pos,
+                             VectorQ::UnitX().asDiagonal(), 10.0, 22.0, 0.05);
+    policies.push_back(simple_target_policy);
+    policies.push_back(simple_target_policy2);
 #endif
 
-    policies.push_back(default_target_policy);
-    policies.push_back(default_target_policy2);
+    static auto rmp_params = ParametersRMP(PolicyType::RAYCASTING);
+    static auto rmp_target_policy = std::make_shared<RaycastingCudaPolicy<TSpace>>(rmp_params.worldPolicyParameters);
+    policies.push_back(rmp_target_policy);
+    policies.back()->scene_ = task_->scene_;
     return policies;
   }
 
@@ -117,7 +113,7 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
   // allocate memory
   void Allocate()  override {
     trajectory_->Initialize(dim_state, dim_action, task_->num_residual,
-                           task_->num_trace, 1);
+                            task_->num_trace, 1);
     trajectory_->Allocate(1);
   }
 
@@ -127,26 +123,15 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
 
   // set state
   void SetState(const mjpc::State& state)  override {}
-  void SetStartGoal(const double* start, const double* goal) override {
-    if(start) {
-      this->setStartPos(geometry_.convertPosToQ(rmpcpp::vectorFromScalarArray<TSpace::dim>(start)));
-    }
-    if(goal) {
-      this->setGoalPos(geometry_.convertPosToQ(rmpcpp::vectorFromScalarArray<TSpace::dim>(goal)));
-    }
-  }
-  void SetStartVel(const double* vel) override {
-    this->setStartVel(geometry_.convertPosToQ(rmpcpp::vectorFromScalarArray<TSpace::dim>(vel)));
-  }
 
   VectorQ GetStartPos() const
   {
-    return geometry_.convertPosToQ(vectorFromScalarArray<3>(task_->GetStartPos()));
+    return geometry_.convertPosToQ(vectorFromScalarArray<TSpace::dim>(task_->GetStartPos()));
   }
 
   VectorQ GetStartVel() const
   {
-    return geometry_.convertPosToQ(vectorFromScalarArray<3>(task_->GetStartVel()));
+    return geometry_.convertPosToQ(vectorFromScalarArray<TSpace::dim>(task_->GetStartVel()));
   }
 
   // optimize nominal policy
@@ -187,11 +172,11 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
                         double time, bool use_previous = false) override {
     const auto* best_trajectory = static_cast<const RMPTrajectory<TSpace>*>(BestTrajectory());
     auto currentPoint = best_trajectory->current();
-#if 1
+#if RMP_USE_ACTUATOR_VELOCITY
     const auto& velq = geometry_.convertPosToX(currentPoint.velocity);
     action[0] = velq[0];
     action[1] = velq[1];
-#else
+#elif RMP_USE_ACTUATOR_MOTOR
     const auto& accelq = currentPoint.acceleration;
     const auto pointmass_id = task_->GetTargetObjectId();
     const auto pointmass = model_->body_mass[pointmass_id];
@@ -205,8 +190,8 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
     //mjtNum I3 = model_->body_inertia[3*pointmass_id+2];
 
     //NOTE: Depending on which dofs the action ctrl is configured in xml, eg: linear movement only uses linear_inertia only
-    action[0] = linear_inertia * accelq[0];
-    action[1] = linear_inertia * accelq[1];
+    action[0] = 5 * linear_inertia * accelq[0];
+    action[1] = 5 * linear_inertia * accelq[1];
     //action[2] = linear_inertia * accelq[2];
 #endif
     // Clamp controls

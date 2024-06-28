@@ -115,7 +115,7 @@ ParametersWrapper Parser::getRMPParameters() {
       dynamic_cast<EsdfPolicyParameters*>(worldPolicyParameters)->r =
           opts_["r"].as<double>();
       break;
-    case RAYCASTING_CUDA:
+    case RAYCASTING:
       dynamic_cast<RaycastingCudaPolicyParameters*>(worldPolicyParameters)
           ->eta_damp *= gain;
       dynamic_cast<RaycastingCudaPolicyParameters*>(worldPolicyParameters)

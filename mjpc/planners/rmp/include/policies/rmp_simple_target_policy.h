@@ -27,14 +27,14 @@ namespace rmpcpp {
 /**
  * Defines a simple dimensional target policy, as described in [1].
  */
-template <class NormSpace>
-class SimpleTargetPolicy : public RMPPolicyBase<NormSpace> {
+template <class TNormSpace>
+class SimpleTargetPolicy : public RMPPolicyBase<TNormSpace> {
 
  public:
-  using VectorQ = typename RMPPolicyBase<NormSpace>::VectorQ;
-  using Matrix = typename RMPPolicyBase<NormSpace>::Matrix;
-  using PValue = typename RMPPolicyBase<NormSpace>::PValue;
-  using PState = typename RMPPolicyBase<NormSpace>::PState;
+  using Vector = typename RMPPolicyBase<TNormSpace>::Vector;
+  using Matrix = typename RMPPolicyBase<TNormSpace>::Matrix;
+  using PValue = typename RMPPolicyBase<TNormSpace>::PValue;
+  using PState = typename RMPPolicyBase<TNormSpace>::PState;
 
  SimpleTargetPolicy() {}
   /**
@@ -43,15 +43,15 @@ class SimpleTargetPolicy : public RMPPolicyBase<NormSpace> {
    * A is the metric to be used.
    * alpha, beta and c are tuning parameters.
    */
-  SimpleTargetPolicy(const VectorQ& target, const Matrix& A,
+  SimpleTargetPolicy(const Vector& target, const Matrix& A,
                      double alpha, double beta, double c)
       : target_(target), alpha_(alpha), beta_(beta), c_(c) {
     this->A_static_ = A;
   }
 
-  SimpleTargetPolicy(const VectorQ& target) : target_(target) {}
+  SimpleTargetPolicy(const Vector& target) : target_(target) {}
 
-  void operator()(const VectorQ& target, const Matrix& A, double alpha, double beta,
+  void operator()(const Vector& target, const Matrix& A, double alpha, double beta,
                   double c) {
     this->target_ = target;
     this->alpha_ = alpha;
@@ -60,8 +60,8 @@ class SimpleTargetPolicy : public RMPPolicyBase<NormSpace> {
     this->A_static_ = A;
   }
 
-  virtual PValue evaluateAt(const PState &state) {
-    VectorQ f = alpha_ * soft_norm(this->space_.minus(target_, state.pos_)) -
+  virtual PValue evaluateAt(const PState &state, const std::vector<PState>&) {
+    Vector f = alpha_ * soft_norm(this->space_.minus(target_, state.pos_)) -
                 beta_ * state.vel_;
     return {f, this->A_static_};
   }
@@ -76,7 +76,7 @@ public:
   /**
    *  Normalization helper function.
    */
-  inline VectorQ soft_norm(const VectorQ& v) { return v / h(this->space_.norm(v)); }
+  inline Vector soft_norm(const Vector& v) { return v / h(this->space_.norm(v)); }
 
   /**
    * Softmax helper function
@@ -85,7 +85,7 @@ public:
     return (z + c_ * log(1 + exp(-2 * c_ * z)));
   }
 
-  VectorQ target_ = VectorQ::Zero();
+  Vector target_ = Vector::Zero();
   double alpha_{1.0}, beta_{8.0}, c_{0.005};
 };
 
