@@ -36,7 +36,7 @@ public:
   // type alias for readability.
   using base = GeometryBase<3, 3>;
   using VectorX = base::VectorX;
-  using VectorQ = base::VectorQ;
+  using Vector = base::VectorQ;
   using StateX = base::StateX;
   using StateQ = base::StateQ;
   using J_phi = base::J_phi;
@@ -48,7 +48,7 @@ public:
   virtual J_phi J(const StateX &state_x) const {
     J_phi mtx_j(J_phi::Identity());
 
-    //base::VectorQ q;
+    //base::Vector q;
 
     mtx_j(0, 0) = cos(state_x.pos_.y());
     mtx_j(0, 1) = sin(state_x.pos_.y());

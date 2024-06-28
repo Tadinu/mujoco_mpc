@@ -31,17 +31,14 @@ namespace rmpcpp {
  */
 template <int d>
 class State {
-  using VectorQ = Eigen::Matrix<double, d, 1>;
+  using Vector = Eigen::Matrix<double, d, 1>;
+  using Matrix = Eigen::Matrix<double, d, d>;
 
  public:
-  State() {}
-
-  State(const VectorQ& pos) : pos_(pos) {}
-
-  State(const VectorQ& pos, const VectorQ& vel) : pos_(pos), vel_(vel) {}
-
-  VectorQ pos_ = VectorQ::Zero();
-  VectorQ vel_ = VectorQ::Zero();
+  Vector pos_ = Vector::Zero();
+  Matrix rot_ = Matrix::Identity();
+  Vector vel_ = Vector::Zero();
+  Vector size_ = Vector::Zero();
 
   // more derivatives to be added later
 };
