@@ -23,7 +23,7 @@ if(MUJOCO_HARDEN
 endif()
 
 if(MUJOCO_HARDEN)
-  set(MUJOCO_HARDEN_COMPILE_OPTIONS -D_FORTIFY_SOURCE=2 -fstack-protector)
+  set(MUJOCO_HARDEN_COMPILE_OPTIONS -D_FORTIFY_SOURCE=2) #-fstack-protector
   if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     set(MUJOCO_HARDEN_LINK_OPTIONS -Wl,-bind_at_load)
   elseif(${CMAKE_SYSTEM_NAME} MATCHES "Linux")

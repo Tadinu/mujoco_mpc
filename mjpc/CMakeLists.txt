@@ -14,6 +14,7 @@
 
 set(MJPC_INSTALL_PUBLIC 0)
 
+# Eigen3
 find_package(Eigen3 REQUIRED)
 include_directories(SYSTEM ${EIGEN3_INCLUDE_DIR})
 
@@ -187,6 +188,7 @@ target_link_libraries(
   mujoco::mujoco
   threadpool
   Threads::Threads
+  OpenMP::OpenMP_CXX
 )
 target_include_directories(libmjpc
   PUBLIC
@@ -257,6 +259,7 @@ target_link_options(testspeed PRIVATE ${MJPC_LINK_OPTIONS})
 target_compile_definitions(testspeed PRIVATE MJSIMULATE_STATIC)
 
 add_subdirectory(tasks)
+add_subdirectory(ispc)
 
 if(BUILD_TESTING AND MJPC_BUILD_TESTS)
   enable_testing()

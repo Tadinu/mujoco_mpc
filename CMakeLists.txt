@@ -37,6 +37,8 @@ if(APPLE)
 endif()
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
+# ISPC
+include(AddISPCSrc)
 include(MpcOptions)
 include(MujocoMacOS)
 
@@ -49,6 +51,13 @@ include(FindOrFetch)
 
 find_package(Python)
 find_package(Threads REQUIRED)
+
+# OpenMP
+find_package(OpenMP REQUIRED)
+if (OPENMP_FOUND)
+  set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+endif()
 
 set(MUJOCO_BUILD_EXAMPLES OFF)
 set(MUJOCO_BUILD_SIMULATE ON)
