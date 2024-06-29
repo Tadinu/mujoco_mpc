@@ -27,6 +27,10 @@
 
 #include <absl/container/flat_hash_map.h>
 #include <mujoco/mujoco.h>
+#include <omp.h>
+
+#define MJPC_OPENMP_ENABLED (1)
+#define MJPC_OPENMP_THREADS_NUM (10)
 
 namespace mjpc {
 

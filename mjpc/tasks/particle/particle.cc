@@ -17,7 +17,13 @@
 #include <string>
 #include <vector>
 
-#include <mujoco/mujoco.h>
+// ISPC
+#include "rt_ispc.h"
+
+// MUJOCP
+#include "mujoco/mujoco.h"
+
+// MJPC
 #include "mjpc/planners/rmp/include/planner/rmp_base_planner.h"
 
 namespace mjpc {
@@ -32,9 +38,9 @@ bool Particle::CheckBlocking(const double start[], const double end[]) {
   static constexpr double TRACE_DELTA = 2*M_PI/ TRACE_RAYS_NUM;
 
   // CHECK OVERLAPPING
-  double vec[3]; mju_sub3(vec, end, start);
-  double length = mju_normalize3(vec);
-  double obstacle_size[3];
+  double ray[3]; mju_sub3(ray, end, start);
+  double ray_length = mju_normalize3(ray);
+  double obstacle_i_size[3];
   int block_obstacles_count = 0;
   bool blocked = false;
   for (auto i = 0; i < OBSTACLES_NUM; ++i) {
@@ -43,7 +49,8 @@ bool Particle::CheckBlocking(const double start[], const double end[]) {
     obstacle_name << "obstacle_" << i;
     auto obstacle_i_id = mj_name2id(model_, mjOBJ_BODY, obstacle_name.str().c_str());
     auto obstacle_geom_i_id = mj_name2id(model_, mjOBJ_GEOM, obstacle_name.str().c_str());
-    //mju_scl(obstacle_size, &model_->geom_size[3*obstacle_geom_i_id], 2.0, 3);
+    // Scale up obstacles size to avoid them better
+    mju_scl3(obstacle_i_size, &model_->geom_size[3*obstacle_geom_i_id], 1.5);
 
     static const double particle_size = [this]() {
       auto particle_geom_id = GetTargetObjectGeomId();
@@ -52,22 +59,26 @@ bool Particle::CheckBlocking(const double start[], const double end[]) {
 
     for (auto j = 0; j < TRACE_RAYS_NUM; ++j)
     {
-      mjtNum pt[3];
-      pt[0] = start[0] + particle_size * mju_sin(j* TRACE_DELTA);
-      pt[1] = start[1] + particle_size * mju_cos(j* TRACE_DELTA);
-      pt[2] = start[2];
-
-#if RMP_DRAW_BLOCKING_TRACE_RAYS
-      mju_copy3(ray_start.data() + i * TRACE_RAYS_NUM + 3 * j, pt);
-      mju_add3(ray_end.data() + i * TRACE_RAYS_NUM + 3 * j, pt, vec);
-#endif
+      mjtNum subray_start[3];
+      subray_start[0] = start[0] + particle_size * mju_sin(j* TRACE_DELTA);
+      subray_start[1] = start[1] + particle_size * mju_cos(j* TRACE_DELTA);
+      subray_start[2] = start[2];
 
       // add if ray-zone intersection (always true when con->pos inside zone)
-      const auto distance = mju_rayGeom(&data_->xpos[3*obstacle_i_id], &data_->xmat[9*obstacle_i_id],
-                      obstacle_size,
-                      pt, vec,
-                      mjGEOM_SPHERE);
-      if ((distance != -1) && (distance < length)) {
+#if RMP_ISPC
+      const auto distance_i = ispc::raySphere(&data_->xpos[3*obstacle_i_id], obstacle_i_size[0],
+                                              subray_start, ray);
+#else
+      const auto distance_i = mju_rayGeom(&data_->xpos[3*obstacle_i_id], &data_->xmat[9*obstacle_i_id],
+                                          obstacle_i_size,
+                                          subray_start, ray,
+                                          mjGEOM_SPHERE);
+#endif
+      if ((distance_i != -1) && (distance_i < ray_length)) {
+#if RMP_DRAW_BLOCKING_TRACE_RAYS
+        mju_copy3(ray_start.data() + i * TRACE_RAYS_NUM + 3 * j, subray_start);
+        mju_add3(ray_end.data() + i * TRACE_RAYS_NUM + 3 * j, subray_start, ray);
+#endif
         static constexpr float YELLOW[] = {1.0, 1.0, 0.0, 1.0};
         SetGeomColor(obstacle_geom_i_id, YELLOW);
         if (block_obstacles_count/float(OBSTACLES_NUM) >= RMP_BLOCKING_OBSTACLES_RATIO) {
