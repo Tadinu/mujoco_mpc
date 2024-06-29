@@ -24,7 +24,7 @@ function(get_avx_compile_options OUTPUT_VAR)
     # Abseil LTS 20230125.0 assumes that AVX implies PCLMUL on Windows.
     set(CMAKE_REQUIRED_FLAGS "-mavx" "-mpclmul")
   else()
-    set(CMAKE_REQUIRED_FLAGS "-mavx")
+    #set(CMAKE_REQUIRED_FLAGS "-mavx")
   endif()
 
   if(APPLE AND "x86_64" IN_LIST CMAKE_OSX_ARCHITECTURES)

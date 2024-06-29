@@ -82,15 +82,15 @@ class TrapezoidalIntegrator {
     const float b = dt;
 
     // get position in manifold
-    VectorX pos_x, x_dot;
+    //VectorX pos_x, x_dot;
     VectorQ acc_b, vel_b, acc_a, vel_a;
     VectorQ dist_increment;
     acc_a = last_acc_;
     vel_a = current_vel_;
 
     // Convert current Configuration space position -> Task space
-    StateQ current_stateQ{.pos_ = current_pos_, .vel_ = current_vel_};
-    StateX current_stateX = geometry.convertToX(current_stateQ);
+    const StateQ current_stateQ = {.pos_ = current_pos_, .vel_ = current_vel_};
+    const StateX current_stateX = geometry.convertToX(current_stateQ);
 
     // evaluate all policy and get new accelerations
     std::vector<typename TPolicy::PValue> evaluated_policies;
@@ -122,7 +122,7 @@ class TrapezoidalIntegrator {
     const float b = dt;
 
     // get position in manifold
-    VectorX pos_x, x_dot;
+    //VectorX pos_x, x_dot;
     VectorQ acc_b, vel_b, acc_a, vel_a;
     VectorQ dist_increment;
     acc_a = last_acc_;

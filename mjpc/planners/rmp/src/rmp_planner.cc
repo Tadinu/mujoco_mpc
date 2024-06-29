@@ -170,15 +170,15 @@ void rmpcpp::RMPPlanner<TSpace>::Traces(mjvScene* scn) {
 
 #if RMP_DRAW_BLOCKING_TRACE_RAYS
   static const int OBSTACLES_NUM = task_->OBSTACLES_NUM;
-  static const int PTS_NUM = task_->TRACE_RAYS_NUM;
+  static const int TRACE_RAYS_NUM = task_->TRACE_RAYS_NUM;
 
   if (task_->ray_start.size() && task_->ray_end.size()) {
     static constexpr float PINK[] = {1.0, 0.5, 1.0, 0.5};
     for (auto i = 0; i < OBSTACLES_NUM; ++i) {
-      for (auto j = 0; j < PTS_NUM; ++j) {
+      for (auto j = 0; j < TRACE_RAYS_NUM; ++j) {
         mjpc::AddConnector(scn, mjGEOM_LINE, 0.3,
-                           task_->ray_start.data() + i * PTS_NUM + 3 * j,
-                           task_->ray_end.data() + i * PTS_NUM + 3 * j, PINK);
+                           task_->ray_start.data() + i * TRACE_RAYS_NUM + 3 * j,
+                           task_->ray_end.data() + i * TRACE_RAYS_NUM + 3 * j, PINK);
       }
     }
     task_->ray_start.fill(0.);

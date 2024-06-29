@@ -27,13 +27,13 @@ class RaycastingCudaPolicy : public RMPPolicyBase<TSpace> {
 
   virtual PValue evaluateAt(const PState& agent_state, const std::vector<PState>& obstacle_states) override;
   virtual void startEvaluateAsync(const PState& agent_state, const std::vector<PState>& obstacle_states) override {
-   ispcStartEval(agent_state, obstacle_states);
+   startEval(agent_state, obstacle_states);
    async_eval_started_ = true;
   }
   virtual void abortEvaluateAsync() override;
 
  private:
-  void ispcStartEval(const PState& agent_state, const std::vector<PState>& obstacle_states);
+  void startEval(const PState& agent_state, const std::vector<PState>& obstacle_states);
   std::pair<mjtNum, Vector> raycastKernel(int ray_id,
                                           const Vector& ray_start, const Vector& ray_vel, int target_geomtype,
                                           const mjtNum* target_pos, const mjtNum* target_rot, const mjtNum* target_size);

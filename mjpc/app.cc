@@ -27,6 +27,7 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include <Eigen/Core>
 
 #include <absl/flags/flag.h>
 #include <mujoco/mujoco.h>
@@ -507,7 +508,22 @@ mj::Simulate* MjpcApp::Sim() {
   return sim.get();
 }
 
+void InitParallelEigen() {
+  if (MJPC_OPENMP_ENABLED) {
+    Eigen::initParallel();
+    omp_set_num_threads(MJPC_OPENMP_THREADS_NUM);
+    Eigen::setNbThreads(MJPC_OPENMP_THREADS_NUM);
+    std::printf("Eigen threads: %d\n", Eigen::nbThreads());
+#pragma omp parallel default(none)
+    {
+#pragma omp single
+      printf("OpenMP num_threads = %d\n", omp_get_num_threads());
+    }
+  }
+}
+
 void StartApp(std::vector<std::shared_ptr<mjpc::Task>> tasks, int task_id) {
+  InitParallelEigen();
   MjpcApp app(std::move(tasks), task_id);
   app.Start();
 }

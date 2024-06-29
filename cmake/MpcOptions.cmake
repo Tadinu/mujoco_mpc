@@ -57,7 +57,7 @@ set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 if(MSVC)
   add_compile_options(/Gy /Gw /Oi)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-fdata-sections -ffunction-sections)
+  #add_compile_options(-fdata-sections -ffunction-sections)
 endif()
 
 # We default to shared library.
@@ -85,16 +85,15 @@ include(MujocoLinkOptions)
 get_mujoco_extra_link_options(EXTRA_LINK_OPTIONS)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT MSVC))
-  set(EXTRA_COMPILE_OPTIONS
-      -Werror
-      -Wall
-      -Wimplicit-fallthrough
-      -Wunused
-      -Wvla
-      -Wno-int-in-bool-context
-      -Wno-sign-compare
-      -Wno-unknown-pragmas
-  )
+  #set(EXTRA_COMPILE_OPTIONS
+  #    -Werror
+  #    -Wall
+  #    -Wimplicit-fallthrough
+  #    -Wunused
+  #    -Wvla
+  #    -Wno-int-in-bool-context
+  #    -Wno-sign-compare
+  #  )
   if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     # Set -Wimplicit-fallthrough=5 to only allow fallthrough annotation via __attribute__.
     set(EXTRA_COMPILE_OPTIONS ${EXTRA_COMPILE_OPTIONS} -Wimplicit-fallthrough=5
