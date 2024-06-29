@@ -34,6 +34,7 @@ class MjpcApp {
   ::mujoco::Simulate* Sim();
 };
 
+void InitParallelEigen();
 void StartApp(std::vector<std::shared_ptr<mjpc::Task>> tasks, int task_id = 0);
 
 }  // namespace mjpc

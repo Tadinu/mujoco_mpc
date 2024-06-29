@@ -11,18 +11,21 @@
 #include "mjpc/planners/rmp/include/core/rmp_state.h"
 #include "mjpc/planners/rmp/include/policies/rmp_simple_target_policy.h"
 
+#define RMP_ISPC (1)
 #define RMP_USE_LINEAR_GEOMETRY (1)
-#define RMP_USE_SIMPLE_TARGET_POLICY (1)
+#define RMP_USE_RMP_COLLISION_POLICY (1)
 #define RMP_USE_ACTUATOR_VELOCITY (1)
 #define RMP_USE_ACTUATOR_MOTOR (!RMP_USE_ACTUATOR_VELOCITY)
 #define RMP_BLOCKING_OBSTACLES_RATIO (0.1)
-#define RMP_DISTANCE_TRACE_RAYS_NUM (100)
+#define RMP_DISTANCE_TRACE_RAYS_NUM (500)
 
 #define RMP_DRAW_START_GOAL (0)
 #define RMP_DRAW_VELOCITY (1)
 #define RMP_DRAW_TRAJECTORY (0)
 #define RMP_DRAW_BLOCKING_TRACE_RAYS (0)
 #define RMP_DRAW_DISTANCE_TRACE_RAYS (1)
+#define RMP_USE_3D_DISTANCE_RAYS (0)
+#define RMP_OBSTACLES_SIZE_SCALE (0.05)
 
 #define RMP_KV (1)
 

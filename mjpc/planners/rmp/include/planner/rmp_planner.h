@@ -45,7 +45,7 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
   std::vector<std::shared_ptr<RMPPolicyBase<TSpace>>> getPolicies() override
   {
     std::vector<std::shared_ptr<RMPPolicyBase<TSpace>>> policies;
-#if RMP_USE_SIMPLE_TARGET_POLICY
+
     const auto goal_pos = vectorFromScalarArray<TSpace::dim>(task_->GetGoalPos());
     static auto simple_target_policy = std::make_shared<SimpleTargetPolicy<TSpace>>();
     (*simple_target_policy)(goal_pos,
@@ -56,12 +56,14 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
                              VectorQ::UnitX().asDiagonal(), 10.0, 22.0, 0.05);
     policies.push_back(simple_target_policy);
     policies.push_back(simple_target_policy2);
-#endif
 
+#if RMP_USE_RMP_COLLISION_POLICY
     static auto rmp_params = ParametersRMP(PolicyType::RAYCASTING);
     static auto rmp_collision_policy = std::make_shared<RaycastingCudaPolicy<TSpace>>(rmp_params.worldPolicyParameters);
     policies.push_back(rmp_collision_policy);
     policies.back()->scene_ = task_->scene_;
+#endif
+
     return policies;
   }
 
