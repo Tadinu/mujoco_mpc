@@ -85,7 +85,6 @@ inline TFloat w(const TFloat d, const TFloat r) {
   return (1.0f / (r * r)) * d * d - (2.0f / r) * d + 1.0f;
 }
 
-#if 1
 /********************************************************************
  ****** Ray tracing kernel code (parts adapted from nvblox)
  ********************************************************************/
@@ -99,7 +98,7 @@ inline std::pair<TFloat, TFloat> get_angles(const TFloat u,
 }
 
 template <class TSpace>
-std::pair<typename rmpcpp::RaycastingCudaPolicy<TSpace>::Matrix, typename rmpcpp::RaycastingCudaPolicy<TSpace>::Vector>
+std::pair<mjtNum, typename rmpcpp::RaycastingCudaPolicy<TSpace>::Vector>
 rmpcpp::RaycastingCudaPolicy<TSpace>::raycastKernel(int ray_id,
   const Vector& ray_start, const Vector& ray_vel, int target_geomtype,
   const mjtNum* target_pos, const mjtNum* target_rot, const mjtNum* target_size)
@@ -111,63 +110,83 @@ rmpcpp::RaycastingCudaPolicy<TSpace>::raycastKernel(int ray_id,
   double phi = angles.first;
   double theta = angles.second;
 
-  // Convert to direction
-  const mjtNum direction[3] = {
+#if 0
+  // Convert to direction, of which the meaning itself is already an unit vector
+  const mjtNum unit_direction[3] = {
     sin(phi) * cos(theta),
     sin(phi) * sin(theta),
-    0.//cos(phi)
+    cos(phi)
   };
-  Vector ray_direction;
-  mju_copy3(ray_direction.data(), direction);
-  const auto distance = mju_rayGeom(target_pos, target_rot, target_size,
-                                    ray_start.data(), direction,
-                                    target_geomtype);
-
-  Matrix A = Matrix::Zero();
-  Vector f_out = Vector::Zero();
-
-  if (distance != -1) {
-#if RMP_DRAW_DISTANCE_TRACE_RAYS
-    this->raytraces_.push_back({.ray_start = ray_start, .ray_end = ray_start + ray_direction, .distance = distance});
+#else
+  const mjtNum unit_direction[3] = {
+    (ray_id % 2 ==0) ? sin(phi) : cos(theta),
+    (ray_id % 2 ==0) ? cos(phi) : sin(theta),
+    0.0
+  };
 #endif
-    // Calculate resulting RMP for this target obstacle
-    // Unit vector pointing away from the obstacle
-    Vector delta_d = -ray_direction / ray_direction.norm();
-
-    // Simple RMP obstacle policy
-    Vector f_rep =
-        alpha_rep(distance, parameters_.eta_rep, parameters_.v_rep, 0.0) *
-        delta_d;
-    Vector f_damp = -alpha_damp(distance, parameters_.eta_damp,
-                                parameters_.v_damp, parameters_.epsilon_damp) *
-                    fmax(0.0, double(-ray_vel.transpose() * delta_d)) *
-                    (delta_d * delta_d.transpose()) * ray_vel;
-    f_out = f_rep + f_damp;
-    Vector f_norm = softnorm(f_out, parameters_.c_softmax_obstacle);
-
-    if (parameters_.metric) {
-      A = w(distance, parameters_.r) * f_norm * f_norm.transpose();
-    } else {
-      A = w(distance, parameters_.r) * Matrix::Identity();
-    }
-  }
-  return std::pair{std::move(A), std::move(f_out)};
+  // https://omaraflak.medium.com/ray-tracing-from-scratch-in-python-41670e6a96f9
+  const mjtNum distance = mju_rayGeom(target_pos, target_rot, target_size,
+                                      ray_start.data(), unit_direction,
+                                      target_geomtype);
+  Vector ray_unit_direction;
+  mju_copy3(ray_unit_direction.data(), unit_direction);
+  return {distance, ray_unit_direction};
 }
-#endif
 
 /********************************************************************/
 template <class TSpace>
 void rmpcpp::RaycastingCudaPolicy<TSpace>::ispcStartEval(const PState& agent_state,
                                                          const std::vector<PState>& obstacle_states) {
   // Shoot rays from agent toward obstacles
-  for (const auto& obstacle : obstacle_states) {
-    for (auto i = 1; i < RMP_DISTANCE_TRACE_RAYS_NUM; ++i) {
-      auto A_f = raycastKernel(i, agent_state.pos_, agent_state.vel_, mjGEOM_SPHERE,
-                               obstacle.pos_.data(), obstacle.rot_.data(), obstacle.size_.data());
-      //A_f[0] = A_f[0] / float(blockdim * dimy);  // scale with number of rays
-      metric_sum_.push_back(A_f.first);
-      metric_x_force_sum_.push_back(A_f.first * A_f.second);
+  for (auto i = 1; i < RMP_DISTANCE_TRACE_RAYS_NUM; ++i) {
+    mjtNum distance_min = std::numeric_limits<mjtNum>::max();
+    Vector ray_direction = Vector::Zero();
+    // Get shortest distance to obstacles
+    for (auto& obstacle: obstacle_states) {
+      auto _ = raycastKernel(i, agent_state.pos_, agent_state.vel_, mjGEOM_SPHERE,
+                             obstacle.pos_.data(), obstacle.rot_.data(), obstacle.size_.data());
+      auto distance = _.first;
+      if ((distance != -1) && (abs(distance) < abs(distance_min))) {
+        distance_min = distance;
+        ray_direction = _.second; // This is already guaranteed a unit direction vector
+      }
     }
+
+    // Calculate {f, A}
+    Vector f_out = Vector::Zero();
+    Matrix A = Matrix::Zero();
+
+    if ((distance_min) > 0 && (distance_min != std::numeric_limits<mjtNum>::max())) {
+#if RMP_DRAW_DISTANCE_TRACE_RAYS
+      this->raytraces_.push_back({.ray_start = agent_state.pos_,
+                                  .ray_end = agent_state.pos_ + ray_direction * distance_min,
+                                  .distance = distance_min});
+#endif
+      // Calculate resulting RMP for this target obstacle
+      // Unit vector pointing away from the obstacle
+      Vector delta_d = -ray_direction;
+
+      // Simple RMP obstacle policy
+      Vector f_rep =
+          alpha_rep(distance_min, parameters_.eta_rep, parameters_.v_rep, 0.0) *
+          delta_d;
+      Vector f_damp = -alpha_damp(distance_min, parameters_.eta_damp,
+                                  parameters_.v_damp, parameters_.epsilon_damp) *
+                      fmax(0.0, double(-agent_state.vel_.transpose() * delta_d)) *
+                      (delta_d * delta_d.transpose()) * agent_state.vel_;
+      f_out = f_rep + f_damp;
+      Vector f_norm = softnorm(f_out, parameters_.c_softmax_obstacle);
+
+      if (parameters_.metric) {
+        A = w(distance_min, parameters_.r) * f_norm * f_norm.transpose();
+      } else {
+        A = w(distance_min, parameters_.r) * Matrix::Identity();
+      }
+    }
+
+    //A_f_i[0] = A_f_i[0] / float(blockdim * dimy);  // scale with number of rays
+    metric_sum_.push_back(A);
+    metric_x_force_sum_.push_back(A * f_out);
   }
 }
 
@@ -194,19 +213,6 @@ rmpcpp::RaycastingCudaPolicy<rmpcpp::CylindricalSpace>::evaluateAt(
     const PState& agent_state, const std::vector<PState>& obstacle_states) {
   static const int blockdim = parameters_.N_sqrt / BLOCK_SIZE;
   static const int blockdim_2 = blockdim * blockdim;
-  if (metric_sum_.empty()) {
-    metric_sum_.reserve(blockdim_2);
-  }
-  else
-  {
-    metric_sum_.clear();
-  }
-  if(metric_x_force_sum_.empty()) {
-    metric_x_force_sum_.reserve(blockdim_2);
-  }
-  else {
-    metric_x_force_sum_.clear();
-  }
   if (!async_eval_started_) {
     for (int i = 0; i < blockdim_2; ++i) {
       ispcStartEval(agent_state, obstacle_states);
@@ -218,7 +224,7 @@ rmpcpp::RaycastingCudaPolicy<rmpcpp::CylindricalSpace>::evaluateAt(
 
   Matrix sum = Matrix::Zero();
   Vector sumv = Vector::Zero();
-  for (int i = 0; i < blockdim_2; ++i) {
+  for (int i = 0; i < metric_sum_.size(); ++i) {
     sum += metric_sum_[i];
     sumv += metric_x_force_sum_[i];
   }

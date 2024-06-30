@@ -33,6 +33,7 @@ bool Particle::CheckBlocking(const double start[], const double end[]) {
 
   // CHECK OVERLAPPING
   double vec[3]; mju_sub3(vec, end, start);
+  double length = mju_normalize3(vec);
   double obstacle_size[3];
   int block_obstacles_count = 0;
   bool blocked = false;
@@ -42,7 +43,7 @@ bool Particle::CheckBlocking(const double start[], const double end[]) {
     obstacle_name << "obstacle_" << i;
     auto obstacle_i_id = mj_name2id(model_, mjOBJ_BODY, obstacle_name.str().c_str());
     auto obstacle_geom_i_id = mj_name2id(model_, mjOBJ_GEOM, obstacle_name.str().c_str());
-    mju_scl(obstacle_size, &model_->geom_size[3*obstacle_geom_i_id], 3.0, 3);
+    //mju_scl(obstacle_size, &model_->geom_size[3*obstacle_geom_i_id], 2.0, 3);
 
     static const double particle_size = [this]() {
       auto particle_geom_id = GetTargetObjectGeomId();
@@ -62,10 +63,11 @@ bool Particle::CheckBlocking(const double start[], const double end[]) {
 #endif
 
       // add if ray-zone intersection (always true when con->pos inside zone)
-      if (mju_rayGeom(&data_->xpos[3*obstacle_i_id], &data_->xmat[9*obstacle_i_id],
+      const auto distance = mju_rayGeom(&data_->xpos[3*obstacle_i_id], &data_->xmat[9*obstacle_i_id],
                       obstacle_size,
                       pt, vec,
-                      mjGEOM_SPHERE) != -1) {
+                      mjGEOM_SPHERE);
+      if ((distance != -1) && (distance < length)) {
         static constexpr float YELLOW[] = {1.0, 1.0, 0.0, 1.0};
         SetGeomColor(obstacle_geom_i_id, YELLOW);
         if (block_obstacles_count/float(OBSTACLES_NUM) >= RMP_BLOCKING_OBSTACLES_RATIO) {

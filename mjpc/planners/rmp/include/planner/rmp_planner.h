@@ -45,7 +45,7 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
   std::vector<std::shared_ptr<RMPPolicyBase<TSpace>>> getPolicies() override
   {
     std::vector<std::shared_ptr<RMPPolicyBase<TSpace>>> policies;
-#if 1
+#if RMP_USE_SIMPLE_TARGET_POLICY
     const auto goal_pos = vectorFromScalarArray<TSpace::dim>(task_->GetGoalPos());
     static auto simple_target_policy = std::make_shared<SimpleTargetPolicy<TSpace>>();
     (*simple_target_policy)(goal_pos,
@@ -59,8 +59,8 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
 #endif
 
     static auto rmp_params = ParametersRMP(PolicyType::RAYCASTING);
-    static auto rmp_target_policy = std::make_shared<RaycastingCudaPolicy<TSpace>>(rmp_params.worldPolicyParameters);
-    policies.push_back(rmp_target_policy);
+    static auto rmp_collision_policy = std::make_shared<RaycastingCudaPolicy<TSpace>>(rmp_params.worldPolicyParameters);
+    policies.push_back(rmp_collision_policy);
     policies.back()->scene_ = task_->scene_;
     return policies;
   }
@@ -174,8 +174,8 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
     auto currentPoint = best_trajectory->current();
 #if RMP_USE_ACTUATOR_VELOCITY
     const auto& velq = geometry_.convertPosToX(currentPoint.velocity);
-    action[0] = velq[0];
-    action[1] = velq[1];
+    action[0] = RMP_KV * velq[0];
+    action[1] = RMP_KV * velq[1];
 #elif RMP_USE_ACTUATOR_MOTOR
     const auto& accelq = currentPoint.acceleration;
     const auto pointmass_id = task_->GetTargetObjectId();
@@ -190,8 +190,8 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
     //mjtNum I3 = model_->body_inertia[3*pointmass_id+2];
 
     //NOTE: Depending on which dofs the action ctrl is configured in xml, eg: linear movement only uses linear_inertia only
-    action[0] = 5 * linear_inertia * accelq[0];
-    action[1] = 5 * linear_inertia * accelq[1];
+    action[0] = 0.5 * linear_inertia * accelq[0];
+    action[1] = 0.5 * linear_inertia * accelq[1];
     //action[2] = linear_inertia * accelq[2];
 #endif
     // Clamp controls
