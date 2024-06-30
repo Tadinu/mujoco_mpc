@@ -25,9 +25,14 @@
 #include <iostream>
 #include <memory>
 
-#include "mjpc/planners/rmp/include/core/rmp_policy_value.h"
+// MUJOCO
+#include "mujoco/mjvisualize.h"
+
+// MJPC
+#include "mjpc/planners/rmp/include/core/rmp_parameters.h"
 #include "mjpc/planners/rmp/include/core/rmp_space.h"
 #include "mjpc/planners/rmp/include/core/rmp_state.h"
+#include "rmp_policy_value.h"
 
 // Macro to mark unused variables s.t. no unused warning appears.
 #define ACK_UNUSED(expr) \
@@ -49,11 +54,13 @@ namespace rmpcpp {
 template <class TNormSpace>
 class RMPPolicyBase {
  public:
-  static constexpr int n = TNormSpace::dim;
+  static constexpr int d = TNormSpace::dim;
   using Matrix = Eigen::Matrix<double, TNormSpace::dim, TNormSpace::dim>;
   using Vector = Eigen::Matrix<double, TNormSpace::dim, 1>;
   using PValue = PolicyValue<TNormSpace::dim>;
   using PState = State<TNormSpace::dim>;
+
+  virtual ~RMPPolicyBase() = default;
 
   // to be implemented in derivatives.
   virtual PValue evaluateAt(const PState& /*agent_state*/, const std::vector<PState>& /*obstacle_states*/) = 0;
@@ -62,7 +69,14 @@ class RMPPolicyBase {
   virtual void startEvaluateAsync(const PState&, const std::vector<PState>& obstacle_states){}; // As a default derivatives don't have to implement this
   virtual void abortEvaluateAsync(){};
 
-  virtual ~RMPPolicyBase() = default;
+  template<typename TPolicy, const ERMPPolicyType policy_type,
+           typename TPolicyConfigs = std::conditional_t<policy_type == RAYCASTING,
+                                                        RaycastingPolicyConfigs, ESDFPolicyConfigs>>
+  static std::shared_ptr<TPolicy> MakePolicy() {
+    const auto policy_configs = std::dynamic_pointer_cast<TPolicyConfigs>(RMPConfigs(policy_type).policyConfigs);
+    return policy_configs ? std::make_shared<TPolicy>(*policy_configs) : nullptr;
+  }
+
   /**
    * Setter for metric A
    * @param A Metric

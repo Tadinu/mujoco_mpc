@@ -30,7 +30,7 @@
 #include <omp.h>
 
 #define MJPC_OPENMP_ENABLED (1)
-#define MJPC_OPENMP_THREADS_NUM (10)
+#define MJPC_OPENMP_THREADS_NUM (100)
 
 namespace mjpc {
 

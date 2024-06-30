@@ -39,6 +39,7 @@ class State {
   Matrix rot_ = Matrix::Identity();
   Vector vel_ = Vector::Zero();
   Vector size_ = Vector::Zero();
+  static constexpr int dim = d;
 
   // more derivatives to be added later
 };

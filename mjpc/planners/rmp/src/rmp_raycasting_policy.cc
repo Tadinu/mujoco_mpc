@@ -14,8 +14,6 @@
 #include "mjpc/planners/rmp/include/core/rmp_space.h"
 #include "mjpc/planners/rmp/include/planner/rmp_base_planner.h"
 
-#define BLOCK_SIZE 8
-
 /**
  * Generates a value between 0 and 1 according to the halton sequence
  * @param index ID of the number
@@ -50,15 +48,15 @@ inline TFloat alpha_freespace(const TFloat d, const TFloat eta_fsp) {
  * RMP Obstacle policy repulsive term activation function as defined in the RMP
  * paper
  * @param d Distance to obstacle
- * @param eta_rep
- * @param v_rep
+ * @param eta_repulsive
+ * @param v_repulsive
  * @return
  */
 template <typename TFloat>
-inline TFloat alpha_rep(const TFloat d, const TFloat eta_rep,
-                       const TFloat v_rep,
-                       const TFloat linear = 0.0) {
-  return eta_rep * (exp(-d / v_rep)) + (linear * 1 / d);
+inline TFloat alpha_repulsive(const TFloat d, const TFloat eta_repulsive,
+                              const TFloat v_repulsive,
+                              const TFloat linear = 0.0) {
+  return eta_repulsive * (exp(-d / v_repulsive)) + (linear * 1 / d);
 }
 
 /**
@@ -67,28 +65,32 @@ inline TFloat alpha_rep(const TFloat d, const TFloat eta_rep,
  * @param d Distance to obstacle
  * @param eta_damp
  * @param v_damp
- * @param epsilon
+ * @param epsilon_damp
  * @return
  */
 template <typename TFloat>
 inline TFloat alpha_damp(const TFloat d, const TFloat eta_damp,
                          const TFloat v_damp,
-                         const TFloat epsilon) {
-  return eta_damp / (d / v_damp + epsilon);
+                         const TFloat epsilon_damp) {
+  return eta_damp / (d / v_damp + epsilon_damp);
 }
 
 /**
  * RMP Obstacle policy metric weighing term as defined in the RMP paper
- * @param d Distance to obstacle
- * @param r
+ * @param distance Distance to obstacle
+ * @param radius Radius in which the policy is applied/active
  * @return
  */
 template <typename TFloat>
-inline TFloat w(const TFloat d, const TFloat r) {
+inline TFloat obstacle_weight(const TFloat distance, const TFloat radius) {
+  const auto& d = distance;
+  const auto& r = radius;
+
+  // Disregard obstacles outside of active-scanning zone
   if (d > r) {
     return 0.0f;
   }
-  return (1.0f / (r * r)) * d * d - (2.0f / r) * d + 1.0f;
+  return (1.0f / (r * r)) * (d * d) - (2.0f / r) * d + 1.0f;
 }
 
 /********************************************************************
@@ -104,9 +106,9 @@ inline std::pair<TFloat, TFloat> get_angles(const TFloat u,
 }
 
 template <class TSpace>
-std::pair<mjtNum, typename rmpcpp::RaycastingCudaPolicy<TSpace>::Vector>
-rmpcpp::RaycastingCudaPolicy<TSpace>::raycastKernel(int ray_id,
-  const Vector& ray_start, const Vector& ray_vel, int target_geomtype,
+std::pair<mjtNum, typename rmpcpp::RaycastingPolicy<TSpace>::Vector>
+rmpcpp::RaycastingPolicy<TSpace>::raycastKernel(int ray_id,
+  const Vector& ray_start, int target_geomtype,
   const mjtNum* target_pos, const mjtNum* target_rot, const mjtNum* target_size)
 {
   // Generate halton sequence and get angles
@@ -116,7 +118,7 @@ rmpcpp::RaycastingCudaPolicy<TSpace>::raycastKernel(int ray_id,
   double phi = angles.first;
   double theta = angles.second;
 
-#if RMP_USE_3D_DISTANCE_RAYS
+#if RMP_COLLISION_USE_3D_TRACE_RAYS
   // Convert to direction, of which the meaning itself is already an unit vector
   const mjtNum unit_direction[3] = {
     sin(phi) * cos(theta),
@@ -125,14 +127,14 @@ rmpcpp::RaycastingCudaPolicy<TSpace>::raycastKernel(int ray_id,
   };
 #else
   const mjtNum unit_direction[3] = {
-    (ray_id % 2 == 0) ? sin(phi) : cos(theta),
-    (ray_id % 2 == 0) ? cos(phi) : sin(theta),
+    sin(phi),
+    cos(phi),
     0.0
   };
 #endif
   // https://omaraflak.medium.com/ray-tracing-from-scratch-in-python-41670e6a96f9
 #if RMP_ISPC
-  const mjtNum distance = ispc::raySphere(target_pos, 2. * target_size[0],
+  const mjtNum distance = ispc::raySphere(target_pos, target_size[0] * target_size[0],
                                           ray_start.data(), unit_direction);
 #else
   const mjtNum distance = mju_rayGeom(target_pos, target_rot, target_size,
@@ -146,27 +148,26 @@ rmpcpp::RaycastingCudaPolicy<TSpace>::raycastKernel(int ray_id,
 
 /********************************************************************/
 template <class TSpace>
-void rmpcpp::RaycastingCudaPolicy<TSpace>::startEval(const PState& agent_state,
+void rmpcpp::RaycastingPolicy<TSpace>::startEval(const PState& agent_state,
                                                      const std::vector<PState>& obstacle_states) {
   // Shoot rays from agent toward obstacles
 #pragma omp parallel for if MJPC_OPENMP_ENABLED
-  for (auto i = 1; i < RMP_DISTANCE_TRACE_RAYS_NUM; ++i) {
+  for (auto i = 1; i < RMP_COLLISION_DISTANCE_TRACE_RAYS_NUM; ++i) {
     mjtNum distance_min = std::numeric_limits<mjtNum>::max();
     Vector ray_direction = Vector::Zero();
     // Get shortest distance to obstacles
-    for (auto& obstacle: obstacle_states) {
-      const Vector obstacle_scaled_size = RMP_OBSTACLES_SIZE_SCALE * obstacle.size_;
-      auto _ = raycastKernel(i, agent_state.pos_, agent_state.vel_, mjGEOM_SPHERE,
-                             obstacle.pos_.data(), obstacle.rot_.data(), obstacle_scaled_size.data());
-      auto distance = _.first;
+    for (const auto& obstacle: obstacle_states) {
+      const auto _ = raycastKernel(i, agent_state.pos_, mjGEOM_SPHERE,
+                                   obstacle.pos_.data(), obstacle.rot_.data(), obstacle.size_.data());
+      const auto distance = _.first;
       if ((distance != -1) && (distance < distance_min)) {
         distance_min = distance;
         ray_direction = _.second; // This is already guaranteed a unit direction vector
       }
     }
 
-    // Calculate {f, A}
-    Vector f_out = Vector::Zero();
+    // Calculate {f_obs, A}
+    Vector f_obs = Vector::Zero();
     Matrix A = Matrix::Zero();
 
     if ((distance_min) > 0 && (distance_min != std::numeric_limits<mjtNum>::max())) {
@@ -183,20 +184,21 @@ void rmpcpp::RaycastingCudaPolicy<TSpace>::startEval(const PState& agent_state,
       const Vector delta_d = -ray_direction;
 
       // Simple RMP obstacle policy
-      const Vector f_rep =
-          alpha_rep(distance_min, parameters_.eta_rep, parameters_.v_rep, 0.0) *
-          delta_d;
+      const Vector f_repulsive =
+          alpha_repulsive(distance_min, parameters_.eta_repulsive, parameters_.v_repulsive, 0.0) *
+                          delta_d;
+      // TODO: why -alpha_damp
       const Vector f_damp = -alpha_damp(distance_min, parameters_.eta_damp,
                                         parameters_.v_damp, parameters_.epsilon_damp) *
                       fmax(0.0, double(-agent_state.vel_.transpose() * delta_d)) *
                       (delta_d * delta_d.transpose()) * agent_state.vel_;
-      f_out = f_rep + f_damp;
-      const Vector f_norm = softnorm(f_out, parameters_.c_softmax_obstacle);
+      f_obs = f_repulsive + f_damp;
+      const Vector f_norm = softnorm(f_obs, parameters_.c_softmax_obstacle);
 
       if (parameters_.metric) {
-        A = w(distance_min, parameters_.r) * f_norm * f_norm.transpose();
+        A = obstacle_weight(distance_min, parameters_.radius) * f_norm * f_norm.transpose();
       } else {
-        A = w(distance_min, parameters_.r) * Matrix::Identity();
+        A = obstacle_weight(distance_min, parameters_.radius) * Matrix::Identity();
       }
 
       // [metric_sum, metric_x_force_sum_]
@@ -204,7 +206,7 @@ void rmpcpp::RaycastingCudaPolicy<TSpace>::startEval(const PState& agent_state,
       {
         //A[0] = A[0] / float(blockdim * dimy);  // scale with number of rays
         metric_sum_.push_back(A);
-        metric_x_force_sum_.push_back(A * f_out);
+        metric_x_force_sum_.push_back(A * f_obs);
       }
     } // End if distance_min is valid
   } // End rayshooting loop
@@ -216,8 +218,8 @@ void rmpcpp::RaycastingCudaPolicy<TSpace>::startEval(const PState& agent_state,
  * @return
  */
 template <>
-rmpcpp::RaycastingCudaPolicy<rmpcpp::Space<2>>::PValue
-rmpcpp::RaycastingCudaPolicy<rmpcpp::Space<2>>::evaluateAt(
+rmpcpp::RaycastingPolicy<rmpcpp::Space<2>>::PValue
+rmpcpp::RaycastingPolicy<rmpcpp::Space<2>>::evaluateAt(
     const PState &state, const std::vector<PState>&) {
   throw std::logic_error("Not implemented");
 }
@@ -228,15 +230,11 @@ rmpcpp::RaycastingCudaPolicy<rmpcpp::Space<2>>::evaluateAt(
  * @return
  */
 template <>
-rmpcpp::RaycastingCudaPolicy<rmpcpp::CylindricalSpace>::PValue
-rmpcpp::RaycastingCudaPolicy<rmpcpp::CylindricalSpace>::evaluateAt(
+rmpcpp::RaycastingPolicy<rmpcpp::CylindricalSpace>::PValue
+rmpcpp::RaycastingPolicy<rmpcpp::CylindricalSpace>::evaluateAt(
     const PState& agent_state, const std::vector<PState>& obstacle_states) {
-  static const int blockdim = parameters_.N_sqrt / BLOCK_SIZE;
-  static const int blockdim_2 = blockdim * blockdim;
   if (!async_eval_started_) {
-    for (int i = 0; i < blockdim_2; ++i) {
-      startEval(agent_state, obstacle_states);
-    }
+    startEval(agent_state, obstacle_states);
   }
   /** If an asynchronous eval was started, no check is done whether the state is
    * the same. (As for now this should never happen)*/
@@ -266,15 +264,15 @@ rmpcpp::RaycastingCudaPolicy<rmpcpp::CylindricalSpace>::evaluateAt(
  * @tparam TSpace
  */
 template <class TSpace>
-void rmpcpp::RaycastingCudaPolicy<TSpace>::abortEvaluateAsync() {
+void rmpcpp::RaycastingPolicy<TSpace>::abortEvaluateAsync() {
   async_eval_started_ = false;
 }
 
 template
-void rmpcpp::RaycastingCudaPolicy<rmpcpp::Space<2>>::abortEvaluateAsync();
+void rmpcpp::RaycastingPolicy<rmpcpp::Space<2>>::abortEvaluateAsync();
 
 template
-void rmpcpp::RaycastingCudaPolicy<rmpcpp::CylindricalSpace>::abortEvaluateAsync();
+void rmpcpp::RaycastingPolicy<rmpcpp::CylindricalSpace>::abortEvaluateAsync();
 
 template
-void rmpcpp::RaycastingCudaPolicy<rmpcpp::Space<3>>::abortEvaluateAsync();
+void rmpcpp::RaycastingPolicy<rmpcpp::Space<3>>::abortEvaluateAsync();

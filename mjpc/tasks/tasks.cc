@@ -44,6 +44,8 @@ namespace mjpc {
 
 std::vector<std::shared_ptr<Task>> GetTasks() {
   return {
+      std::make_shared<Particle>(),
+      std::make_shared<ParticleFixed>(),
       std::make_shared<Acrobot>(),
       std::make_shared<Allegro>(),
       std::make_shared<aloha::Handover>(),
@@ -58,8 +60,6 @@ std::vector<std::shared_ptr<Task>> GetTasks() {
       // DEEPMIND INTERNAL TASKS
       std::make_shared<OP3>(),
       std::make_shared<Panda>(),
-      std::make_shared<Particle>(),
-      std::make_shared<ParticleFixed>(),
       std::make_shared<Rubik>(),
       std::make_shared<ShadowReorient>(),
       std::make_shared<Quadrotor>(),

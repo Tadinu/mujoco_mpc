@@ -18,16 +18,9 @@ Tester::Tester(const ParametersWrapper& parameters,
  * Does a single planner run
  */
 void Tester::runSingle(const size_t run_index) {
-  planner_ = std::make_unique<rmpcpp::RMPPlanner<rmpcpp::Space<3>>>(
-      parameters_.parametersRMP);
-
-  Eigen::Vector3d startv = planner_->getStart();
-  Eigen::Vector3d goalv = planner_->getGoal();
-
-  rmpcpp::State<dim> start(startv, {0.0, 0.0, 0.0});
-
+  planner_ = std::make_unique<rmpcpp::RMPPlanner<rmpcpp::Space<3>>>(parameters_.parametersRMP);
   auto starttime = std::chrono::high_resolution_clock::now();
-  planner_->plan(start, goalv);
+  planner_->plan();
   auto endtime = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
       endtime - starttime);
@@ -58,8 +51,8 @@ void Tester::exportTrajectories(std::string path, const int i) {
                          "", "", " ", "");
   file.open(endpoints_path, std::ofstream::trunc);
   file << "sx sy sz ex ey ez" << std::endl;
-  file << planner_->getStart().format(format)
-       << planner_->getGoal().format(format) << std::endl;
+  file << planner_->GetStartPosQ().format(format)
+       << planner_->GetGoalPosQ().format(format) << std::endl;
   file.close();
 }
 

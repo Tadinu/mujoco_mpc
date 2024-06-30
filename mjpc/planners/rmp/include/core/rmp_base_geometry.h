@@ -20,9 +20,9 @@
 #ifndef RMPCPP_BASE_GEOMETRY_BASE_H_
 #define RMPCPP_BASE_GEOMETRY_BASE_H_
 
-#include "mjpc/planners/rmp/include/core/rmp_base_policy.h"
-#include "mjpc/planners/rmp/include/core/rmp_policy_value.h"
 #include "mjpc/planners/rmp/include/core/rmp_state.h"
+#include "mjpc/planners/rmp/include/policies/rmp_base_policy.h"
+#include "mjpc/planners/rmp/include/policies/rmp_policy_value.h"
 
 #include <Eigen/Dense>
 
@@ -66,15 +66,15 @@ class GeometryBase {
     J_phi J_;
 
     // Position/Velocity of agent at which this geometry is valid
-    StateX state_;
+    StateX stateX_;
 
     // Obstacle states
-    std::vector<StateX> obstacle_states_;
+    std::vector<StateX> obstacle_statesX_;
 
    public:
     ParametrizedGeometry(const J_phi& J, const StateX& agent_state,
                          const std::vector<StateX>& obstacle_states) :
-      J_(J), state_(agent_state), obstacle_states_(obstacle_states) {}
+      J_(J), stateX_(agent_state), obstacle_statesX_(obstacle_states) {}
 
     /**
      * Evaluates a given policy and then pulls it.
@@ -82,7 +82,7 @@ class GeometryBase {
      */
     template <class TNormSpace>
     PolicyQ pull(RMPPolicyBase<TNormSpace>* noneval_policyX) {
-      return pull(noneval_policyX->evaluateAt(state_, obstacle_states_));
+      return pull(noneval_policyX->evaluateAt(stateX_, obstacle_statesX_));
     }
 
     /**

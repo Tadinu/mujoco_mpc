@@ -30,20 +30,23 @@
 
 namespace mjpc {
 const char kPlannerNames[] =
+    "RMP\n"
     "Sampling\n"
     "Gradient\n"
     "iLQG\n"
     "iLQS\n"
     "Robust Sampling\n"
     "Cross Entropy\n"
-    "Sample Gradient\n"
-    "RMP";
+    "Sample Gradient";
 
 // load all available planners
 std::vector<std::unique_ptr<mjpc::Planner>> LoadPlanners() {
   // planners
   std::vector<std::unique_ptr<mjpc::Planner>> planners;
 
+  // NOTE: The adding order below must match [kPlannerNames]
+  planners.emplace_back(new rmpcpp::RMPPlanner<rmpcpp::CylindricalSpace>);
+  //planners.emplace_back(new rmpcpp::RMPPlanner<rmpcpp::Space<2>>);
   planners.emplace_back(new mjpc::SamplingPlanner);
   planners.emplace_back(new mjpc::GradientPlanner);
   planners.emplace_back(new mjpc::iLQGPlanner);
@@ -52,8 +55,6 @@ std::vector<std::unique_ptr<mjpc::Planner>> LoadPlanners() {
       new RobustPlanner(std::make_unique<mjpc::SamplingPlanner>()));
   planners.emplace_back(new mjpc::CrossEntropyPlanner);
   planners.emplace_back(new mjpc::SampleGradientPlanner);
-  planners.emplace_back(new rmpcpp::RMPPlanner<rmpcpp::CylindricalSpace>);
-  //planners.emplace_back(new rmpcpp::RMPPlanner<rmpcpp::Space<2>>);
   return planners;
 }
 

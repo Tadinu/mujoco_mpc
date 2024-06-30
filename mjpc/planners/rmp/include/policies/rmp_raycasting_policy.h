@@ -2,9 +2,9 @@
 #ifndef RMPCPP_PLANNER_RAYCASTING_CUDA_H
 #define RMPCPP_PLANNER_RAYCASTING_CUDA_H
 
+#include "mjpc/planners/rmp/include/core/rmp_parameters.h"
 #include "mujoco/mujoco.h"
-#include "mjpc/planners/rmp/include/core/rmp_base_policy.h"
-#include "mjpc/planners/rmp/include/planner/rmp_parameters.h"
+#include "rmp_base_policy.h"
 
 #define OUTPUT_RAYS (0)
 
@@ -15,15 +15,15 @@ namespace rmpcpp {
  * obstacle avoidance policy
  */
 template <class TSpace>
-class RaycastingCudaPolicy : public RMPPolicyBase<TSpace> {
+class RaycastingPolicy : public RMPPolicyBase<TSpace> {
  public:
   using Vector = typename RMPPolicyBase<TSpace>::Vector;
   using Matrix = typename RMPPolicyBase<TSpace>::Matrix;
   using PValue = typename RMPPolicyBase<TSpace>::PValue;
   using PState = typename RMPPolicyBase<TSpace>::PState;
 
-  RaycastingCudaPolicy(WorldPolicyParameters* parameters) :
-    parameters_(*dynamic_cast<RaycastingCudaPolicyParameters*>(parameters)) {}
+  explicit RaycastingPolicy(RaycastingPolicyConfigs parameters) :
+    parameters_(std::move(parameters)) {}
 
   virtual PValue evaluateAt(const PState& agent_state, const std::vector<PState>& obstacle_states) override;
   virtual void startEvaluateAsync(const PState& agent_state, const std::vector<PState>& obstacle_states) override {
@@ -35,10 +35,10 @@ class RaycastingCudaPolicy : public RMPPolicyBase<TSpace> {
  private:
   void startEval(const PState& agent_state, const std::vector<PState>& obstacle_states);
   std::pair<mjtNum, Vector> raycastKernel(int ray_id,
-                                          const Vector& ray_start, const Vector& ray_vel, int target_geomtype,
+                                          const Vector& ray_start, int target_geomtype,
                                           const mjtNum* target_pos, const mjtNum* target_rot, const mjtNum* target_size);
 
-  const RaycastingCudaPolicyParameters parameters_;
+  const RaycastingPolicyConfigs parameters_;
   PState last_evaluated_state_;
 
   bool async_eval_started_ = false;
