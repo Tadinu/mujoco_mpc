@@ -34,7 +34,7 @@ class RaycastingCudaPolicy : public RMPPolicyBase<TSpace> {
 
  private:
   void ispcStartEval(const PState& agent_state, const std::vector<PState>& obstacle_states);
-  std::pair<Matrix, Vector> raycastKernel(int ray_id,
+  std::pair<mjtNum, Vector> raycastKernel(int ray_id,
                                           const Vector& ray_start, const Vector& ray_vel, int target_geomtype,
                                           const mjtNum* target_pos, const mjtNum* target_rot, const mjtNum* target_size);
 
