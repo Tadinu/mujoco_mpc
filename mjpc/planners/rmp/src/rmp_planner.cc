@@ -23,7 +23,7 @@ void rmpcpp::RMPPlanner<TSpace>::integrate() {
     mjtNum* obstacle_i_size =  &model_->geom_size[3 * obstacle_geom_i_id];
     //mju_scl(obstacle_size, obstacle_size, 2.0, 3);
     mjtNum* obstacle_i_pos = &data_->xpos[3*obstacle_i_id];
-    mjtNum* obstacle_i_rot = &data_->xmat[9*obstacle_i_id];
+    mjtNum* obstacle_i_rot = &data_->xquat[4*obstacle_i_id];
 
     static constexpr int LIN_IDX = 3;
 #if 0
@@ -160,7 +160,9 @@ void rmpcpp::RMPPlanner<TSpace>::Traces(mjvScene* scn) {
     for (const auto& trace : policy->raytraces_) {
       mjpc::AddConnector(scn, mjGEOM_LINE, 0.5,
                          trace.ray_start.data(),
-                         trace.ray_end.data(), (float[]){float(mju_sigmoid(trace.distance)), 0.0, 0.0, 0.5});
+                         trace.ray_end.data(),
+                         (float[]){float(trace.distance),
+                                   1.0, 0.0, 0.5});
     }
     policy->raytraces_.clear();
   }

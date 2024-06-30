@@ -23,13 +23,13 @@
 #include <Eigen/Dense>
 
 // https://eigen.tuxfamily.org/dox/group__DenseDecompositionBenchmark.html
-#define RMP_USE_QR_INVERSE_MATRIX (0)
+#define RMP_USE_QR_INVERSE_MATRIX (1)
 /* https://www.naukri.com/code360/library/understanding-svd-decomposition
  * JacobiSVD: For small matrices, two-sided Jacobi iterations are quickly implemented, but for bigger matrices, they take a very long time.
  * BDCSVD: Applying an upper-bidiagonalization that is still quick for large problems on top of a recursive divide-and-conquer approach.
  * -> Divide-and-conquer diagonalizes the input matrix after first reducing it to bi-diagonal form using class UpperBidiagonalization.
  */
-#define RMP_USE_JACOBI_SVD_INVERSE_MATRIX (1)
+#define RMP_USE_JACOBI_SVD_INVERSE_MATRIX (0)
 #define RMP_USE_BDC_SVD_INVERSE_MATRIX (!RMP_USE_QR_INVERSE_MATRIX && !RMP_USE_JACOBI_SVD_INVERSE_MATRIX)
 
 namespace rmpcpp {
