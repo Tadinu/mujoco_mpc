@@ -1,6 +1,6 @@
 #include "mjpc/planners/rmp/test/rmp_parser.h"
 
-#include "mjpc/planners/rmp/include/planner/rmp_parameters.h"
+#include "mjpc/planners/rmp/include/core/rmp_parameters.h"
 #include "mjpc/planners/rmp/test/rmp_settings.h"
 
 /**
@@ -85,13 +85,11 @@ ParametersWrapper Parser::getParameters() {
 
 ParametersWrapper Parser::getRMPParameters() {
   /** Parameters */
-  PolicyType policy_type =
-      static_cast<PolicyType>(opts_["policy_type"].as<int>());
-  ParametersRMP parameters(policy_type);
-
-  parameters.policy_type = policy_type;
+  ERMPPolicyType policy_type =
+      static_cast<ERMPPolicyType>(opts_["policy_type"].as<int>());
+  RMPConfigs parameters(policy_type);
   parameters.truncation_distance_vox = opts_["trunc_dist"].as<double>();
-  parameters.r = opts_["r"].as<double>();
+  parameters.radius = opts_["r"].as<double>();
   parameters.terminate_upon_goal_reached =
       static_cast<bool>(opts_["terminate_upon_goal_reached"].as<int>());
   parameters.dt = opts_["dt"].as<double>();
@@ -100,39 +98,33 @@ ParametersWrapper Parser::getRMPParameters() {
   /** Policy specific parameters
    * Probably can do this in a cleaner way */
   float gain = opts_["gain"].as<float>();
-  WorldPolicyParameters* worldPolicyParameters =
-      parameters.worldPolicyParameters;
+  const auto policyConfigs = parameters.policyConfigs;
+
   switch (policy_type) {
-    case SIMPLE_ESDF:
-      dynamic_cast<EsdfPolicyParameters*>(worldPolicyParameters)->eta_damp *=
-          gain;
-      dynamic_cast<EsdfPolicyParameters*>(worldPolicyParameters)->eta_rep *=
-          gain;
-      dynamic_cast<EsdfPolicyParameters*>(worldPolicyParameters)->v_damp =
-          v_rep_damp;
-      dynamic_cast<EsdfPolicyParameters*>(worldPolicyParameters)->v_rep =
-          v_rep_damp;
-      dynamic_cast<EsdfPolicyParameters*>(worldPolicyParameters)->r =
-          opts_["r"].as<double>();
+    case SIMPLE_ESDF: {
+      const auto esdfPolicyConfigs =
+          std::dynamic_pointer_cast<ESDFPolicyConfigs>(policyConfigs);
+      esdfPolicyConfigs->eta_damp *= gain;
+      esdfPolicyConfigs->eta_repulsive *= gain;
+      esdfPolicyConfigs->v_damp = v_rep_damp;
+      esdfPolicyConfigs->v_repulsive = v_rep_damp;
+      esdfPolicyConfigs->radius = opts_["r"].as<double>();
       break;
-    case RAYCASTING:
-      dynamic_cast<RaycastingCudaPolicyParameters*>(worldPolicyParameters)
-          ->eta_damp *= gain;
-      dynamic_cast<RaycastingCudaPolicyParameters*>(worldPolicyParameters)
-          ->eta_rep *= gain;
-      dynamic_cast<RaycastingCudaPolicyParameters*>(worldPolicyParameters)
-          ->v_damp = v_rep_damp;
-      dynamic_cast<RaycastingCudaPolicyParameters*>(worldPolicyParameters)
-          ->v_rep = v_rep_damp;
-      dynamic_cast<RaycastingCudaPolicyParameters*>(worldPolicyParameters)
-          ->metric = bool(opts_["metric"].as<int>());
-      dynamic_cast<RaycastingCudaPolicyParameters*>(worldPolicyParameters)
-          ->N_sqrt = opts_["N_sqrt"].as<int>();
-      dynamic_cast<RaycastingCudaPolicyParameters*>(worldPolicyParameters)->r =
-          opts_["r"].as<double>();
-      dynamic_cast<RaycastingCudaPolicyParameters*>(worldPolicyParameters)
-          ->truncation_distance_vox = opts_["trunc_dist"].as<double>();
+    }
+    case RAYCASTING: {
+      const auto raycastingPolicyConfigs =
+          std::dynamic_pointer_cast<RaycastingPolicyConfigs>(policyConfigs);
+      raycastingPolicyConfigs->eta_damp *= gain;
+      raycastingPolicyConfigs->eta_repulsive *= gain;
+      raycastingPolicyConfigs->v_damp = v_rep_damp;
+      raycastingPolicyConfigs->v_repulsive = v_rep_damp;
+      raycastingPolicyConfigs->metric = bool(opts_["metric"].as<int>());
+      raycastingPolicyConfigs->N_sqrt = opts_["N_sqrt"].as<int>();
+      raycastingPolicyConfigs->radius = opts_["r"].as<double>();
+      raycastingPolicyConfigs->truncation_distance_vox =
+          opts_["trunc_dist"].as<double>();
       break;
+    }
   }
   return ParametersWrapper(parameters);
 }

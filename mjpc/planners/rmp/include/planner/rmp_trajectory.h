@@ -68,12 +68,15 @@ class RMPTrajectory : public mjpc::Trajectory {
   bool hasData() const {
     return trajectory_data_.size() > 0;
   }
-
+  void setMaxLength(float max_length) {
+    max_length_ = max_length;
+  }
   void writeToStream(std::ofstream& file) const;
 
  private:
   std::vector<RMPWaypoint<TSpace>> trajectory_data_;
   bool collided_ = false;
+  float max_length_ = 0.;
 };
 
 }  // namespace rmpcpp

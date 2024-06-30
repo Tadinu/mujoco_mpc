@@ -48,7 +48,7 @@ void rmpcpp::RMPTrajectory<TSpace>::addPoint(const RMPWaypoint<TSpace>& point)
 template <class TSpace>
 void rmpcpp::RMPTrajectory<TSpace>::addPoint(RMPWaypoint<TSpace>&& point)
 {
-  point.cumulative_length = getLength() + (current().position - point.position).norm();
+  point.cumulative_length = getLength() + (current().position - point.position).norm();;
   trajectory_data_.push_back(std::move(point));
 }
 

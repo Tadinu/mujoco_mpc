@@ -31,14 +31,20 @@ TVector vectorFromScalarArray(const T* scalarArray) {
 }
 
 template<int dim, typename T = double,
-         typename TMatrix=Eigen::Matrix<T, dim, dim>,
+         typename TMatrix=Eigen::Matrix<T, dim, dim>>
+TMatrix matrixFromScalarArray(const T* matrix) {
+  return TMatrix(matrix[0], matrix[1], matrix[2],
+                 matrix[3], matrix[4], matrix[5],
+                 matrix[6], matrix[7], matrix[8]);
+}
+
+template<int dim, typename T = double,
          typename TQuat=Eigen::Quaternion<T>>
-TMatrix matrixFromScalarArray(const T* scalarQuat) {
-  TQuat quat(scalarQuat[0],
-             scalarQuat[1],
-             scalarQuat[2],
-             scalarQuat[3]);
-  return quat.toRotationMatrix();
+TQuat quatFromScalarArray(const T* scalarQuat) {
+  return TQuat(scalarQuat[0],
+               scalarQuat[1],
+               scalarQuat[2],
+               scalarQuat[3]);
 }
 
 /**
