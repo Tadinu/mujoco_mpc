@@ -16,6 +16,7 @@
 #define MJPC_TASKS_PARTICLE_PARTICLE_H_
 
 #include <memory>
+#include <random>
 #include <string>
 #include <iostream>
 #include <sstream>
@@ -30,22 +31,30 @@
 namespace mjpc {
 class Particle : public Task {
  public:
+  std::random_device rd;  // To obtain a seed for the random number engine
+  std::mt19937 gen = std::mt19937(rd()); // Standard mersenne_twister_engine seeded with rd()
+  std::uniform_real_distribution<> dis = std::uniform_real_distribution<>(-0.2, 0.2);
+  double rand_val() {
+    return dis(gen);
+  }
+
   std::string Name() const override;
   std::string XmlPath() const override;
   virtual int GetTargetObjectId() const override { return mj_name2id(model_, mjOBJ_BODY, "rigidmass"); }
   virtual int GetTargetObjectGeomId() const override { return mj_name2id(model_, mjOBJ_GEOM, "rigidmass"); }
-  const double* GetStartPos() const override {
-   if (model_) {
+  const mjtNum* QueryParticlePos() const {
+    if (model_) {
 #if 1
-    return &data_->xpos[3* GetTargetObjectId()];
+      return &data_->xipos[3* GetTargetObjectId()];
 #else
-    int site_start = mj_name2id(model_, mjOBJ_SITE, "tip");
-    return &data_->site_xpos[site_start];
+      int site_start = mj_name2id(model_, mjOBJ_SITE, "tip");
+      return &data_->site_xpos[site_start];
 #endif
-   }
-   return nullptr;
+    }
+    return nullptr;
   }
-  const double* GetStartVel() const override {
+
+  const mjtNum* QueryParticleVel() const {
     if (model_) {
       static double lvel[3] = {0};
       auto rigidmass_id = GetTargetObjectId();
@@ -60,34 +69,48 @@ class Particle : public Task {
     }
     return nullptr;
   }
-  static int GetBodyMocapId(const mjModel* model, const char* body_name) {
-    if (model) {
-      int goal = mj_name2id(model, mjOBJ_BODY, body_name);
-      return model->body_mocapid[goal];
-    }
-    return -1;
+
+  mjtNum particle_pos_[3];
+  mjtNum* GetParticlePos() {
+    std::lock_guard<std::mutex> lock(task_data_mutex_);
+    mju_copy3(particle_pos_, QueryParticlePos());
+    return &particle_pos_[0];
   }
 
-  static void SetBodyMocapPos(const mjModel* model, const mjData* data,
-                              const char* body_name, const double* pos) {
-    if (model && data) {
-      int bodyMocapId = GetBodyMocapId(model, body_name);
-      mju_copy3(&data->mocap_pos[3*bodyMocapId], pos);
-      data->mocap_pos[3*bodyMocapId+2] = 0.01;
-      //std::cout << body_name << ":" << bodyMocapId << " " << pos[0] << " " << pos[1] << std::endl;
-    }
+  mjtNum start_pos_[3];
+  mjtNum* GetStartPos() override {
+    std::lock_guard<std::mutex> lock(task_data_mutex_);
+    mju_copy3(start_pos_, QueryStartPos());
+    return &start_pos_[0];
   }
-  static double* GetBodyMocapPos(const mjModel* model, const mjData* data,
-                                 const char* body_name) {
-    int bodyMocapId = GetBodyMocapId(model, body_name);
-    return &data->mocap_pos[3*bodyMocapId];
+  const mjtNum* QueryStartPos() const {
+    return QueryParticlePos();
+  }
+
+  mjtNum start_vel_[3];
+  mjtNum* GetStartVel() override {
+    std::lock_guard<std::mutex> lock(task_data_mutex_);
+    mju_copy3(start_vel_, QueryStartPos());
+    return &start_vel_[0];
+  }
+  const mjtNum* QueryStartVel() const {
+    return QueryParticleVel();
   }
   void SetGoalPos(const double* pos) {
     SetBodyMocapPos(model_, data_, "goal", pos);
   }
-  const double* GetGoalPos() const override {
-    return GetBodyMocapPos(model_, data_, "goal");
+  mjtNum goal_pos_[3];
+  mjtNum* GetGoalPos() override {
+    std::lock_guard<std::mutex> lock(task_data_mutex_);
+    mju_copy3(goal_pos_, QueryGoalPos());
+    return &goal_pos_[0];
   }
+  const mjtNum* QueryGoalPos() const {
+    return QueryBodyMocapPos(model_, data_, "goal");
+  }
+  static constexpr float PARTICLE_GOAL_REACH_THRESHOLD = 0.01;
+  bool QueryGoalReached();
+  void QueryObstacleStatesX() override;
   bool CheckBlocking(const double start[], const double end[]) override;
   class ResidualFn : public mjpc::BaseResidualFn {
    public:
@@ -108,6 +131,9 @@ class Particle : public Task {
   Particle() : residual_(this) {}
   void TransitionLocked(mjModel* model, mjData* data) override;
 
+  virtual void ModifyScene(const mjModel* model, const mjData* data,
+                           mjvScene* scene) const override;
+
   virtual void MoveObstacles() {
     for(auto i = 1; i < (OBSTACLES_NUM+1); ++i) {
       double obstacle_curve_pos[2] = {0.05 * log(i+1) * mju_sin(0.2*i * data_->time),
@@ -115,6 +141,14 @@ class Particle : public Task {
       std::ostringstream obstacle_name;
       obstacle_name << "obstacle_" << (i - 1);
       SetBodyMocapPos(model_, data_, obstacle_name.str().c_str(), obstacle_curve_pos);
+    }
+  }
+
+  virtual void RandomizeObstacles() {
+    for(auto i = 1; i < (OBSTACLES_NUM+1); ++i) {
+      std::ostringstream obstacle_name;
+      obstacle_name << "obstacle_" << (i - 1);
+      SetBodyMocapPos(model_, data_, obstacle_name.str().c_str(), (double[]){rand_val(), rand_val()});
     }
   }
  protected:
@@ -150,9 +184,7 @@ class ParticleFixed : public Particle {
     const ParticleFixed* particle_fixed_task = nullptr;
   };
   ParticleFixed() : residual_(this) {}
-  void TransitionLocked(mjModel* model, mjData* data) override {
-    //MoveObstacles();
-  }
+  void TransitionLocked(mjModel* model, mjData* data) override;
 protected:
   std::unique_ptr<mjpc::AbstractResidualFn> ResidualLocked() const override {
     return std::make_unique<FixedResidualFn>(this);

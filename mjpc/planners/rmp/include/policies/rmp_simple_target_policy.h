@@ -20,7 +20,7 @@
 #ifndef RMPCPP_POLICIES_SIMPLE_TARGET_POLICY_H_
 #define RMPCPP_POLICIES_SIMPLE_TARGET_POLICY_H_
 
-#include "mjpc/planners/rmp/include/core/rmp_base_policy.h"
+#include "rmp_base_policy.h"
 
 namespace rmpcpp {
 
@@ -36,7 +36,7 @@ class SimpleTargetPolicy : public RMPPolicyBase<TNormSpace> {
   using PValue = typename RMPPolicyBase<TNormSpace>::PValue;
   using PState = typename RMPPolicyBase<TNormSpace>::PState;
 
- SimpleTargetPolicy() {}
+ SimpleTargetPolicy() = default;
   /**
    * Sets up the policy.
    * target is the target to move to.

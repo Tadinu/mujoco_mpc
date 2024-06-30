@@ -19,8 +19,8 @@
 
 #ifndef RMPCPP_EVAL_INTEGRATOR_H
 #define RMPCPP_EVAL_INTEGRATOR_H
-#include "mjpc/planners/rmp/include/core/rmp_policy_value.h"
 #include "mjpc/planners/rmp/include/core/rmp_base_geometry.h"
+#include "mjpc/planners/rmp/include/policies/rmp_policy_value.h"
 
 #include <iostream>
 #include <vector>
