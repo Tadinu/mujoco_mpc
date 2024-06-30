@@ -4,7 +4,7 @@
 
 #include <string>
 
-#include "mjpc/planners/rmp/include/planner/rmp_parameters.h"
+#include "mjpc/planners/rmp/include/core/rmp_parameters.h"
 #include "mjpc/planners/rmp/include/planner/rmp_planner.h"
 #include "mjpc/planners/rmp/test/rmp_settings.h"
 #include "mjpc/planners/rmp/test/rmp_statistics.h"
@@ -12,10 +12,10 @@
 struct ParametersWrapper {
   ~ParametersWrapper() = default;
 
-  explicit ParametersWrapper(const ParametersRMP &params)
+  explicit ParametersWrapper(const RMPConfigs &params)
       : parametersRMP(params){};
 
-  const ParametersRMP parametersRMP;
+  const RMPConfigs parametersRMP;
 };
 
 /**
@@ -40,11 +40,10 @@ class Tester {
   void exportStats(std::string path);
   std::string getMapName();
 
-  rmpcpp::WorldGen worldgen_;
   rmpcpp::RunStatistics statistics_;
   ParametersWrapper parameters_;
   rmpcpp::TestSettings settings_;
-  std::unique_ptr<rmpcpp::PlannerBase<Space>> planner_;
+  std::unique_ptr<rmpcpp::RMPPlanner<Space>> planner_ = nullptr;
 };
 
 #endif  // RMPCPP_PLANNER_TESTER_H

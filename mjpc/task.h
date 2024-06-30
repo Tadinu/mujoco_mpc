@@ -23,6 +23,7 @@
 
 #include <mujoco/mujoco.h>
 #include "mjpc/norm.h"
+#include "mjpc/planners/rmp/include/core/rmp_state.h"
 
 namespace mjpc {
 
@@ -124,7 +125,7 @@ class Task {
 
   virtual std::string Name() const = 0;
   virtual std::string XmlPath() const = 0;
-  static constexpr int TRACE_RAYS_NUM = 10;
+
   static constexpr int OBSTACLES_NUM = 10;
   virtual int GetTargetObjectId() const { return -1; }
   virtual int GetTargetObjectGeomId() const { return -1; }
@@ -134,9 +135,32 @@ class Task {
   mjModel* model_ = nullptr;
   mjData* data_ = nullptr;
   mjvScene* scene_ = nullptr;
-  virtual const double* GetStartPos() const { return nullptr;}
-  virtual const double* GetStartVel() const { return nullptr; }
-  virtual const double* GetGoalPos() const { return nullptr; }
+  virtual const mjtNum* GetStartPos() { return nullptr;}
+  virtual const mjtNum* GetStartVel() { return nullptr; }
+  virtual const mjtNum* GetGoalPos() { return nullptr; }
+
+  static int GetBodyMocapId(const mjModel* model, const char* body_name) {
+    if (model) {
+      int goal = mj_name2id(model, mjOBJ_BODY, body_name);
+      return model->body_mocapid[goal];
+    }
+    return -1;
+  }
+
+  static void SetBodyMocapPos(const mjModel* model, const mjData* data,
+                              const char* body_name, const double* pos) {
+    if (model && data) {
+      int bodyMocapId = GetBodyMocapId(model, body_name);
+      mju_copy3(&data->mocap_pos[3*bodyMocapId], pos);
+      data->mocap_pos[3*bodyMocapId+2] = 0.01;
+      //std::cout << body_name << ":" << bodyMocapId << " " << pos[0] << " " << pos[1] << std::endl;
+    }
+  }
+  static mjtNum* QueryBodyMocapPos(const mjModel* model, const mjData* data,
+                                   const char* body_name) {
+    int bodyMocapId = GetBodyMocapId(model, body_name);
+    return &data->mocap_pos[3*bodyMocapId];
+  }
 
   void SetGeomColor(uint geom_id, const float* rgba) const {
     if (scene_ && (geom_id < model_->ngeom)) {
@@ -164,8 +188,26 @@ class Task {
 
   // residual parameters
   std::vector<double> parameters;
-  std::array<mjtNum, 3 * OBSTACLES_NUM * TRACE_RAYS_NUM> ray_start = {0.};
-  std::array<mjtNum, 3 * OBSTACLES_NUM * TRACE_RAYS_NUM> ray_end = {0.};
+  std::array<mjtNum, 3 * OBSTACLES_NUM> ray_starts = {0.};
+  std::array<mjtNum, 3 * OBSTACLES_NUM> ray_ends = {0.};
+  bool last_goal_reached_ = false;
+
+  // RMP
+  using StateX = rmpcpp::State<3>;
+  std::vector<StateX> obstacle_statesX_;
+
+  // mutex which should be held on changes to data queried from mjdata
+  mutable std::mutex task_data_mutex_;
+  virtual void QueryObstacleStatesX() {}
+  inline std::vector<StateX> GetObstacleStatesX() {
+    std::vector<StateX> obstacle_statesX;
+    {
+      std::lock_guard<std::mutex> lock(task_data_mutex_);
+      obstacle_statesX = obstacle_statesX_;
+    }
+    return obstacle_statesX;
+  }
+
  protected:
   // returns a pointer to the ResidualFn instance that's used for physics
   // stepping and plotting, and is internal to the class

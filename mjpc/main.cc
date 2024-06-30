@@ -23,8 +23,13 @@
 #include "mjpc/app.h"
 #include "mjpc/tasks/tasks.h"
 
-ABSL_FLAG(std::string, task, "Quadruped Flat",
+#if 1
+ABSL_FLAG(std::string, task_name, "Particle",
           "Which model to load on startup.");
+#else
+ABSL_FLAG(std::string, task_name, "Quadruped Flat",
+          "Which model to load on startup.");
+#endif
 
 // machinery for replacing command line error by a macOS dialog box
 // when running under Rosetta
@@ -48,7 +53,7 @@ int main(int argc, char** argv) {
 #endif
   absl::ParseCommandLine(argc, argv);
 
-  std::string task_name = absl::GetFlag(FLAGS_task);
+  std::string task_name = absl::GetFlag(FLAGS_task_name);
   auto tasks = mjpc::GetTasks();
   int task_id = -1;
   for (int i = 0; i < tasks.size(); i++) {

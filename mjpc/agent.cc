@@ -72,6 +72,10 @@ void Agent::Initialize(const mjModel* model) {
   // ----- model ----- //
   mjModel* old_model = model_;
   model_ = mj_copyModel(nullptr, model);  // agent's copy of model
+  for (auto& task : tasks_)
+  {
+    task->model_ = model_;
+  }
 
   // check for limits on all actuators
   int num_missing = 0;
