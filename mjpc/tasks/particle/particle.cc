@@ -25,7 +25,7 @@
 
 // MJPC
 #include "mjpc/planners/rmp/include/planner/rmp_base_planner.h"
-#include "mjpc/planners/rmp/include/util/rmp_vector_range.h"
+#include "mjpc/planners/rmp/include/util/rmp_util.h"
 
 namespace mjpc {
 
@@ -36,9 +36,8 @@ std::string Particle::Name() const { return "Particle"; }
 
 bool Particle::CheckBlocking(const double start[], const double end[]) {
 #if 1
-  std::vector<StateX> obstacle_statesX = GetObstacleStatesX();
-
   // CHECK OVERLAPPING
+  std::vector<StateX> obstacle_statesX = GetObstacleStatesX();
   double ray[3]; mju_sub3(ray, end, start);
   double ray_length = mju_normalize3(ray);
   double obstacle_i_size[3];
@@ -50,8 +49,8 @@ bool Particle::CheckBlocking(const double start[], const double end[]) {
     obstacle_name << "obstacle_" << i;
     //auto obstacle_i_id = mj_name2id(model_, mjOBJ_BODY, obstacle_name.str().c_str());
     auto obstacle_geom_i_id = mj_name2id(model_, mjOBJ_GEOM, obstacle_name.str().c_str());
-    // Scale up obstacles size to avoid them better
-    mju_scl3(obstacle_i_size, &model_->geom_size[3*obstacle_geom_i_id], 1.2);
+    // Scale up obstacles size to make a contour around them by a larger margin, so safer
+    mju_scl3(obstacle_i_size, &model_->geom_size[3*obstacle_geom_i_id], RMP_BLOCKING_OBSTACLES_SIZE_SCALE);
 
     static const double particle_size = [this]() {
       auto particle_geom_id = GetTargetObjectGeomId();
@@ -153,7 +152,7 @@ void ResidualImpl(const mjModel* model, const mjData* data,
 
 bool Particle::QueryGoalReached()
 {
-  return (rmpcpp::vectorFromScalarArray<3>(GetParticlePos()) - rmpcpp::vectorFromScalarArray<3>(GetGoalPos())).norm() < PARTICLE_GOAL_REACH_THRESHOLD;
+  return (rmp::vectorFromScalarArray<3>(GetParticlePos()) - rmp::vectorFromScalarArray<3>(GetGoalPos())).norm() < PARTICLE_GOAL_REACH_THRESHOLD;
 }
 
 void Particle::QueryObstacleStatesX()
@@ -190,10 +189,10 @@ void Particle::QueryObstacleStatesX()
     mjtNum obstacle_i_lin_vel[StateX::dim];
     mju_copy(obstacle_i_lin_vel, &data_->cvel[6*obstacle_i_id + LIN_IDX], StateX::dim);
 #endif
-    obstacle_statesX_.push_back(StateX{.pos_ = rmpcpp::vectorFromScalarArray<StateX::dim>(obstacle_i_pos),
-                                       .rot_ = rmpcpp::quatFromScalarArray<StateX::dim>(obstacle_i_rot).toRotationMatrix(),
-                                       .vel_ = rmpcpp::vectorFromScalarArray<StateX::dim>(obstacle_i_lin_vel),
-                                       .size_ = rmpcpp::vectorFromScalarArray<StateX::dim>(obstacle_i_size)});
+    obstacle_statesX_.push_back(StateX{.pos_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_pos),
+                                       .rot_ = rmp::quatFromScalarArray<StateX::dim>(obstacle_i_rot).toRotationMatrix(),
+                                       .vel_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_lin_vel),
+                                       .size_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_size)});
   }
 }
 

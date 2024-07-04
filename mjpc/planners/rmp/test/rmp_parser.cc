@@ -65,9 +65,9 @@ bool Parser::parse() {
   return true;
 }
 
-rmpcpp::TestSettings Parser::getSettings() {
+rmp::TestSettings Parser::getSettings() {
   /** Settings */
-  rmpcpp::TestSettings settings;
+  rmp::TestSettings settings;
   settings.obstacles = opts_["obstacles"].as<int>();
   settings.n_runs = opts_["n_runs"].as<int>();
   settings.seed = opts_["seed"].as<int>();

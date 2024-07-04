@@ -16,18 +16,18 @@
  * You should have received a copy of the GNU General Public License
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef RMPCPP_INCLUDE_RMPCPP_CORE_SPACE_H_
-#define RMPCPP_INCLUDE_RMPCPP_CORE_SPACE_H_
+#ifndef RMP_INCLUDE_RMP_CORE_SPACE_H_
+#define RMP_INCLUDE_RMP_CORE_SPACE_H_
 #include <Eigen/Dense>
-namespace rmpcpp {
 
+namespace rmp {
 /**
  * Represents a mathematical space with a corresponding norm and distance
  * @tparam d Dimensionality
  */
-template<int d>
+template <int d>
 class Space {
- public:
+public:
   using Vector = Eigen::Matrix<double, d, 1>;
 
   virtual Vector minus(const Vector& v1, const Vector& v2) { return v1 - v2; }
@@ -41,7 +41,7 @@ class Space {
  * Represents a cylindrical space with angular wrap around in the y-axis
  */
 class CylindricalSpace : public Space<3> {
- public:
+public:
   virtual Vector minus(const Vector& v1, const Vector& v2) {
     Vector dist = v1 - v2;
 
@@ -54,6 +54,5 @@ class CylindricalSpace : public Space<3> {
     return dist;
   }
 };
-
-}  // namespace rmpcpp
-#endif  // RMPCPP_INCLUDE_RMPCPP_CORE_SPACE_H_
+} // namespace rmp
+#endif  // RMP_INCLUDE_RMP_CORE_SPACE_H_

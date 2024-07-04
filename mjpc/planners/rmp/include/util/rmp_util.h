@@ -17,34 +17,37 @@
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RMPCPP_UTIL_POLICY_VECTOR_RANGE_H_
-#define RMPCPP_UTIL_POLICY_VECTOR_RANGE_H_
-#include "mjpc/planners/rmp/include/core/rmp_base_geometry.h"
+#ifndef RMP_UTIL_H_
+#define RMP_UTIL_H_
 
-namespace rmpcpp {
-
-template<int dim, typename T = double, typename TVector=Eigen::Matrix<T, dim, 1>>
+namespace rmp {
+template <int dim, typename T = double, typename TVector = Eigen::Matrix<T, dim, 1>>
 TVector vectorFromScalarArray(const T* scalarArray) {
   TVector v;
-  memcpy(v.data(), scalarArray, sizeof(T) *dim);
+  memcpy(v.data(), scalarArray, sizeof(T) * dim);
   return v;
 }
 
-template<int dim, typename T = double,
-         typename TMatrix=Eigen::Matrix<T, dim, dim>>
+template <int dim, typename T = double, typename TMatrix = Eigen::Matrix<T, dim, dim>>
 TMatrix matrixFromScalarArray(const T* matrix) {
-  return TMatrix(matrix[0], matrix[1], matrix[2],
-                 matrix[3], matrix[4], matrix[5],
-                 matrix[6], matrix[7], matrix[8]);
+  return TMatrix(matrix[0], matrix[1], matrix[2], matrix[3], matrix[4], matrix[5], matrix[6], matrix[7],
+                 matrix[8]);
 }
 
-template<int dim, typename T = double,
-         typename TQuat=Eigen::Quaternion<T>>
+template <int dim, typename T = double, typename TQuat = Eigen::Quaternion<T>>
 TQuat quatFromScalarArray(const T* scalarQuat) {
-  return TQuat(scalarQuat[0],
-               scalarQuat[1],
-               scalarQuat[2],
-               scalarQuat[3]);
+  return TQuat(scalarQuat[0], scalarQuat[1], scalarQuat[2], scalarQuat[3]);
+}
+
+/**
+ * Softmax helper function / Directionally stretched metrics
+ * https://arxiv.org/abs/1801.02854
+ *
+ * gamma: norm of a given vector
+ * alpha: weighing factor for the softmax
+ */
+inline double softmax(const double gamma, const double alpha) {
+  return (gamma + (1.0 / alpha) * log(1 + exp(-2 * alpha * gamma)));
 }
 
 /**
@@ -56,7 +59,7 @@ TQuat quatFromScalarArray(const T* scalarQuat) {
  */
 template <class TVector>
 class VectorRange {
- public:
+public:
   /**
    * Internal Subclass that defines the
    * actual iterator that is being returned.
@@ -77,7 +80,7 @@ class VectorRange {
    *  is going through.
    */
   class ConstVectorRangeIterator {
-   public:
+  public:
     typedef ConstVectorRangeIterator self_type;
     typedef TVector value_type;
     typedef std::forward_iterator_tag iterator_category;
@@ -98,16 +101,12 @@ class VectorRange {
 
     const value_type operator*() { return parent_->getValue(current_); }
 
-    bool operator==(const self_type& rhs) {
-      return current_ == rhs.current_ && parent_ == rhs.parent_;
-    }
+    bool operator==(const self_type& rhs) { return current_ == rhs.current_ && parent_ == rhs.parent_; }
 
-    bool operator!=(const self_type& rhs) {
-      return current_ != rhs.current_ || parent_ != rhs.parent_;
-    }
+    bool operator!=(const self_type& rhs) { return current_ != rhs.current_ || parent_ != rhs.parent_; }
 
-   private:
-     TVector current_;
+  private:
+    TVector current_;
     const VectorRange<TVector>* parent_;
   };
 
@@ -157,14 +156,12 @@ class VectorRange {
    */
   ConstVectorRangeIterator end() const { return ConstVectorRangeIterator(this, ticks_plus_one_); }
 
- private:
+private:
   /**
    * Converts the current position of the loop (ticks)
    * to the value this represents.
    */
-   TVector getValue(TVector& ticks) const {
-    return start_range_ + (ticks.array() * inc_.array()).matrix();
-  }
+  TVector getValue(TVector& ticks) const { return start_range_ + (ticks.array() * inc_.array()).matrix(); }
 
   /**
    *  Returns the next tick vector based on a current position.
@@ -190,7 +187,6 @@ class VectorRange {
   TVector ticks_;  ///< integer ticks to increment through
   TVector ticks_plus_one_;
 };
+}  // namespace rmp
 
-}  // namespace rmpcpp
-
-#endif  // RMPCPP_UTIL_POLICY_VECTOR_RANGE_H_
+#endif  // RMP_UTIL_H_

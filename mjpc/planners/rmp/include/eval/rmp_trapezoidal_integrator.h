@@ -17,16 +17,19 @@
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RMPCPP_EVAL_INTEGRATOR_H
-#define RMPCPP_EVAL_INTEGRATOR_H
-#include "mjpc/planners/rmp/include/core/rmp_base_geometry.h"
-#include "mjpc/planners/rmp/include/policies/rmp_policy_value.h"
+#ifndef RMP_EVAL_INTEGRATOR_H
+#define RMP_EVAL_INTEGRATOR_H
 
+// MJPC
 #include <iostream>
 #include <vector>
 
-namespace rmpcpp {
+#include "mjpc/planners/rmp/include/core/rmp_base_geometry.h"
+#include "mjpc/planners/rmp/include/policies/rmp_policy_value.h"
+#include "mjpc/planners/rmp/include/util/rmp_util.h"
+#include "mjpc/task.h"
 
+namespace rmp {
 /**
  * Simple Integrator to integrate a trajectory through
  * a policy field.
@@ -35,16 +38,13 @@ namespace rmpcpp {
  * Keeps a distance integral.
  *
  * \tparam TGeometry Geometry on which the integrator operates.
- *                   Has to be inherited from GeometryBase.
+ *                   Has to be inherited from RMPBaseGeometry.
  */
-template <class TPolicy, class TGeometry>
+template <class TPolicy, typename TGeometry,
+          typename = std::enable_if_t<
+              std::is_base_of<RMPBaseGeometry<TGeometry::K, TGeometry::D>, TGeometry>::value>>
 class TrapezoidalIntegrator {
  public:
-  static_assert(
-      std::is_base_of<GeometryBase<TGeometry::K, TGeometry::D>,
-                      TGeometry>::value,
-      "Geometry must inherit from GeometryBase with correct dimensionality");
-
   using VectorX = typename TGeometry::VectorX;
   using MatrixX = typename TGeometry::MatrixX;
   using VectorQ = typename TGeometry::VectorQ;
@@ -52,51 +52,55 @@ class TrapezoidalIntegrator {
   using StateQ = typename TGeometry::StateQ;
   using StateX = typename TGeometry::StateX;
 
-  /**
-   * Constructor to supply a policycontainer.
-   */
-  TrapezoidalIntegrator() {}
+  TrapezoidalIntegrator() = default;
+
+  TrapezoidalIntegrator(mjpc::Task* task) : task_(task) {}
+
+  mjpc::Task* task_ = nullptr;
 
   /**
    *  Reset integrator to a specific state.
    */
-  void resetTo(const VectorQ& position,
-               const VectorQ& velocity,
-               std::vector<StateX>&& obstacle_statesX) {
+  void resetTo(const VectorQ& position, const VectorQ& velocity) {
     current_pos_ = position;
     current_vel_ = velocity;
     distance_ = 0.0;
     done_ = false;
-    //last_acc_ = Vector::Zero();
-    //last_metric_ = MatrixQ::Zero();
-    current_obstacle_statesX_ = std::move(obstacle_statesX);
+    last_acc_ = VectorQ::Zero();
+    last_metric_ = MatrixQ::Zero();
   }
 
   /**
    * Advance by dt and return position in configuration space.
    */
-  VectorQ forwardIntegrate(const std::vector<TPolicy*>& policies, TGeometry& geometry,
-                           float dt) {
+  VectorQ forwardIntegrate(const std::vector<TPolicy*>& policies, TGeometry& geometry, float dt) {
     // relative start and end of integration
     const float a = 0.0;
     const float b = dt;
 
     // get position in manifold
-    //VectorX pos_x, x_dot;
+    // VectorX pos_x, x_dot;
     VectorQ acc_b, vel_b, acc_a, vel_a;
     VectorQ dist_increment;
     acc_a = last_acc_;
     vel_a = current_vel_;
 
+#if 0
     // Convert current Configuration space position -> Task space
     const StateQ current_stateQ = {.pos_ = current_pos_, .vel_ = current_vel_};
     const StateX current_stateX = geometry.convertToX(current_stateQ);
+#else
+    current_pos_ = vectorFromScalarArray<TGeometry::D>(task_->GetStartPos());
+    // NOTE: Taking the real vel from task worsen the accuracy => Stay with the predictive one
+    // current_vel_ = vectorFromScalarArray<TGeometry::D>(task_->GetStartVel());
+    const StateQ current_stateX = {.pos_ = current_pos_, .vel_ = geometry.convertPosToX(current_vel_)};
+#endif
 
-    // evaluate all policy and get new accelerations
+    // evaluate all policy (in task space X) and get new accelerations by a pull-back (in config space Q)
     std::vector<typename TPolicy::PValue> evaluated_policies;
     for (auto* policy : policies) {
-      evaluated_policies.push_back(geometry.createParametrized(current_stateX,
-                                                               current_obstacle_statesX_).pull(policy));
+      evaluated_policies.push_back(
+          geometry.createParametrized(current_stateX, task_->GetObstacleStatesX()).pull(policy));
     }
 
     PolicyValue pval = TPolicy::PValue::sum(evaluated_policies);
@@ -115,14 +119,14 @@ class TrapezoidalIntegrator {
 
     return current_pos_;
   }
-  VectorQ forwardIntegrateFixed(typename TPolicy::PValue policy, TGeometry& /*geometry*/,
-                                 float dt) {
+
+  VectorQ forwardIntegrateFixed(typename TPolicy::PValue policy, TGeometry& /*geometry*/, float dt) {
     // relative start and end of integration
     const float a = 0.0;
     const float b = dt;
 
     // get position in manifold
-    //VectorX pos_x, x_dot;
+    // VectorX pos_x, x_dot;
     VectorQ acc_b, vel_b, acc_a, vel_a;
     VectorQ dist_increment;
     acc_a = last_acc_;
@@ -131,7 +135,7 @@ class TrapezoidalIntegrator {
     // get current configuration space position and convert to
     //  task space.
     StateQ current_stateQ{current_pos_, current_vel_};
-    //StateX current_stateX = geometry.convertToX(current_stateQ);
+    // StateX current_stateX = geometry.convertToX(current_stateQ);
 
     // evaluate all policy and get new accelerations
     acc_b = policy.f_;
@@ -173,16 +177,14 @@ class TrapezoidalIntegrator {
     acc = last_acc_;
   }
 
-private:
+ private:
   bool done_ = false;
   double distance_ = 0.0;
   VectorQ current_pos_ = VectorQ::Zero();
   VectorQ current_vel_ = VectorQ::Zero();
   VectorQ last_acc_ = VectorQ::Zero();
   MatrixQ last_metric_ = MatrixQ::Zero();
-  std::vector<StateX> current_obstacle_statesX_;
 };
+}  // namespace rmp
 
-}  // namespace rmpcpp
-
-#endif  // RMPCPP_EVAL_INTEGRATOR_H
+#endif  // RMP_EVAL_INTEGRATOR_H

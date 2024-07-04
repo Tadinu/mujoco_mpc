@@ -17,12 +17,10 @@
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RMPCPP_CORE_POLICY_BASE_H_
-#define RMPCPP_CORE_POLICY_BASE_H_
+#ifndef RMP_CORE_POLICY_BASE_H_
+#define RMP_CORE_POLICY_BASE_H_
 
 #include <Eigen/Dense>
-#include <Eigen/QR>
-#include <iostream>
 #include <memory>
 
 // MUJOCO
@@ -30,9 +28,9 @@
 
 // MJPC
 #include "mjpc/planners/rmp/include/core/rmp_parameters.h"
-#include "mjpc/planners/rmp/include/core/rmp_space.h"
 #include "mjpc/planners/rmp/include/core/rmp_state.h"
-#include "rmp_policy_value.h"
+#include "mjpc/planners/rmp/include/policies/rmp_policy_value.h"
+#include "mjpc/planners/rmp/include/util/rmp_util.h"
 
 // Macro to mark unused variables s.t. no unused warning appears.
 #define ACK_UNUSED(expr) \
@@ -40,8 +38,7 @@
     (void)(expr);        \
   } while (0)
 
-namespace rmpcpp {
-
+namespace rmp {
 /**
  * Holds a plain basic n-dimensional Riemannian Motion Policy
  * as defined in [1], Chapter IV.
@@ -53,7 +50,7 @@ namespace rmpcpp {
  */
 template <class TNormSpace>
 class RMPPolicyBase {
- public:
+public:
   static constexpr int d = TNormSpace::dim;
   using Matrix = Eigen::Matrix<double, TNormSpace::dim, TNormSpace::dim>;
   using Vector = Eigen::Matrix<double, TNormSpace::dim, 1>;
@@ -66,12 +63,14 @@ class RMPPolicyBase {
   virtual PValue evaluateAt(const PState& /*agent_state*/, const std::vector<PState>& /*obstacle_states*/) = 0;
   /** Asynchronous start of evaluation. If implemented will make a subsequent (blocking) call to evaluateAt
    * (with the same state) faster. */
-  virtual void startEvaluateAsync(const PState&, const std::vector<PState>& obstacle_states){}; // As a default derivatives don't have to implement this
-  virtual void abortEvaluateAsync(){};
+  virtual void startEvaluateAsync(const PState&, const std::vector<PState>& obstacle_states) {
+  }; // As a default derivatives don't have to implement this
+  virtual void abortEvaluateAsync() {
+  };
 
-  template<typename TPolicy, const ERMPPolicyType policy_type,
-           typename TPolicyConfigs = std::conditional_t<policy_type == RAYCASTING,
-                                                        RaycastingPolicyConfigs, ESDFPolicyConfigs>>
+  template <typename TPolicy, const ERMPPolicyType policy_type,
+            typename TPolicyConfigs = std::conditional_t<policy_type == RAYCASTING,
+                                                         RaycastingPolicyConfigs, ESDFPolicyConfigs>>
   static std::shared_ptr<TPolicy> MakePolicy() {
     const auto policy_configs = std::dynamic_pointer_cast<TPolicyConfigs>(RMPConfigs(policy_type).policyConfigs);
     return policy_configs ? std::make_shared<TPolicy>(*policy_configs) : nullptr;
@@ -83,7 +82,16 @@ class RMPPolicyBase {
    */
   inline void setA(Matrix A) { A_static_ = A; }
 
- public:
+  /**
+   *  Soft-Normalization helper function, normalizing a scaled softmax of a vector
+   *  https://arxiv.org/abs/1801.02854
+   *  alpha: weighing factor for the softmax
+   */
+  inline Vector soft_norm(const Vector& v, const double alpha) {
+    return v / softmax(this->space_.norm(v), alpha);
+  }
+
+public:
   RMPPolicyBase() = default;
 
   mjvScene* scene_ = nullptr;
@@ -91,12 +99,13 @@ class RMPPolicyBase {
   Matrix A_static_ = Matrix::Identity();
 
   struct RayTrace {
-   Vector ray_start;
-   Vector ray_end;
-   double distance = 0.;
+    Vector ray_start;
+    Vector ray_end;
+    double distance = 0.;
   };
+
   std::vector<RayTrace> raytraces_;
 };
-}  // namespace rmpcpp
+} // namespace rmp
 
-#endif  // RMPCPP_CORE_POLICY_BASE_H_
+#endif  // RMP_CORE_POLICY_BASE_H_
