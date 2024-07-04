@@ -1,6 +1,6 @@
 
-#ifndef RMPCPP_PLANNER_TESTER_H
-#define RMPCPP_PLANNER_TESTER_H
+#ifndef RMP_PLANNER_TESTER_H
+#define RMP_PLANNER_TESTER_H
 
 #include <string>
 
@@ -24,11 +24,11 @@ struct ParametersWrapper {
  */
 class Tester {
   static const int dim = 3;
-  using Space = rmpcpp::Space<dim>;
+  using Space = rmp::Space<dim>;
 
  public:
   Tester(const ParametersWrapper &parameters,
-         const rmpcpp::TestSettings &settings);
+         const rmp::TestSettings &settings);
 
   void run();
 
@@ -40,10 +40,10 @@ class Tester {
   void exportStats(std::string path);
   std::string getMapName();
 
-  rmpcpp::RunStatistics statistics_;
+  rmp::RunStatistics statistics_;
   ParametersWrapper parameters_;
-  rmpcpp::TestSettings settings_;
-  std::unique_ptr<rmpcpp::RMPPlanner<Space>> planner_ = nullptr;
+  rmp::TestSettings settings_;
+  std::unique_ptr<rmp::RMPPlanner<Space>> planner_ = nullptr;
 };
 
-#endif  // RMPCPP_PLANNER_TESTER_H
+#endif  // RMP_PLANNER_TESTER_H

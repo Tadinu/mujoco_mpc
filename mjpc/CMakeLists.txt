@@ -93,7 +93,7 @@ set(LIB_MJPC_HEADERS
     planners/rmp/include/policies/rmp_base_policy.h
     planners/rmp/include/policies/rmp_policy_value.h
     planners/rmp/include/eval/rmp_trapezoidal_integrator.h
-    planners/rmp/include/util/rmp_vector_range.h
+    planners/rmp/include/util/rmp_util.h
     estimators/estimator.h
     estimators/unscented.h
     estimators/kalman.h

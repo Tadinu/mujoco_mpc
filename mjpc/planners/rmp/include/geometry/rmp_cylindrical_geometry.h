@@ -17,13 +17,12 @@
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RMPCPP_GEOMETRY_CYLINDRICAL_GEOMETRY_H_
-#define RMPCPP_GEOMETRY_CYLINDRICAL_GEOMETRY_H_
+#ifndef RMP_GEOMETRY_CYLINDRICAL_GEOMETRY_H_
+#define RMP_GEOMETRY_CYLINDRICAL_GEOMETRY_H_
 
 #include "mjpc/planners/rmp/include/core/rmp_base_geometry.h"
 
-namespace rmpcpp {
-
+namespace rmp {
 /**
  * Example of a cylindrical geometry that maps to a plane.
  * Here, the task space is the unit sphere, and the configuration space is R^3
@@ -31,21 +30,21 @@ namespace rmpcpp {
  * X Task space coordinates are: theta, rho, z
  * Q Configuration space coordinates are: x,y,z
  */
-class CylindricalGeometry : public GeometryBase<3, 3> {
+class CylindricalGeometry : public RMPBaseGeometry<3, 3> {
 public:
   // type alias for readability.
-  using base = GeometryBase<3, 3>;
+  using base = RMPBaseGeometry<3, 3>;
   using VectorX = base::VectorX;
   using Vector = base::VectorQ;
   using StateX = base::StateX;
   using StateQ = base::StateQ;
   using J_phi = base::J_phi;
 
- protected:
+protected:
   /**
    * Return jacobian.
    */
-  virtual J_phi J(const StateX &state_x) const {
+  virtual J_phi J(const StateX& state_x) const {
     J_phi mtx_j(J_phi::Identity());
 
     //base::Vector q;
@@ -58,13 +57,13 @@ public:
     return mtx_j;
   }
 
- public:
-  virtual VectorX convertPosToX(const VectorQ &pos_q) const {
+public:
+  virtual VectorX convertPosToX(const VectorQ& pos_q) const {
     // Standard formula for cylindrical coordinates
     VectorX pos_x;
 
     // rho
-    pos_x.x() = pos_q.template topRows<2>().norm();  // sqrt(x^2+y^2)
+    pos_x.x() = pos_q.template topRows<2>().norm(); // sqrt(x^2+y^2)
 
     // theta
     pos_x.y() = atan2(pos_q.y(), pos_q.x());
@@ -75,7 +74,7 @@ public:
     return pos_x;
   }
 
-  virtual StateX convertToX(const StateQ &state_q) const {
+  virtual StateX convertToX(const StateQ& state_q) const {
     // Standard formula for cylindrical coordinates
     StateX state_x;
 
@@ -87,7 +86,7 @@ public:
     return state_x;
   }
 
-  virtual VectorQ convertPosToQ(const VectorX &vector_x) const {
+  virtual VectorQ convertPosToQ(const VectorX& vector_x) const {
     // Standard formula for cylindrical coordinates
     VectorQ vector_q;
 
@@ -102,7 +101,7 @@ public:
     return vector_q;
   }
 
-  virtual StateQ convertToQ(const StateX &state_x) const {
+  virtual StateQ convertToQ(const StateX& state_x) const {
     // Standard formula for cylindrical coordinates
     StateQ state_q;
     state_q.pos_ = convertPosToQ(state_x.pos_);
@@ -111,5 +110,5 @@ public:
     return state_q;
   }
 };
-}  // namespace rmpcpp
-#endif  // RMPCPP_GEOMETRY_CYLINDRICAL_GEOMETRY_H_
+} // namespace rmp
+#endif  // RMP_GEOMETRY_CYLINDRICAL_GEOMETRY_H_

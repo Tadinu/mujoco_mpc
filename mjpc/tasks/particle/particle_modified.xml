@@ -54,13 +54,13 @@
       <camera name="cam0" pos="0 -0.3 0.3" xyaxes="1 0 0 0 0.7 0.7"/>
       <joint name="root_x" type="slide"  pos="0 0 0" axis="1 0 0" />
       <joint name="root_y" type="slide"  pos="0 0 0" axis="0 1 0" />
-      <geom name="rigidmass" type="sphere" size=".01" material="self" mass=".3"/>
+      <geom name="rigidmass" type="sphere" size=".01" material="self" mass=".03"/>
       <site name="tip" pos="0 0 0" size="0.01"/>
     </body>
   </worldbody>
 
   <actuator>
-    <velocity name="x_velocity" joint="root_x" gear="1" ctrllimited="true" ctrlrange="-1 1"/>
-    <velocity name="y_velocity" joint="root_y" gear="1" ctrllimited="true" ctrlrange="-1 1"/>
+    <motor name="x_motor" joint="root_x" gear="1" ctrllimited="true" ctrlrange="-1 1"/>
+    <motor name="y_motor" joint="root_y" gear="1" ctrllimited="true" ctrlrange="-1 1"/>
   </actuator>
 </mujoco>

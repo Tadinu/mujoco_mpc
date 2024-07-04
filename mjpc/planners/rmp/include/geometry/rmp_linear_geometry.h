@@ -17,11 +17,11 @@
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RMPCPP_GEOMETRY_LINEAR_GEOMETRY_H_
-#define RMPCPP_GEOMETRY_LINEAR_GEOMETRY_H_
+#ifndef RMP_GEOMETRY_LINEAR_GEOMETRY_H_
+#define RMP_GEOMETRY_LINEAR_GEOMETRY_H_
 #include "mjpc/planners/rmp/include/core/rmp_base_geometry.h"
-namespace rmpcpp {
 
+namespace rmp {
 /**
  * Example of a simple linear geometry, where both
  * task and configuration space are some regular
@@ -29,10 +29,10 @@ namespace rmpcpp {
  * \tparam d Dimensionality of geometry.
  */
 template <int d>
-class LinearGeometry : public GeometryBase<d, d> {
- public:
+class LinearGeometry : public RMPBaseGeometry<d, d> {
+public:
   // type alias for readability.
-  using base = GeometryBase<d, d>;
+  using base = RMPBaseGeometry<d, d>;
   using VectorX = typename base::VectorX;
   using VectorQ = typename base::VectorQ;
   using StateX = typename base::StateX;
@@ -51,25 +51,25 @@ class LinearGeometry : public GeometryBase<d, d> {
    * Convert vector Q->X
    * As the spaces are equal, they are the same too.
    */
-  virtual VectorX convertPosToX(const VectorQ &vector_q) const { return vector_q; }
+  virtual VectorX convertPosToX(const VectorQ& vector_q) const { return vector_q; }
 
   /**
    * Convert state Q->X
    * As the spaces are equal, they are the same too.
    */
-  virtual StateX convertToX(const StateQ &state_q) const { return state_q; }
+  virtual StateX convertToX(const StateQ& state_q) const { return state_q; }
 
   /**
    * Convert state X->Q
    * As the spaces are equal, they are the same too.
    */
-  virtual StateQ convertToQ(const StateX &state_x) const { return state_x; }
+  virtual StateQ convertToQ(const StateX& state_x) const { return state_x; }
 
   /**
    * Convert vector X->Q
    * As the spaces are equal, they are the same too.
    */
-  virtual VectorQ convertPosToQ(const VectorX &vector_x) const { return vector_x; }
+  virtual VectorQ convertPosToQ(const VectorX& vector_x) const { return vector_x; }
 };
-}  // namespace rmpcpp
-#endif  // RMPCPP_GEOMETRY_LINEAR_GEOMETRY_H_
+} // namespace rmp
+#endif  // RMP_GEOMETRY_LINEAR_GEOMETRY_H_
