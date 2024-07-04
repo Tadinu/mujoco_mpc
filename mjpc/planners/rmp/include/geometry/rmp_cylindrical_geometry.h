@@ -31,10 +31,10 @@ namespace rmpcpp {
  * X Task space coordinates are: theta, rho, z
  * Q Configuration space coordinates are: x,y,z
  */
-class CylindricalGeometry : public GeometryBase<3, 3> {
+class CylindricalGeometry : public RMPBaseGeometry<3, 3> {
 public:
   // type alias for readability.
-  using base = GeometryBase<3, 3>;
+  using base = RMPBaseGeometry<3, 3>;
   using VectorX = base::VectorX;
   using Vector = base::VectorQ;
   using StateX = base::StateX;

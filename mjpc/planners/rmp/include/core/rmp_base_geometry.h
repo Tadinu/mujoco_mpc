@@ -39,7 +39,7 @@ namespace rmpcpp {
  *
  */
 template <int k, int d>
-class GeometryBase {
+class RMPBaseGeometry {
  public:
   /// Type alias for a Vector belonging to task Space X
   using MatrixX = Eigen::Matrix<double, k, k>;
@@ -59,7 +59,7 @@ class GeometryBase {
   /*
    * Class that represents a fully parametrized geometry
    * that allows pushing and polling.
-   * Internal class, as it is built by GeometryBase only
+   * Internal class, as it is built by RMPBaseGeometry only
    */
   class ParametrizedGeometry {
     // Corresponding Jacobian at this state

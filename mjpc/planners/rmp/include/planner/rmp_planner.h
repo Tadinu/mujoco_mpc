@@ -2,9 +2,9 @@
 #define RMPCPP_PLANNER_PLANNER_RMP_H
 
 #include <queue>
+#include <utility>
 
 #include "mjpc/planners/rmp/include/core/rmp_parameters.h"
-#include "mjpc/planners/rmp/include/core/rmp_space.h"
 #include "mjpc/planners/rmp/include/eval/rmp_trapezoidal_integrator.h"
 #include "mjpc/planners/rmp/include/geometry/rmp_cylindrical_geometry.h"
 #include "mjpc/planners/rmp/include/geometry/rmp_linear_geometry.h"
@@ -14,7 +14,7 @@
 #include "mjpc/planners/rmp/include/policies/rmp_base_policy.h"
 #include "mjpc/planners/rmp/include/policies/rmp_raycasting_policy.h"
 #include "mjpc/planners/rmp/include/policies/rmp_simple_target_policy.h"
-#include "mjpc/planners/rmp/include/util/rmp_vector_range.h"
+#include "mjpc/planners/rmp/include/util/rmp_util.h"
 #include "mjpc/utilities.h"
 
 namespace rmpcpp {
@@ -32,9 +32,9 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
  public:
   friend class RMPTrajectory<TSpace>;
   static constexpr int dim = TSpace::dim;
-  RMPPlanner() {}
-  RMPPlanner(const RMPConfigs& params): parameters_(params) {}
-  ~RMPPlanner() = default;
+  RMPPlanner() = default;
+  explicit RMPPlanner(RMPConfigs configs): configs_(std::move(configs)) {}
+  ~RMPPlanner() override = default;
 
   std::vector<std::shared_ptr<RMPPolicyBase<TSpace>>> getPolicies() override
   {
@@ -42,17 +42,25 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
 
     const auto goal_pos = vectorFromScalarArray<TSpace::dim>(task_->GetGoalPos());
 
-    // Target atractor policies
+    // Target attractor policies (For the collision policies -> [RaycastingPolicyConfigs]
     // Ref: [Table I]
     static auto simple_target_policy = std::make_shared<SimpleTargetPolicy<TSpace>>();
     (*simple_target_policy)(goal_pos,
-                            Matrix::Identity(), 1.6, 3.2, 1.0);
+                            Matrix::Identity(), 0.8, 1.6, 1.0);
 
+    static auto simple_target_policy1 = std::make_shared<SimpleTargetPolicy<TSpace>>();
+    (*simple_target_policy1)(goal_pos,
+                            Matrix::Identity(), 1.6, 3.2, 1.0);
     static auto simple_target_policy2 = std::make_shared<SimpleTargetPolicy<TSpace>>();
     (*simple_target_policy2)(goal_pos,
-                             VectorQ::UnitX().asDiagonal(), 10.0, 22.0, 0.05);
+                             VectorQ::UnitX().asDiagonal(), 20.0, 44.0, 20);
+    static auto simple_target_policy3 = std::make_shared<SimpleTargetPolicy<TSpace>>();
+    (*simple_target_policy3)(goal_pos,
+                             VectorQ::UnitY().asDiagonal(), 20.0, 44.0, 20);
     policies.push_back(simple_target_policy);
+    policies.push_back(simple_target_policy1);
     policies.push_back(simple_target_policy2);
+    policies.push_back(simple_target_policy3);
 
     // Collision avoidance policy
 #if RMP_USE_RMP_COLLISION_POLICY
@@ -68,7 +76,7 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
     return policies;
   }
 
-  const std::shared_ptr<RMPTrajectory<TSpace>> getTrajectory() const override {
+  std::shared_ptr<RMPTrajectory<TSpace>> getTrajectory() const override {
     return trajectory_;  // only valid if planner has run.
   };
 
@@ -97,6 +105,7 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
   // initialize data and settings
   void Initialize(mjModel* model, const mjpc::Task& task) override {
     task_ = const_cast<mjpc::Task*>(&task);
+    integrator_.task_ = task_;
     model_ = model;
     data_ = task_->data_;
 
@@ -111,7 +120,7 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
                 model->nuser_sensor);
 
     trajectory_ = std::make_shared<RMPTrajectory<TSpace>>();
-    trajectory_->setMaxLength(parameters_.max_length);
+    trajectory_->setMaxLength(configs_.max_length);
   }
 
   // allocate memory
@@ -145,6 +154,7 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
 
   // optimize nominal policy
   void OptimizePolicy(int horizon, mjpc::ThreadPool& pool)  override {
+    const std::shared_lock<std::shared_mutex> lock(policy_mutex_);
     // get nominal trajectory
     this->NominalTrajectory(horizon, pool);
 
@@ -179,6 +189,7 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
   // set action from policy
   void ActionFromPolicy(double* action, const double* state,
                         double time, bool use_previous = false) override {
+    const std::shared_lock<std::shared_mutex> lock(policy_mutex_);
     const auto* best_trajectory = static_cast<const RMPTrajectory<TSpace>*>(BestTrajectory());
     auto currentPoint = best_trajectory->current();
 #if RMP_USE_ACTUATOR_VELOCITY
@@ -228,23 +239,19 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
   int NumParameters() override {return 0;}
  private:
   void integrate();
+  mutable std::shared_mutex policy_mutex_;
 
   TrapezoidalIntegrator<RMPPolicyBase<TSpace>, typename RMPPlannerBase<TSpace>::RiemannianGeometry> integrator_;
-  RMPConfigs parameters_;
+  RMPConfigs configs_;
   std::shared_ptr<RMPTrajectory<TSpace>> trajectory_;
 
   // dimensions
-  int dim_state;             // state
-  int dim_state_derivative;  // state derivative
-  int dim_action;            // action
-  int dim_sensor;            // output (i.e., all sensors)
-  int dim_max;               // maximum dimension
+  int dim_state = 0;             // state
+  int dim_state_derivative = 0;  // state derivative
+  int dim_action = 0;            // action
+  int dim_sensor = 0;            // output (i.e., all sensors)
+  int dim_max = 0;               // maximum dimension
 };
-
-// explicit instantation
-template class RMPPlanner<Space<3>>;
-//template class RMPPlanner<Space<2>>;
-template class RMPPlanner<CylindricalSpace>;
 }  // namespace rmpcpp
 
 #endif  // RMPCPP_PLANNER_PLANNER_RMP_H

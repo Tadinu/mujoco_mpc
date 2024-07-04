@@ -62,7 +62,7 @@ class Particle : public Task {
       memcpy(lvel, &data_->cvel[6*rigidmass_id+3], sizeof(mjtNum) * 3);
 #else
       mjtNum vel[6];
-      mj_objectVelocity(model_, data_, mjOBJ_BODY, pointmass_id, vel, 0);
+      mj_objectVelocity(model_, data_, mjOBJ_BODY, rigidmass_id, vel, 0);
       memcpy(lvel, &vel[3], sizeof(mjtNum) * 3);
 #endif
       return &lvel[0];

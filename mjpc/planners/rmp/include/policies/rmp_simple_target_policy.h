@@ -44,49 +44,37 @@ class SimpleTargetPolicy : public RMPPolicyBase<TNormSpace> {
    * alpha, beta and c are tuning parameters.
    */
   SimpleTargetPolicy(const Vector& target, const Matrix& A,
-                     double alpha, double beta, double c)
-      : target_(target), alpha_(alpha), beta_(beta), c_(c) {
+                     double kp, double kd, double alpha)
+      : target_(target), kp_(kp), kd_(kd), alpha_(alpha) {
     this->A_static_ = A;
   }
 
-  SimpleTargetPolicy(const Vector& target) : target_(target) {}
+  explicit SimpleTargetPolicy(const Vector& target) : target_(target) {}
 
-  void operator()(const Vector& target, const Matrix& A, double alpha, double beta,
-                  double c) {
+  void operator()(const Vector& target, const Matrix& A, double kp, double kd,
+                  double alpha) {
     this->target_ = target;
+    this->kp_ = kp;
+    this->kd_ = kd;
     this->alpha_ = alpha;
-    this->beta_ = beta;
-    this->c_ = c;
     this->A_static_ = A;
   }
 
-  virtual PValue evaluateAt(const PState &state, const std::vector<PState>&) {
-    Vector f = alpha_ * soft_norm(this->space_.minus(target_, state.pos_)) -
-                beta_ * state.vel_;
-    return {f, this->A_static_};
+  PValue evaluateAt(const PState &state, const std::vector<PState>&) override {
+    Vector f = kp_ * this->soft_norm(this->space_.minus(target_, state.pos_), alpha_) -
+               kd_ * state.vel_;
+    return {std::move(f), this->A_static_};
   }
 
-  void updateParams(double alpha, double beta, double c){
+  void updateParams(const double kp, const double kd, const double alpha){
+    kp_ = kp;
+    kd_ = kd;
     alpha_ = alpha;
-    beta_ = beta;
-    c_ = c;
   }
 
 public:
-  /**
-   *  Normalization helper function.
-   */
-  inline Vector soft_norm(const Vector& v) { return v / h(this->space_.norm(v)); }
-
-  /**
-   * Softmax helper function
-   */
-  inline double h(const double z) {
-    return (z + c_ * log(1 + exp(-2 * c_ * z)));
-  }
-
   Vector target_ = Vector::Zero();
-  double alpha_{1.0}, beta_{8.0}, c_{0.005};
+  double kp_{1.0}, kd_{8.0}, alpha_{0.005};
 };
 
 }  // namespace rmpcpp

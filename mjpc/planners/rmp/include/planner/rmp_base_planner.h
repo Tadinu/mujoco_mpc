@@ -50,7 +50,7 @@ class RMPPlannerBase : public mjpc::Planner {
 
   virtual bool checkBlocking(const VectorQ& s1, const VectorQ& s2) = 0;
   virtual bool hasTrajectory() const = 0;
-  virtual const std::shared_ptr<RMPTrajectory<TSpace>> getTrajectory() const = 0;
+  virtual std::shared_ptr<RMPTrajectory<TSpace>> getTrajectory() const = 0;
 
   virtual double distanceToObstacle(const VectorQ& pos) {
       return 0;

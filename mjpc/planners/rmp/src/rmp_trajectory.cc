@@ -29,42 +29,27 @@ std::string rmpcpp::RMPWaypoint<TSpace>::format() const {
 /**************************************************/
 
 template <class TSpace>
-void rmpcpp::RMPTrajectory<TSpace>::addPoint(const VectorQ &p, const VectorQ &v,
+void rmpcpp::RMPTrajectory<TSpace>::addWaypoint(const VectorQ &p, const VectorQ &v,
                                              const VectorQ &a) {
   RMPWaypoint<TSpace> point;
   point.position = p;
   point.velocity = v;
   point.acceleration = a;
-  addPoint(std::move(point));
+  addWaypoint(std::move(point));
 }
 
 template <class TSpace>
-void rmpcpp::RMPTrajectory<TSpace>::addPoint(const RMPWaypoint<TSpace>& point)
+void rmpcpp::RMPTrajectory<TSpace>::addWaypoint(const RMPWaypoint<TSpace>& point)
 {
   auto new_point = point;
-  addPoint(std::move(new_point));
+  addWaypoint(std::move(new_point));
 }
 
 template <class TSpace>
-void rmpcpp::RMPTrajectory<TSpace>::addPoint(RMPWaypoint<TSpace>&& point)
+void rmpcpp::RMPTrajectory<TSpace>::addWaypoint(RMPWaypoint<TSpace>&& point)
 {
   point.cumulative_length = getLength() + (current().position - point.position).norm();;
   trajectory_data_.push_back(std::move(point));
-}
-
-template <class TSpace>
-int rmpcpp::RMPTrajectory<TSpace>::getSegmentCount() const {
-  return trajectory_data_.size() - 1;  // one point is not a segment yet.
-}
-
-template <class TSpace>
-int rmpcpp::RMPTrajectory<TSpace>::getWaypointsCount() const {
-  return trajectory_data_.size();
-}
-
-template <class TSpace>
-double rmpcpp::RMPTrajectory<TSpace>::getLength() const {
-  return (trajectory_data_.size() > 0 ) ? current().cumulative_length : 0.0;
 }
 
 template <class TSpace>

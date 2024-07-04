@@ -25,7 +25,7 @@
 
 // MJPC
 #include "mjpc/planners/rmp/include/planner/rmp_base_planner.h"
-#include "mjpc/planners/rmp/include/util/rmp_vector_range.h"
+#include "mjpc/planners/rmp/include/util/rmp_util.h"
 
 namespace mjpc {
 

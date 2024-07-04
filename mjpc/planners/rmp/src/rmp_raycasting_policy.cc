@@ -31,14 +31,6 @@ inline TFloat halton_seq(int index, int base) {
   return r;
 }
 
-template <typename TVector, typename TFloat>
-inline TVector softnorm(const TVector& v, const TFloat c) {
-  TFloat norm = v.norm();
-  TFloat h = norm + c * log(1.0f + exp(-2.0f * c * norm));
-
-  return v / h;
-}
-
 template <typename TFloat>
 inline TFloat alpha_freespace(const TFloat d, const TFloat eta_fsp) {
   return eta_fsp * 1.0 / (1.0 + exp(-(2 * d - 6)));
@@ -90,7 +82,12 @@ inline TFloat obstacle_weight(const TFloat distance, const TFloat radius) {
   if (d > r) {
     return 0.0f;
   }
+#if 1
+  // Cubic clamped spline with derivative as 0 at two ends
+  return (1.0f / (r * r)) * (d * d * d) - (2.0f / r) * d * d + 1.0f;
+#else
   return (1.0f / (r * r)) * (d * d) - (2.0f / r) * d + 1.0f;
+#endif
 }
 
 /********************************************************************
@@ -127,8 +124,8 @@ rmpcpp::RaycastingPolicy<TSpace>::raycastKernel(int ray_id,
   };
 #else
   const mjtNum unit_direction[3] = {
-    sin(phi),
-    cos(phi),
+    (ray_id %2 == 0) ? sin(phi) : cos(phi),
+    (ray_id %3 == 0) ? cos(phi) : sin(phi),
     0.0
   };
 #endif
@@ -166,11 +163,12 @@ void rmpcpp::RaycastingPolicy<TSpace>::startEval(const PState& agent_state,
       }
     }
 
-    // Calculate {f_obs, A}
+    // Calculate {f_obs (acceleration), A_metric}
     Vector f_obs = Vector::Zero();
-    Matrix A = Matrix::Zero();
+    Matrix A_metric = Matrix::Zero();
 
-    if ((distance_min) > 0 && (distance_min != std::numeric_limits<mjtNum>::max())) {
+    // && (distance_min < RMP_COLLISION_ACTIVE_RADIUS)
+    if ((distance_min > 0) && (distance_min != std::numeric_limits<mjtNum>::max())) {
 #if RMP_DRAW_DISTANCE_TRACE_RAYS
 #pragma omp critical
       {
@@ -187,26 +185,34 @@ void rmpcpp::RaycastingPolicy<TSpace>::startEval(const PState& agent_state,
       const Vector f_repulsive =
           alpha_repulsive(distance_min, parameters_.eta_repulsive, parameters_.v_repulsive, 0.0) *
                           delta_d;
-      // TODO: why -alpha_damp
-      const Vector f_damp = -alpha_damp(distance_min, parameters_.eta_damp,
-                                        parameters_.v_damp, parameters_.epsilon_damp) *
-                      fmax(0.0, double(-agent_state.vel_.transpose() * delta_d)) *
-                      (delta_d * delta_d.transpose()) * agent_state.vel_;
+      // A directionally-scaled projection of [agent_state.vel_] onto [ray_direction],
+      // scaled by a factor that vanishes as [agent_state.vel_] moves toward the half space:
+      // Haway = {v | delta_d.transpose() * v >= 0}, as orthogonal to or pointing away from the obstacle
+      const Vector p_obs = fmax(0.0, double(-agent_state.vel_.transpose() * delta_d)) *
+                           (delta_d * delta_d.transpose()) * agent_state.vel_;
+      // Original: -alpha_damp
+      const Vector f_damp = alpha_damp(distance_min, parameters_.eta_damp,
+                                       parameters_.v_damp, parameters_.epsilon_damp) * p_obs;
       f_obs = f_repulsive + f_damp;
-      const Vector f_norm = softnorm(f_obs, parameters_.c_softmax_obstacle);
 
+      // Obstacle metric
       if (parameters_.metric) {
-        A = obstacle_weight(distance_min, parameters_.radius) * f_norm * f_norm.transpose();
+        // Directionally (f_obs) stretched metric
+        const Vector f_norm_metric = this->soft_norm(f_obs, parameters_.alpha);
+        // This metric smoothly transitions from [f_norm_metric], stretching along a desired acceleration vector [f_obs],
+        // and an uniformed metric [softmax], while being modulated by [parameters_.alpha]
+        const auto A_stretch_metric = f_norm_metric * f_norm_metric.transpose();
+        A_metric = obstacle_weight(distance_min, parameters_.radius) * A_stretch_metric;
       } else {
-        A = obstacle_weight(distance_min, parameters_.radius) * Matrix::Identity();
+        A_metric = obstacle_weight(distance_min, parameters_.radius) * Matrix::Identity();
       }
 
       // [metric_sum, metric_x_force_sum_]
 #pragma omp critical
       {
         //A[0] = A[0] / float(blockdim * dimy);  // scale with number of rays
-        metric_sum_.push_back(A);
-        metric_x_force_sum_.push_back(A * f_obs);
+        metric_sum_.push_back(A_metric);
+        metric_x_force_sum_.push_back(A_metric * f_obs);
       }
     } // End if distance_min is valid
   } // End rayshooting loop

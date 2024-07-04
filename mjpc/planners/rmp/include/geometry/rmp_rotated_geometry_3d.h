@@ -6,10 +6,10 @@
 #define RMPCPP_ROTATEDGEOMETRY3D_H
 #include "mjpc/planners/rmp/include/core/rmp_base_geometry.h"
 namespace rmpcpp {
-class RotatedGeometry3d : public GeometryBase<3, 3> {
+class RotatedGeometry3d : public RMPBaseGeometry<3, 3> {
  public:
   // type alias for readability.
-  using base = GeometryBase<3, 3>;
+  using base = RMPBaseGeometry<3, 3>;
   using VectorX = base::VectorX;
   using Vector = base::VectorQ;
   using StateX = base::StateX;

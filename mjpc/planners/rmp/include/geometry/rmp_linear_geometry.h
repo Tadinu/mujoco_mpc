@@ -29,10 +29,10 @@ namespace rmpcpp {
  * \tparam d Dimensionality of geometry.
  */
 template <int d>
-class LinearGeometry : public GeometryBase<d, d> {
+class LinearGeometry : public RMPBaseGeometry<d, d> {
  public:
   // type alias for readability.
-  using base = GeometryBase<d, d>;
+  using base = RMPBaseGeometry<d, d>;
   using VectorX = typename base::VectorX;
   using VectorQ = typename base::VectorQ;
   using StateX = typename base::StateX;

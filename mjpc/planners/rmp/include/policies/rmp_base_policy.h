@@ -32,7 +32,8 @@
 #include "mjpc/planners/rmp/include/core/rmp_parameters.h"
 #include "mjpc/planners/rmp/include/core/rmp_space.h"
 #include "mjpc/planners/rmp/include/core/rmp_state.h"
-#include "rmp_policy_value.h"
+#include "mjpc/planners/rmp/include/policies/rmp_policy_value.h"
+#include "mjpc/planners/rmp/include/util/rmp_util.h"
 
 // Macro to mark unused variables s.t. no unused warning appears.
 #define ACK_UNUSED(expr) \
@@ -82,6 +83,15 @@ class RMPPolicyBase {
    * @param A Metric
    */
   inline void setA(Matrix A) { A_static_ = A; }
+
+  /**
+   *  Soft-Normalization helper function, normalizing a scaled softmax of a vector
+   *  https://arxiv.org/abs/1801.02854
+   *  alpha: weighing factor for the softmax
+   */
+  inline Vector soft_norm(const Vector& v, const double alpha) {
+    return v / softmax(this->space_.norm(v), alpha);
+  }
 
  public:
   RMPPolicyBase() = default;

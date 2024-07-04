@@ -1,5 +1,6 @@
 
 #include "mjpc/planners/rmp/include/planner/rmp_planner.h"
+#include "mjpc/planners/rmp/include/core/rmp_space.h"
 
 /**
  * @tparam TSpace
@@ -11,13 +12,10 @@ void rmpcpp::RMPPlanner<TSpace>::integrate() {
     return;
   }
 
-  std::vector<StateX> obstacle_statesX = task_->GetObstacleStatesX();
-
   // start from end of current trajectory (which should always be initialized
   // when this function is called)
   integrator_.resetTo(trajectory_->hasData() ? trajectory_->current().position : GetStartPosQ(),
-                      trajectory_->hasData() ? trajectory_->current().velocity : GetStartVelQ(),
-                      std::move(obstacle_statesX));
+                      trajectory_->hasData() ? trajectory_->current().velocity : GetStartVelQ());
 
   // reset state
   size_t num_steps = 0;
@@ -34,17 +32,13 @@ void rmpcpp::RMPPlanner<TSpace>::integrate() {
                    [](auto &ptr) { return ptr.get(); });
 
     // Integrate, performing over geometry on task space and pullback to config space here-in
-    integrator_.forwardIntegrate(policiesRaw, this->geometry_, parameters_.dt);
+    integrator_.forwardIntegrate(policiesRaw, this->geometry_, configs_.dt);
 
     // Get next state
     VectorQ next_position, next_velocity, next_acceleration;
     integrator_.getState(next_position, next_velocity, next_acceleration);
 
     // Update exit conditions
-    // Meant to be moved so not defined const here
-    RMPWaypoint<TSpace> next_waypoint = {.position = next_position,
-                                         .velocity = next_velocity,
-                                         .acceleration = next_acceleration};
     // Collision check
     if (trajectory_->hasData() && this->checkBlocking(trajectory_->current().position, next_position)) {
       this->collided_ = true;
@@ -54,13 +48,16 @@ void rmpcpp::RMPPlanner<TSpace>::integrate() {
       this->path_filled_ = true;
     }
 
-    if ((num_steps++ > size_t(parameters_.max_steps)) &&
-        (trajectory_->current().cumulative_length > double(parameters_.max_length))) {
+    //std::cout << "CUMU L " << trajectory_->current().cumulative_length << std::endl;
+    if ((num_steps++ > size_t(configs_.max_steps)) ||
+        (trajectory_->current().cumulative_length > double(configs_.max_length))) {
       this->diverged_ = true;
     }
 
     // Update [trajectory_]
-    trajectory_->addPoint(std::move(next_waypoint));
+    trajectory_->addWaypoint(RMPWaypoint<TSpace>{.position = next_position,
+                                                 .velocity = next_velocity,
+                                                 .acceleration = next_acceleration});
   }
   trajectory_->setCollided(this->collided_);
 }
@@ -72,13 +69,14 @@ void rmpcpp::RMPPlanner<TSpace>::integrate() {
  */
 template <class TSpace>
 void rmpcpp::RMPPlanner<TSpace>::plan() {
+  std::cout << "PLAN" << std::endl;
   // Reset states
   this->collided_ = false;
   this->path_filled_ = false;
   this->diverged_ = false;
 
   trajectory_->clearData();
-  trajectory_->addPoint(GetStartPosQ(), GetStartVelQ());
+  trajectory_->addWaypoint(GetStartPosQ(), GetStartVelQ());
 
   // run integrator
   this->integrate();
@@ -145,3 +143,8 @@ void rmpcpp::RMPPlanner<TSpace>::Traces(mjvScene* scn) {
   DrawTrajectory(trajectory_.get(), scn);
 #endif
 }
+
+// explicit instantation
+template class rmpcpp::RMPPlanner<rmpcpp::Space<3>>;
+//template class RMPPlanner<Space<2>>;
+template class rmpcpp::RMPPlanner<rmpcpp::CylindricalSpace>;

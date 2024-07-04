@@ -16,10 +16,10 @@ template <class TSpace>
 struct RMPWaypoint {
   using VectorQ = Eigen::Matrix<double, TSpace::dim, 1>;
   using MatrixQ = Eigen::Matrix<double, TSpace::dim, TSpace::dim>;
-  VectorQ position;
-  MatrixQ rotation;
-  VectorQ velocity;
-  VectorQ acceleration;
+  VectorQ position = VectorQ::Zero();
+  MatrixQ rotation = MatrixQ::Identity();
+  VectorQ velocity = VectorQ::Zero();
+  VectorQ acceleration= VectorQ::Zero();
   double cumulative_length = 0.0;  // Cumulative length of this trajectory
 
   static std::string getHeaderFormat();
@@ -41,14 +41,23 @@ class RMPTrajectory : public mjpc::Trajectory {
     return (trajectory_data_.size() > 0) ? trajectory_data_.back() : RMPWaypoint<TSpace>();
   }
 
-  void addPoint(const VectorQ& p, const VectorQ& v, const VectorQ& a = VectorQ::Zero());
-  void addPoint(const RMPWaypoint<TSpace>& point);
-  void addPoint(RMPWaypoint<TSpace>&& point);
+  void addWaypoint(const VectorQ& p, const VectorQ& v, const VectorQ& a = VectorQ::Zero());
+  void addWaypoint(const RMPWaypoint<TSpace>& point);
+  void addWaypoint(RMPWaypoint<TSpace>&& point);
 
-  int getSegmentCount() const;
-  int getWaypointsCount() const;
+  int getSegmentCount() const {
+    return trajectory_data_.size() - 1;  // one point is not a segment yet.
+  }
+
+  int getWaypointsCount() const {
+    return trajectory_data_.size();
+  }
+
+  double getLength() const {
+    return (trajectory_data_.size() > 0 ) ? current().cumulative_length : 0.0;
+  }
+
   double getSmoothness() const;
-  double getLength() const;
   bool hasCollided() const {
     return collided_;
   }

@@ -17,9 +17,8 @@
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RMPCPP_UTIL_POLICY_VECTOR_RANGE_H_
-#define RMPCPP_UTIL_POLICY_VECTOR_RANGE_H_
-#include "mjpc/planners/rmp/include/core/rmp_base_geometry.h"
+#ifndef RMPCPP_UTIL_H_
+#define RMPCPP_UTIL_H_
 
 namespace rmpcpp {
 
@@ -45,6 +44,17 @@ TQuat quatFromScalarArray(const T* scalarQuat) {
                scalarQuat[1],
                scalarQuat[2],
                scalarQuat[3]);
+}
+
+/**
+   * Softmax helper function / Directionally stretched metrics
+   * https://arxiv.org/abs/1801.02854
+   *
+   * gamma: norm of a given vector
+   * alpha: weighing factor for the softmax
+ */
+inline double softmax(const double gamma, const double alpha) {
+  return (gamma + (1.0/alpha) * log(1 + exp(-2 * alpha * gamma)));
 }
 
 /**
@@ -193,4 +203,4 @@ class VectorRange {
 
 }  // namespace rmpcpp
 
-#endif  // RMPCPP_UTIL_POLICY_VECTOR_RANGE_H_
+#endif  // RMPCPP_UTIL_H_

@@ -4,7 +4,7 @@
 #include <Eigen/Dense>
 #include <memory>
 
-#define RMP_ISPC (1)
+#define RMP_ISPC (0)
 #define RMP_USE_LINEAR_GEOMETRY (1)
 #define RMP_USE_RMP_COLLISION_POLICY (1)
 #define RMP_USE_ACTUATOR_VELOCITY (1)
@@ -12,17 +12,17 @@
 #define RMP_BLOCKING_OBSTACLES_RATIO (0.1)
 
 #define RMP_COLLISION_USE_3D_TRACE_RAYS (0)
-#define RMP_COLLISION_ACTIVE_RADIUS (0.03)
-#define RMP_COLLISION_DISTANCE_TRACE_RAYS_NUM (500)
+#define RMP_COLLISION_ACTIVE_RADIUS (0.05)
+#define RMP_COLLISION_DISTANCE_TRACE_RAYS_NUM (1000)
 
 #define RMP_DRAW_START_GOAL (0)
-#define RMP_DRAW_VELOCITY (1)
+#define RMP_DRAW_VELOCITY (0)
 #define RMP_DRAW_TRAJECTORY (1)
 #define RMP_DRAW_BLOCKING_TRACE_RAYS (0)
 #define RMP_DRAW_DISTANCE_TRACE_RAYS (1)
 
-#define RMP_KV (1)
-#define RMP_FORCE_GAIN (4)
+#define RMP_KV (0.6)
+#define RMP_FORCE_GAIN (1)
 
 /**
  * Most of the default values here all get overridden by the parser class.
@@ -43,19 +43,19 @@ struct ESDFPolicyConfigs : RMPBasePolicyConfigs {
   double v_repulsive = 2.0;
   double v_damp = 2.0;
   double epsilon_damp = 0.1;
-  double c_softmax_obstacle = 0.2;
-  double radius = 5.0;
+  double alpha = 0.2;
+  double radius = 5.0; // weighting factor for the softmax
 };
 
 struct RaycastingPolicyConfigs : RMPBasePolicyConfigs {
-  double eta_repulsive = 0.02;   // Gets multiplied by a gain factor from the parser
-  double eta_damp = 0.01;  // Gets multiplied by a gain factor from the parser
-  double v_repulsive = 0.01;
+  double eta_repulsive = 0.005;   // Gets multiplied by a gain factor from the parser
+  double eta_damp = 0.005;  // Gets multiplied by a gain factor from the parser
+  double v_repulsive = 0.005;
   double v_damp = 0.01;
   double epsilon_damp = 0.1; // [0,1] for numerical stability
-  double c_softmax_obstacle = 0.2;
+  double alpha = 5.0; // weighting factor for the softmax
   double radius = RMP_COLLISION_ACTIVE_RADIUS;
-  bool metric = true;
+  bool metric = true; // Whether or not using Directionally stretched metrics
 
 #if 0 // UNUSED
   double lin_rep = 1.0;
@@ -88,8 +88,10 @@ struct RMPConfigs {
   }
   ERMPPolicyType policy_type = ERMPPolicyType::RAYCASTING;
   double dt = 0.01;
-  float max_length = 1.0;
-  int max_steps = 200;
+
+  // These 2 essentially are subject to each task specifics
+  float max_length = 1;
+  long max_steps = 1000000;
 
 #if 0 // UNUSED
   bool terminate_upon_goal_reached = true;
