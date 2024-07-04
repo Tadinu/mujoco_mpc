@@ -17,8 +17,8 @@
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RMPCPP_CORE_POLICY_VALUE_H_
-#define RMPCPP_CORE_POLICY_VALUE_H_
+#ifndef RMP_CORE_POLICY_VALUE_H_
+#define RMP_CORE_POLICY_VALUE_H_
 
 #include <Eigen/Dense>
 
@@ -32,24 +32,25 @@
 #define RMP_USE_JACOBI_SVD_INVERSE_MATRIX (0)
 #define RMP_USE_BDC_SVD_INVERSE_MATRIX (!RMP_USE_QR_INVERSE_MATRIX && !RMP_USE_JACOBI_SVD_INVERSE_MATRIX)
 
-namespace rmpcpp {
+namespace rmp {
 /**
  * Evaluated policy consisting of concrete f and A
  * @tparam d Dimensionality
  */
 template <int d>
 class PolicyValue {
- public:
+public:
   using Matrix = Eigen::Matrix<double, d, d>;
   using Vector = Eigen::Matrix<double, d, 1>;
 
-  PolicyValue(const Vector &f, const Matrix &A) : A_(A), f_(f) {}
+  PolicyValue(const Vector& f, const Matrix& A) : A_(A), f_(f) {
+  }
 
   /**
    * Implemetation of addition operation.
    * Defined in Eq. 8 in [1]
    */
-  PolicyValue operator+(PolicyValue &other) {
+  PolicyValue operator+(PolicyValue& other) {
     Matrix A_combined = this->A_ + other.A_;
     Vector f_combined = pinv(A_combined) * (this->A_ * this->f_ + other.A_ * other.f_);
 
@@ -64,7 +65,7 @@ class PolicyValue {
     Vector sum_ai_fi = Vector::Zero();
 
     // sum up terms
-    for (const auto &rmpBase : RMPBases) {
+    for (const auto& rmpBase : RMPBases) {
       sum_ai += rmpBase.A_;
       sum_ai_fi += rmpBase.A_ * rmpBase.f_;
     }
@@ -75,8 +76,8 @@ class PolicyValue {
 
 #if RMP_USE_QR_INVERSE_MATRIX
   /// Convenience method for pseudo-inverse
-  template<int i = d, int j = d, typename TMatrix = Eigen::Matrix<double, i, j>>
-  static inline TMatrix pinv(const Eigen::Matrix<double, i, j> &M) {
+  template <int i = d, int j = d, typename TMatrix = Eigen::Matrix<double, i, j>>
+  static inline TMatrix pinv(const Eigen::Matrix<double, i, j>& M) {
     return (M.completeOrthogonalDecomposition().pseudoInverse());
   }
 #elif RMP_USE_JACOBI_SVD_INVERSE_MATRIX
@@ -128,7 +129,6 @@ class PolicyValue {
   const Matrix A_;
   const Vector f_;
 };
+} // namespace rmp
 
-}  // namespace rmpcpp
-
-#endif  // RMPCPP_CORE_POLICY_VALUE_H_
+#endif  // RMP_CORE_POLICY_VALUE_H_

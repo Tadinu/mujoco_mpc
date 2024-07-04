@@ -1,5 +1,5 @@
-#ifndef RMPCPP_PLANNER_PARSER_H
-#define RMPCPP_PLANNER_PARSER_H
+#ifndef RMP_PLANNER_PARSER_H
+#define RMP_PLANNER_PARSER_H
 
 #include "mjpc/planners/rmp/test/rmp_settings.h"
 #include "mjpc/planners/rmp/test/rmp_tester.h"
@@ -9,11 +9,11 @@ class Parser {
   Parser(int argc, char* argv[]);
 
   bool parse();
-  rmpcpp::TestSettings getSettings();
+  rmp::TestSettings getSettings();
   ParametersWrapper getParameters();
 
  private:
   ParametersWrapper getRMPParameters();
 };
 
-#endif  // RMPCPP_PLANNER_PARSER_H
+#endif  // RMP_PLANNER_PARSER_H

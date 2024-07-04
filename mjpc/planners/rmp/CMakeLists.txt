@@ -7,13 +7,13 @@ set(CMAKE_CXX_FLAGS " -Wall -Wextra")
 set(CMAKE_BUILD_TYPE Release)
 
 set(SOURCES
-    src/rmp_planner.cc
-    src/rmp_trajectory.cc
-    src/rmp_raycasting_policy.cc)
+        src/rmp_planner.cc
+        src/rmp_trajectory.cc
+        src/rmp_raycasting_policy.cc)
 
 set(TESTSOURCES
-    test/tester.cc
-    test/parser.cc)
+        test/tester.cc
+        test/parser.cc)
 
 # Main executable
 add_executable(rmp_test

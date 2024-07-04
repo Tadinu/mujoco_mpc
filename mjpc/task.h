@@ -193,7 +193,7 @@ class Task {
   bool last_goal_reached_ = false;
 
   // RMP
-  using StateX = rmpcpp::State<3>;
+  using StateX = rmp::State<3>;
   std::vector<StateX> obstacle_statesX_;
 
   // mutex which should be held on changes to data queried from mjdata

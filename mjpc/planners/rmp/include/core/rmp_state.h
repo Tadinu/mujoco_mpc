@@ -17,13 +17,12 @@
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RMPCPP_CORE_STATE_H_
-#define RMPCPP_CORE_STATE_H_
+#ifndef RMP_CORE_STATE_H_
+#define RMP_CORE_STATE_H_
 
 #include <Eigen/Dense>
 
-namespace rmpcpp {
-
+namespace rmp {
 /**
  * Represents a state with multiple derivates.
  * Currently implemented: Position + Velocity
@@ -34,7 +33,7 @@ class State {
   using Vector = Eigen::Matrix<double, d, 1>;
   using Matrix = Eigen::Matrix<double, d, d>;
 
- public:
+public:
   Vector pos_ = Vector::Zero();
   Matrix rot_ = Matrix::Identity();
   Vector vel_ = Vector::Zero();
@@ -43,7 +42,6 @@ class State {
 
   // more derivatives to be added later
 };
+} // namespace rmp
 
-}  // namespace rmpcpp
-
-#endif  // RMPCPP_STATE_H
+#endif  // RMP_STATE_H

@@ -2,15 +2,15 @@
 // Created by mpantic on 04.10.22.
 //
 
-#ifndef RMPCPP_PLANNER_STATISTICS_H
-#define RMPCPP_PLANNER_STATISTICS_H
+#ifndef RMP_PLANNER_STATISTICS_H
+#define RMP_PLANNER_STATISTICS_H
 #include <cmath>
 #include <fstream>
 #include <numeric>
 #include <utility>
 #include <vector>
 
-namespace rmpcpp {
+namespace rmp {
 
 class RunStatistics {
  public:
@@ -139,5 +139,5 @@ class RunStatistics {
   const char sep_ = '\t';
   std::vector<Line> lines_;
 };
-}  // namespace rmpcpp
-#endif  // RMPCPP_PLANNER_STATISTICS_H
+}  // namespace rmp
+#endif  // RMP_PLANNER_STATISTICS_H

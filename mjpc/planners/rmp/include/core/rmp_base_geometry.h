@@ -17,8 +17,8 @@
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RMPCPP_BASE_GEOMETRY_BASE_H_
-#define RMPCPP_BASE_GEOMETRY_BASE_H_
+#ifndef RMP_BASE_GEOMETRY_BASE_H_
+#define RMP_BASE_GEOMETRY_BASE_H_
 
 #include "mjpc/planners/rmp/include/core/rmp_state.h"
 #include "mjpc/planners/rmp/include/policies/rmp_base_policy.h"
@@ -26,8 +26,7 @@
 
 #include <Eigen/Dense>
 
-namespace rmpcpp {
-
+namespace rmp {
 /** Abstract Base class that fully defines a geometry mapping between two spaces
  * Q and X. It mostly serves to pull everything together and ensure the correct
  * sizes of all used vectors.
@@ -39,8 +38,8 @@ namespace rmpcpp {
  *
  */
 template <int k, int d>
-class GeometryBase {
- public:
+class RMPBaseGeometry {
+public:
   /// Type alias for a Vector belonging to task Space X
   using MatrixX = Eigen::Matrix<double, k, k>;
   using VectorX = Eigen::Matrix<double, k, 1>;
@@ -59,7 +58,7 @@ class GeometryBase {
   /*
    * Class that represents a fully parametrized geometry
    * that allows pushing and polling.
-   * Internal class, as it is built by GeometryBase only
+   * Internal class, as it is built by RMPBaseGeometry only
    */
   class ParametrizedGeometry {
     // Corresponding Jacobian at this state
@@ -71,10 +70,11 @@ class GeometryBase {
     // Obstacle states
     std::vector<StateX> obstacle_statesX_;
 
-   public:
+  public:
     ParametrizedGeometry(const J_phi& J, const StateX& agent_state,
                          const std::vector<StateX>& obstacle_states) :
-      J_(J), stateX_(agent_state), obstacle_statesX_(obstacle_states) {}
+      J_(J), stateX_(agent_state), obstacle_statesX_(obstacle_states) {
+    }
 
     /**
      * Evaluates a given policy and then pulls it.
@@ -131,25 +131,25 @@ class GeometryBase {
    * To be implemented in derived classes.
    * Performs position from Q to X.
    */
-  virtual VectorX convertPosToX(const VectorQ &vector_q) const = 0;
+  virtual VectorX convertPosToX(const VectorQ& vector_q) const = 0;
 
   /**
    * To be implemented in derived classes.
    * Performs coordinate conversion from Q to X.
    */
-  virtual StateX convertToX(const StateQ &state_q) const = 0;
+  virtual StateX convertToX(const StateQ& state_q) const = 0;
 
   /**
    * To be implemented in derived classes.
    * Performs coordinate conversion from X to Q.
    */
-  virtual StateQ convertToQ(const StateX &state_x) const = 0;
+  virtual StateQ convertToQ(const StateX& state_x) const = 0;
 
   /**
    * To be implemented in derived classes.
    * Performs position conversion from X to Q.
    */
-  virtual VectorQ convertPosToQ(const VectorX &vector_x) const = 0;
+  virtual VectorQ convertPosToQ(const VectorX& vector_x) const = 0;
 
   /**
    * To be implemented in derived classes.
@@ -157,6 +157,6 @@ class GeometryBase {
    */
   virtual J_phi J(const StateX&) const = 0;
 };
-}  // namespace rmpcpp
+} // namespace rmp
 
-#endif  // RMPCPP_BASE_GEOMETRY_BASE_H_
+#endif  // RMP_BASE_GEOMETRY_BASE_H_

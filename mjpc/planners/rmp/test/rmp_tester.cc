@@ -10,7 +10,7 @@
 #include "mjpc/planners/rmp/test/rmp_settings.h"
 
 Tester::Tester(const ParametersWrapper& parameters,
-               const rmpcpp::TestSettings& settings)
+               const rmp::TestSettings& settings)
     : parameters_(parameters),
       settings_(settings) {}
 
@@ -18,7 +18,7 @@ Tester::Tester(const ParametersWrapper& parameters,
  * Does a single planner run
  */
 void Tester::runSingle(const size_t run_index) {
-  planner_ = std::make_unique<rmpcpp::RMPPlanner<rmpcpp::Space<3>>>(parameters_.parametersRMP);
+  planner_ = std::make_unique<rmp::RMPPlanner<rmp::Space<3>>>(parameters_.parametersRMP);
   auto starttime = std::chrono::high_resolution_clock::now();
   planner_->plan();
   auto endtime = std::chrono::high_resolution_clock::now();
@@ -101,7 +101,7 @@ std::string Tester::getMapName() {
 void Tester::updateStats(int index, double map_density, double duration_s) {
   bool success = planner_->success();
   auto trajectory = planner_->getTrajectory();
-  rmpcpp::RunStatistics::Line stat_line;
+  rmp::RunStatistics::Line stat_line;
 
   stat_line.success = success;
   stat_line.index = index;
