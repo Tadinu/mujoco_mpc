@@ -45,8 +45,8 @@ std::vector<std::unique_ptr<mjpc::Planner>> LoadPlanners() {
   std::vector<std::unique_ptr<mjpc::Planner>> planners;
 
   // NOTE: The adding order below must match [kPlannerNames]
-  planners.emplace_back(new rmpcpp::RMPPlanner<rmpcpp::CylindricalSpace>);
-  //planners.emplace_back(new rmpcpp::RMPPlanner<rmpcpp::Space<2>>);
+  planners.emplace_back(new rmp::RMPPlanner<rmp::CylindricalSpace>);
+  //planners.emplace_back(new rmp::RMPPlanner<rmp::Space<2>>);
   planners.emplace_back(new mjpc::SamplingPlanner);
   planners.emplace_back(new mjpc::GradientPlanner);
   planners.emplace_back(new mjpc::iLQGPlanner);
