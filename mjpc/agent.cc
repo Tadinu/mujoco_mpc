@@ -503,8 +503,8 @@ int Agent::SetModeByName(std::string_view name) {
 void Agent::ModifyScene(mjvScene* scn) {
   // if acting is off make all geom colors grayscale
   if (!action_enabled) {
-    int cube = mj_name2id(model_, mjOBJ_MATERIAL, "cube");
-    int graycube = mj_name2id(model_, mjOBJ_MATERIAL, "graycube");
+    int mat_cube = mj_name2id(model_, mjOBJ_MATERIAL, "cube");
+    int mat_graycube = mj_name2id(model_, mjOBJ_MATERIAL, "graycube");
     for (int i = 0; i < scn->ngeom; i++) {
       mjvGeom* g = scn->geoms + i;
       // skip static and decor geoms
@@ -515,8 +515,8 @@ void Agent::ModifyScene(mjvScene* scn) {
       double rgb_average = (g->rgba[0] + g->rgba[1] + g->rgba[2]) / 3;
       g->rgba[0] = g->rgba[1] = g->rgba[2] = rgb_average;
       // specifically for the hand task, make grayscale cube.
-      if (cube > -1 && graycube > -1 && g->matid == cube) {
-        g->matid = graycube;
+      if (mat_cube > -1 && mat_graycube > -1 && g->matid == mat_cube) {
+        g->matid = mat_graycube;
       }
     }
   }
