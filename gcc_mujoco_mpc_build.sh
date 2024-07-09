@@ -4,9 +4,10 @@ mkdir -p build
 pushd build
 
 cmake .. -G Ninja \
-	 -DCMAKE_INSTALL_PREFIX=$HOME/1_MUJOCO/mujoco_mpc/release \
+	 -DCMAKE_INSTALL_PREFIX=../release \
 	 -DCMAKE_BUILD_TYPE:STRING=Release \
-	 -DMJPC_BUILD_GRPC_SERVICE:BOOL=ON 
+	 -DMJPC_BUILD_GRPC_SERVICE:BOOL=ON \
+	 -Dcasadi_DIR=~/CASADI/casadi/release/lib/cmake/casadi
 cmake --build . -j8 --config=Release
 cmake --install .
 popd
