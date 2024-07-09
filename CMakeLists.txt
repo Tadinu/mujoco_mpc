@@ -39,6 +39,8 @@ endif()
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 # ISPC
 include(AddISPCSrc)
+# IPOPT
+include(FindIPOPT)
 include(MpcOptions)
 include(MujocoMacOS)
 
@@ -75,7 +77,8 @@ set(MUJOCO_MPC_MENAGERIE_GIT_TAG
 )
 
 set(MUJOCO_MPC_DM_CONTROL_GIT_TAG
-    774f46182140106e22725914aad3c6299ed91edd
+    #774f46182140106e22725914aad3c6299ed91edd
+    main
     CACHE STRING "Git revision for dm_control."
 )
 
