@@ -2,10 +2,10 @@
 // Created by mpantic on 06.09.22.
 //
 
-#ifndef RMPCPP_ROTATEDGEOMETRY3D_H
-#define RMPCPP_ROTATEDGEOMETRY3D_H
+#ifndef RMP_ROTATEDGEOMETRY3D_H
+#define RMP_ROTATEDGEOMETRY3D_H
 #include "mjpc/planners/rmp/include/core/rmp_base_geometry.h"
-namespace rmpcpp {
+namespace rmp {
 class RotatedGeometry3d : public RMPBaseGeometry<3, 3> {
  public:
   // type alias for readability.
@@ -41,6 +41,6 @@ class RotatedGeometry3d : public RMPBaseGeometry<3, 3> {
   Eigen::Matrix3d R_x_q_{Eigen::Matrix3d::Identity()};
 };
 
-}  // namespace rmpcpp
+}  // namespace rmp
 
-#endif  // RMPCPP_ROTATEDGEOMETRY3D_H
+#endif  // RMP_ROTATEDGEOMETRY3D_H

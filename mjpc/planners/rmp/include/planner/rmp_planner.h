@@ -1,5 +1,5 @@
-#ifndef RMPCPP_PLANNER_PLANNER_RMP_H
-#define RMPCPP_PLANNER_PLANNER_RMP_H
+#ifndef RMP_PLANNER_PLANNER_RMP_H
+#define RMP_PLANNER_PLANNER_RMP_H
 
 #include <queue>
 #include <utility>
@@ -17,10 +17,10 @@
 #include "mjpc/planners/rmp/include/util/rmp_util.h"
 #include "mjpc/utilities.h"
 
-namespace rmpcpp {
+namespace rmp {
 /**
  * The planner class is the top-level entity that handles all planning
- * @tparam TSpace TSpace in which the world is defined (from rmpcpp/core/space)
+ * @tparam TSpace TSpace in which the world is defined (from rmp/core/space)
  */
 template <class TSpace>
 class RMPPlanner : public RMPPlannerBase<TSpace> {
@@ -252,6 +252,6 @@ class RMPPlanner : public RMPPlannerBase<TSpace> {
   int dim_sensor = 0;            // output (i.e., all sensors)
   int dim_max = 0;               // maximum dimension
 };
-}  // namespace rmpcpp
+}  // namespace rmp
 
-#endif  // RMPCPP_PLANNER_PLANNER_RMP_H
+#endif  // RMP_PLANNER_PLANNER_RMP_H

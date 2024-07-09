@@ -17,8 +17,8 @@
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RMPCPP_CORE_POLICY_BASE_H_
-#define RMPCPP_CORE_POLICY_BASE_H_
+#ifndef RMP_CORE_POLICY_BASE_H_
+#define RMP_CORE_POLICY_BASE_H_
 
 #include <Eigen/Dense>
 #include <Eigen/QR>
@@ -41,7 +41,7 @@
     (void)(expr);        \
   } while (0)
 
-namespace rmpcpp {
+namespace rmp {
 
 /**
  * Holds a plain basic n-dimensional Riemannian Motion Policy
@@ -107,6 +107,6 @@ class RMPPolicyBase {
   };
   std::vector<RayTrace> raytraces_;
 };
-}  // namespace rmpcpp
+}  // namespace rmp
 
-#endif  // RMPCPP_CORE_POLICY_BASE_H_
+#endif  // RMP_CORE_POLICY_BASE_H_

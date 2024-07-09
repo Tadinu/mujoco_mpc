@@ -1,5 +1,5 @@
-#ifndef RMPCPP_PLANNER_PARAMETERS_H
-#define RMPCPP_PLANNER_PARAMETERS_H
+#ifndef RMP_PLANNER_PARAMETERS_H
+#define RMP_PLANNER_PARAMETERS_H
 
 #include <Eigen/Dense>
 #include <memory>
@@ -105,4 +105,4 @@ struct RMPConfigs {
   std::shared_ptr<RMPBasePolicyConfigs> policyConfigs = nullptr;
 };
 
-#endif  // RMPCPP_PLANNER_PARAMETERS_H
+#endif  // RMP_PLANNER_PARAMETERS_H

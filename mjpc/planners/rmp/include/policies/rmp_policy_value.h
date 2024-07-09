@@ -17,8 +17,8 @@
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RMPCPP_CORE_POLICY_VALUE_H_
-#define RMPCPP_CORE_POLICY_VALUE_H_
+#ifndef RMP_CORE_POLICY_VALUE_H_
+#define RMP_CORE_POLICY_VALUE_H_
 
 #include <Eigen/Dense>
 
@@ -32,7 +32,7 @@
 #define RMP_USE_JACOBI_SVD_INVERSE_MATRIX (0)
 #define RMP_USE_BDC_SVD_INVERSE_MATRIX (!RMP_USE_QR_INVERSE_MATRIX && !RMP_USE_JACOBI_SVD_INVERSE_MATRIX)
 
-namespace rmpcpp {
+namespace rmp {
 /**
  * Evaluated policy consisting of concrete f and A
  * @tparam d Dimensionality
@@ -129,6 +129,6 @@ class PolicyValue {
   const Vector f_;
 };
 
-}  // namespace rmpcpp
+}  // namespace rmp
 
-#endif  // RMPCPP_CORE_POLICY_VALUE_H_
+#endif  // RMP_CORE_POLICY_VALUE_H_

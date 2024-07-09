@@ -17,12 +17,12 @@
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RMPCPP_POLICIES_SIMPLE_TARGET_POLICY_H_
-#define RMPCPP_POLICIES_SIMPLE_TARGET_POLICY_H_
+#ifndef RMP_POLICIES_SIMPLE_TARGET_POLICY_H_
+#define RMP_POLICIES_SIMPLE_TARGET_POLICY_H_
 
 #include "rmp_base_policy.h"
 
-namespace rmpcpp {
+namespace rmp {
 
 /**
  * Defines a simple dimensional target policy, as described in [1].
@@ -77,6 +77,6 @@ public:
   double kp_{1.0}, kd_{8.0}, alpha_{0.005};
 };
 
-}  // namespace rmpcpp
+}  // namespace rmp
 
-#endif  // RMPCPP_POLICIES_SIMPLE_TARGET_POLICY_H_
+#endif  // RMP_POLICIES_SIMPLE_TARGET_POLICY_H_

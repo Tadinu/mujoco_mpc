@@ -103,8 +103,8 @@ inline std::pair<TFloat, TFloat> get_angles(const TFloat u,
 }
 
 template <class TSpace>
-std::pair<mjtNum, typename rmpcpp::RaycastingPolicy<TSpace>::Vector>
-rmpcpp::RaycastingPolicy<TSpace>::raycastKernel(int ray_id,
+std::pair<mjtNum, typename rmp::RaycastingPolicy<TSpace>::Vector>
+rmp::RaycastingPolicy<TSpace>::raycastKernel(int ray_id,
   const Vector& ray_start, int target_geomtype,
   const mjtNum* target_pos, const mjtNum* target_rot, const mjtNum* target_size)
 {
@@ -145,7 +145,7 @@ rmpcpp::RaycastingPolicy<TSpace>::raycastKernel(int ray_id,
 
 /********************************************************************/
 template <class TSpace>
-void rmpcpp::RaycastingPolicy<TSpace>::startEval(const PState& agent_state,
+void rmp::RaycastingPolicy<TSpace>::startEval(const PState& agent_state,
                                                      const std::vector<PState>& obstacle_states) {
   // Shoot rays from agent toward obstacles
 #pragma omp parallel for if MJPC_OPENMP_ENABLED
@@ -224,8 +224,8 @@ void rmpcpp::RaycastingPolicy<TSpace>::startEval(const PState& agent_state,
  * @return
  */
 template <>
-rmpcpp::RaycastingPolicy<rmpcpp::Space<2>>::PValue
-rmpcpp::RaycastingPolicy<rmpcpp::Space<2>>::evaluateAt(
+rmp::RaycastingPolicy<rmp::Space<2>>::PValue
+rmp::RaycastingPolicy<rmp::Space<2>>::evaluateAt(
     const PState &state, const std::vector<PState>&) {
   throw std::logic_error("Not implemented");
 }
@@ -236,8 +236,8 @@ rmpcpp::RaycastingPolicy<rmpcpp::Space<2>>::evaluateAt(
  * @return
  */
 template <>
-rmpcpp::RaycastingPolicy<rmpcpp::CylindricalSpace>::PValue
-rmpcpp::RaycastingPolicy<rmpcpp::CylindricalSpace>::evaluateAt(
+rmp::RaycastingPolicy<rmp::CylindricalSpace>::PValue
+rmp::RaycastingPolicy<rmp::CylindricalSpace>::evaluateAt(
     const PState& agent_state, const std::vector<PState>& obstacle_states) {
   if (!async_eval_started_) {
     startEval(agent_state, obstacle_states);
@@ -270,15 +270,15 @@ rmpcpp::RaycastingPolicy<rmpcpp::CylindricalSpace>::evaluateAt(
  * @tparam TSpace
  */
 template <class TSpace>
-void rmpcpp::RaycastingPolicy<TSpace>::abortEvaluateAsync() {
+void rmp::RaycastingPolicy<TSpace>::abortEvaluateAsync() {
   async_eval_started_ = false;
 }
 
 template
-void rmpcpp::RaycastingPolicy<rmpcpp::Space<2>>::abortEvaluateAsync();
+void rmp::RaycastingPolicy<rmp::Space<2>>::abortEvaluateAsync();
 
 template
-void rmpcpp::RaycastingPolicy<rmpcpp::CylindricalSpace>::abortEvaluateAsync();
+void rmp::RaycastingPolicy<rmp::CylindricalSpace>::abortEvaluateAsync();
 
 template
-void rmpcpp::RaycastingPolicy<rmpcpp::Space<3>>::abortEvaluateAsync();
+void rmp::RaycastingPolicy<rmp::Space<3>>::abortEvaluateAsync();

@@ -1,8 +1,8 @@
-#ifndef RMPCPP_PLANNER_SETTINGS_H
-#define RMPCPP_PLANNER_SETTINGS_H
+#ifndef RMP_PLANNER_SETTINGS_H
+#define RMP_PLANNER_SETTINGS_H
 #include <Eigen/Dense>
 
-namespace rmpcpp {
+namespace rmp {
 
 enum PlannerType { RMP };
 
@@ -28,6 +28,6 @@ struct WorldGenSettings {
       {0.0f, 0.0f, 0.0f}, {10.4f, 10.4f, 10.4f}};
 };
 
-}  // namespace rmpcpp
+}  // namespace rmp
 
-#endif  // RMPCPP_PLANNER_SETTINGS_H
+#endif  // RMP_PLANNER_SETTINGS_H

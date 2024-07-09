@@ -17,10 +17,10 @@
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RMPCPP_UTIL_H_
-#define RMPCPP_UTIL_H_
+#ifndef RMP_UTIL_H_
+#define RMP_UTIL_H_
 
-namespace rmpcpp {
+namespace rmp {
 
 template<int dim, typename T = double, typename TVector=Eigen::Matrix<T, dim, 1>>
 TVector vectorFromScalarArray(const T* scalarArray) {
@@ -201,6 +201,6 @@ class VectorRange {
   TVector ticks_plus_one_;
 };
 
-}  // namespace rmpcpp
+}  // namespace rmp
 
-#endif  // RMPCPP_UTIL_H_
+#endif  // RMP_UTIL_H_

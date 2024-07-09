@@ -1,6 +1,6 @@
 
-#ifndef RMPCPP_PLANNER_RAYCASTING_CUDA_H
-#define RMPCPP_PLANNER_RAYCASTING_CUDA_H
+#ifndef RMP_PLANNER_RAYCASTING_CUDA_H
+#define RMP_PLANNER_RAYCASTING_CUDA_H
 
 #include "mjpc/planners/rmp/include/core/rmp_parameters.h"
 #include "mujoco/mujoco.h"
@@ -8,7 +8,7 @@
 
 #define OUTPUT_RAYS (0)
 
-namespace rmpcpp {
+namespace rmp {
 
 /*
  * Implements a nvblox- map based raycasting
@@ -46,6 +46,6 @@ class RaycastingPolicy : public RMPPolicyBase<TSpace> {
   std::vector<Vector> metric_x_force_sum_;
 };
 
-}  // namespace rmpcpp
+}  // namespace rmp
 
-#endif  // RMPCPP_PLANNER_RAYCASTING_CUDA_H
+#endif  // RMP_PLANNER_RAYCASTING_CUDA_H

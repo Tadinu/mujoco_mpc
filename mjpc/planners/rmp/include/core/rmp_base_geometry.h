@@ -17,8 +17,8 @@
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RMPCPP_BASE_GEOMETRY_BASE_H_
-#define RMPCPP_BASE_GEOMETRY_BASE_H_
+#ifndef RMP_BASE_GEOMETRY_BASE_H_
+#define RMP_BASE_GEOMETRY_BASE_H_
 
 #include "mjpc/planners/rmp/include/core/rmp_state.h"
 #include "mjpc/planners/rmp/include/policies/rmp_base_policy.h"
@@ -26,7 +26,7 @@
 
 #include <Eigen/Dense>
 
-namespace rmpcpp {
+namespace rmp {
 
 /** Abstract Base class that fully defines a geometry mapping between two spaces
  * Q and X. It mostly serves to pull everything together and ensure the correct
@@ -157,6 +157,6 @@ class RMPBaseGeometry {
    */
   virtual J_phi J(const StateX&) const = 0;
 };
-}  // namespace rmpcpp
+}  // namespace rmp
 
-#endif  // RMPCPP_BASE_GEOMETRY_BASE_H_
+#endif  // RMP_BASE_GEOMETRY_BASE_H_

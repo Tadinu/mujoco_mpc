@@ -17,10 +17,10 @@
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RMPCPP_GEOMETRY_LINEAR_GEOMETRY_H_
-#define RMPCPP_GEOMETRY_LINEAR_GEOMETRY_H_
+#ifndef RMP_GEOMETRY_LINEAR_GEOMETRY_H_
+#define RMP_GEOMETRY_LINEAR_GEOMETRY_H_
 #include "mjpc/planners/rmp/include/core/rmp_base_geometry.h"
-namespace rmpcpp {
+namespace rmp {
 
 /**
  * Example of a simple linear geometry, where both
@@ -71,5 +71,5 @@ class LinearGeometry : public RMPBaseGeometry<d, d> {
    */
   virtual VectorQ convertPosToQ(const VectorX &vector_x) const { return vector_x; }
 };
-}  // namespace rmpcpp
-#endif  // RMPCPP_GEOMETRY_LINEAR_GEOMETRY_H_
+}  // namespace rmp
+#endif  // RMP_GEOMETRY_LINEAR_GEOMETRY_H_

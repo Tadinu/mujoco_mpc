@@ -1,5 +1,5 @@
-#ifndef RMPCPP_PLANNER_TRAJECTORY_RMP_H
-#define RMPCPP_PLANNER_TRAJECTORY_RMP_H
+#ifndef RMP_PLANNER_TRAJECTORY_RMP_H
+#define RMP_PLANNER_TRAJECTORY_RMP_H
 
 #include <memory>
 #include <vector>
@@ -8,7 +8,7 @@
 #include "mjpc/trajectory.h"
 #include "mjpc/planners/rmp/include/core/rmp_space.h"
 
-namespace rmpcpp {
+namespace rmp {
 /*
  * Struct that holds a discretized and integrated point in a RMP trajectory.
  */
@@ -88,6 +88,6 @@ class RMPTrajectory : public mjpc::Trajectory {
   float max_length_ = 0.;
 };
 
-}  // namespace rmpcpp
+}  // namespace rmp
 
-#endif  // RMPCPP_PLANNER_TRAJECTORY_RMP_H
+#endif  // RMP_PLANNER_TRAJECTORY_RMP_H

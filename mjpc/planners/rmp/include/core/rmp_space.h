@@ -16,10 +16,10 @@
  * You should have received a copy of the GNU General Public License
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef RMPCPP_INCLUDE_RMPCPP_CORE_SPACE_H_
-#define RMPCPP_INCLUDE_RMPCPP_CORE_SPACE_H_
+#ifndef RMP_INCLUDE_RMP_CORE_SPACE_H_
+#define RMP_INCLUDE_RMP_CORE_SPACE_H_
 #include <Eigen/Dense>
-namespace rmpcpp {
+namespace rmp {
 
 /**
  * Represents a mathematical space with a corresponding norm and distance
@@ -55,5 +55,5 @@ class CylindricalSpace : public Space<3> {
   }
 };
 
-}  // namespace rmpcpp
-#endif  // RMPCPP_INCLUDE_RMPCPP_CORE_SPACE_H_
+}  // namespace rmp
+#endif  // RMP_INCLUDE_RMP_CORE_SPACE_H_

@@ -6,7 +6,7 @@
  * @tparam TSpace
  */
 template <class TSpace>
-void rmpcpp::RMPPlanner<TSpace>::integrate() {
+void rmp::RMPPlanner<TSpace>::integrate() {
   // ignore if trajectory is not initialized
   if (!model_ || !data_ || !trajectory_) {
     return;
@@ -68,7 +68,7 @@ void rmpcpp::RMPPlanner<TSpace>::integrate() {
  * @param start
  */
 template <class TSpace>
-void rmpcpp::RMPPlanner<TSpace>::plan() {
+void rmp::RMPPlanner<TSpace>::plan() {
   std::cout << "PLAN" << std::endl;
   // Reset states
   this->collided_ = false;
@@ -83,7 +83,7 @@ void rmpcpp::RMPPlanner<TSpace>::plan() {
 }
 
 template<class TSpace>
-void rmpcpp::RMPPlanner<TSpace>::DrawTrajectoryCurrent(const mjpc::Trajectory* trajectory,
+void rmp::RMPPlanner<TSpace>::DrawTrajectoryCurrent(const mjpc::Trajectory* trajectory,
                                                        mjvScene* scn, const float* color)
 {
   const auto* rmp_trajectory = static_cast<const RMPTrajectory<TSpace>*>(trajectory);
@@ -100,7 +100,7 @@ void rmpcpp::RMPPlanner<TSpace>::DrawTrajectoryCurrent(const mjpc::Trajectory* t
 }
 
 template<class TSpace>
-void rmpcpp::RMPPlanner<TSpace>::DrawTrajectory(const mjpc::Trajectory* trajectory,
+void rmp::RMPPlanner<TSpace>::DrawTrajectory(const mjpc::Trajectory* trajectory,
                                                 mjvScene* scn, const float* color)
 {
   const auto* rmp_trajectory = static_cast<const RMPTrajectory<TSpace>*>(trajectory);
@@ -119,7 +119,7 @@ void rmpcpp::RMPPlanner<TSpace>::DrawTrajectory(const mjpc::Trajectory* trajecto
 }
 
 template <class TSpace>
-void rmpcpp::RMPPlanner<TSpace>::Traces(mjvScene* scn) {
+void rmp::RMPPlanner<TSpace>::Traces(mjvScene* scn) {
   //static constexpr float PINK[] = {1.0, 192.0/255.0,203.0/255.0, 1.0}
 #if RMP_DRAW_VELOCITY
   DrawTrajectoryCurrent(BestTrajectory(), scn);
@@ -145,6 +145,6 @@ void rmpcpp::RMPPlanner<TSpace>::Traces(mjvScene* scn) {
 }
 
 // explicit instantation
-template class rmpcpp::RMPPlanner<rmpcpp::Space<3>>;
+template class rmp::RMPPlanner<rmp::Space<3>>;
 //template class RMPPlanner<Space<2>>;
-template class rmpcpp::RMPPlanner<rmpcpp::CylindricalSpace>;
+template class rmp::RMPPlanner<rmp::CylindricalSpace>;

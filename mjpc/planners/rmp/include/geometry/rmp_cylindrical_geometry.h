@@ -17,12 +17,12 @@
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RMPCPP_GEOMETRY_CYLINDRICAL_GEOMETRY_H_
-#define RMPCPP_GEOMETRY_CYLINDRICAL_GEOMETRY_H_
+#ifndef RMP_GEOMETRY_CYLINDRICAL_GEOMETRY_H_
+#define RMP_GEOMETRY_CYLINDRICAL_GEOMETRY_H_
 
 #include "mjpc/planners/rmp/include/core/rmp_base_geometry.h"
 
-namespace rmpcpp {
+namespace rmp {
 
 /**
  * Example of a cylindrical geometry that maps to a plane.
@@ -111,5 +111,5 @@ public:
     return state_q;
   }
 };
-}  // namespace rmpcpp
-#endif  // RMPCPP_GEOMETRY_CYLINDRICAL_GEOMETRY_H_
+}  // namespace rmp
+#endif  // RMP_GEOMETRY_CYLINDRICAL_GEOMETRY_H_

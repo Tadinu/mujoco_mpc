@@ -153,7 +153,7 @@ void ResidualImpl(const mjModel* model, const mjData* data,
 
 bool Particle::QueryGoalReached()
 {
-  return (rmpcpp::vectorFromScalarArray<3>(GetParticlePos()) - rmpcpp::vectorFromScalarArray<3>(GetGoalPos())).norm() < PARTICLE_GOAL_REACH_THRESHOLD;
+  return (rmp::vectorFromScalarArray<3>(GetParticlePos()) - rmp::vectorFromScalarArray<3>(GetGoalPos())).norm() < PARTICLE_GOAL_REACH_THRESHOLD;
 }
 
 void Particle::QueryObstacleStatesX()
@@ -190,10 +190,10 @@ void Particle::QueryObstacleStatesX()
     mjtNum obstacle_i_lin_vel[StateX::dim];
     mju_copy(obstacle_i_lin_vel, &data_->cvel[6*obstacle_i_id + LIN_IDX], StateX::dim);
 #endif
-    obstacle_statesX_.push_back(StateX{.pos_ = rmpcpp::vectorFromScalarArray<StateX::dim>(obstacle_i_pos),
-                                       .rot_ = rmpcpp::quatFromScalarArray<StateX::dim>(obstacle_i_rot).toRotationMatrix(),
-                                       .vel_ = rmpcpp::vectorFromScalarArray<StateX::dim>(obstacle_i_lin_vel),
-                                       .size_ = rmpcpp::vectorFromScalarArray<StateX::dim>(obstacle_i_size)});
+    obstacle_statesX_.push_back(StateX{.pos_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_pos),
+                                       .rot_ = rmp::quatFromScalarArray<StateX::dim>(obstacle_i_rot).toRotationMatrix(),
+                                       .vel_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_lin_vel),
+                                       .size_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_size)});
   }
 }
 

@@ -17,8 +17,8 @@
  * along with RMPCPP. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RMPCPP_EVAL_INTEGRATOR_H
-#define RMPCPP_EVAL_INTEGRATOR_H
+#ifndef RMP_EVAL_INTEGRATOR_H
+#define RMP_EVAL_INTEGRATOR_H
 
 // MJPC
 #include "mjpc/task.h"
@@ -29,7 +29,7 @@
 #include <iostream>
 #include <vector>
 
-namespace rmpcpp {
+namespace rmp {
 
 /**
  * Simple Integrator to integrate a trajectory through
@@ -187,6 +187,6 @@ private:
   MatrixQ last_metric_ = MatrixQ::Zero();
 };
 
-}  // namespace rmpcpp
+}  // namespace rmp
 
-#endif  // RMPCPP_EVAL_INTEGRATOR_H
+#endif  // RMP_EVAL_INTEGRATOR_H

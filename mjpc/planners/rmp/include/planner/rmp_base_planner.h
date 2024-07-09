@@ -1,5 +1,5 @@
-#ifndef RMPCPP_PLANNER_PLANNER_BASE_H
-#define RMPCPP_PLANNER_PLANNER_BASE_H
+#ifndef RMP_PLANNER_PLANNER_BASE_H
+#define RMP_PLANNER_PLANNER_BASE_H
 
 #include <numeric>
 #include <Eigen/Core>
@@ -13,7 +13,7 @@
 #include "mjpc/planners/rmp/include/policies/rmp_base_policy.h"
 #include "mjpc/planners/rmp/include/policies/rmp_simple_target_policy.h"
 
-namespace rmpcpp {
+namespace rmp {
 
 /**
  * Base class for a RMP planner
@@ -67,6 +67,6 @@ class RMPPlannerBase : public mjpc::Planner {
   bool diverged_ = false;
 };
 
-}  // namespace rmpcpp
+}  // namespace rmp
 
-#endif  // RMPCPP_PLANNER_PLANNER_BASE_H
+#endif  // RMP_PLANNER_PLANNER_BASE_H
