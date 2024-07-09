@@ -20,6 +20,8 @@
 #ifndef RMP_UTIL_H_
 #define RMP_UTIL_H_
 
+#include "mjpc/planners/fabrics/include/fab_diff_map.h"
+
 namespace rmp {
 template <int dim, typename T = double, typename TVector = Eigen::Matrix<T, dim, 1>>
 TVector vectorFromScalarArray(const T* scalarArray) {

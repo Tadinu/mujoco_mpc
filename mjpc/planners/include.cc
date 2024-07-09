@@ -27,6 +27,7 @@
 #include "mjpc/planners/sampling/planner.h"
 #include "mjpc/planners/rmp/include/planner/rmp_planner.h"
 #include "mjpc/planners/rmp/include/core/rmp_space.h"
+#include "mjpc/planners/fabrics/include/fab_planner.h"
 
 namespace mjpc {
 const char kPlannerNames[] =
