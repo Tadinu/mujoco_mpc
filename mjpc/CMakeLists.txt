@@ -94,6 +94,14 @@ set(LIB_MJPC_HEADERS
     planners/rmp/include/policies/rmp_policy_value.h
     planners/rmp/include/eval/rmp_trapezoidal_integrator.h
     planners/rmp/include/util/rmp_util.h
+        urdf_parser/include/common.h
+        urdf_parser/include/exception.h
+        urdf_parser/include/geometry.h
+        urdf_parser/include/joint.h
+        urdf_parser/include/link.h
+        urdf_parser/include/model.h
+        urdf_parser/include/txml.h
+        estimators/batch.h
     estimators/estimator.h
     estimators/unscented.h
     estimators/kalman.h
@@ -154,6 +162,14 @@ add_library(
   planners/rmp/src/rmp_planner.cc
   planners/rmp/src/rmp_trajectory.cc
   planners/rmp/src/rmp_raycasting_policy.cc
+        urdf_parser/common.cpp
+        urdf_parser/geometry.cpp
+        urdf_parser/joint.cpp
+        urdf_parser/link.cpp
+        urdf_parser/model.cpp
+        urdf_parser/tinyxml.cpp
+        urdf_parser/tinyxmlerror.cpp
+        urdf_parser/tinyxmlparser.cpp
   estimators/batch.cc
   estimators/include.cc
   estimators/include.h
