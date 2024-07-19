@@ -1,5 +1,7 @@
 #include "mjpc/urdf_parser/include/common.h"
 
+#include "absl/strings/ascii.h"
+
 using namespace urdf;
 using namespace std;
 
@@ -10,25 +12,28 @@ Vector3 Vector3::UnitY = {0., 1., 0.};
 Vector3 Vector3::UnitZ = {0., 0., 1.};
 
 template <typename T>
-static std::vector<T> tokenize(const std::string &text, const std::string &token) {
+static std::vector<T> tokenize(const std::string& text, const std::string& token) {
   std::vector<T> results;
-  std::stringstream size_stream(text);
+  std::stringstream stream(std::string(absl::StripAsciiWhitespace(text)));
   bool has_token = true;
   do {
     std::string token;
-    has_token = bool(getline(size_stream, token, ' '));
+    has_token = bool(getline(stream, token, ' '));
+    if (token.empty()) {
+      continue;
+    }
     if constexpr (std::is_same_v<T, std::string>) {
       results.emplace_back(std::move(token));
-    } else if constexpr (std::is_scalar_v<T>) {
-      results.push_back(std::stoi(token));
     } else if constexpr (std::is_floating_point_v<T>) {
       results.push_back(std::stod(token));
+    } else if constexpr (std::is_scalar_v<T>) {
+      results.push_back(std::stoi(token));
     }
   } while (has_token);
   return results;
 }
 
-Vector3 Vector3::fromVecStr(const string &vector_str) {
+Vector3 Vector3::fromVecStr(const string& vector_str) {
   Vector3 vec;
 
   vector<string> pieces;
@@ -36,7 +41,7 @@ Vector3 Vector3::fromVecStr(const string &vector_str) {
   if (values.size() != 3) {
     ostringstream error_msg;
     error_msg << "Parser found " << values.size() << " elements but 3 expected while parsing vector ["
-              << vector_str << "]";
+        << vector_str << "]";
     throw URDFParseError(error_msg.str());
   }
 
@@ -47,11 +52,16 @@ Vector3 Vector3::fromVecStr(const string &vector_str) {
   return vec;
 }
 
-Vector3 Vector3::operator+(const Vector3 &other) { return Vector3(x + other.x, y + other.y, z + other.z); }
+Vector3 Vector3::operator+(const Vector3& other) const {
+  return Vector3(x + other.x, y + other.y, z + other.z);
+}
+
+Vector3 Vector3::operator*(const double scale) const { return Vector3(x * scale, y * scale, z * scale); }
 
 // ------------------- Quaternion Implementation -------------------
 Rotation Rotation::Zero = {0., 0., 0., 1.};
-void Rotation::set_rpy(double &roll, double &pitch, double &yaw) {
+
+void Rotation::set_rpy(double& roll, double& pitch, double& yaw) {
   double sqw;
   double sqx;
   double sqy;
@@ -104,7 +114,7 @@ Rotation Rotation::get_inverse() const {
   return result;
 }
 
-Rotation Rotation::operator*(const Rotation &other) const {
+Rotation Rotation::operator*(const Rotation& other) const {
   Rotation result;
 
   result.x = (w * other.x) + (x * other.w) + (y * other.z) - (z * other.y);
@@ -115,7 +125,7 @@ Rotation Rotation::operator*(const Rotation &other) const {
   return result;
 }
 
-Vector3 Rotation::operator*(const Vector3 &vec) const {
+Vector3 Rotation::operator*(const Vector3& vec) const {
   Rotation t;
   Vector3 result;
 
@@ -151,37 +161,37 @@ Rotation Rotation::fromRpy(double roll, double pitch, double yaw) {
   return rot;
 };
 
-Rotation Rotation::fromRpyStr(const string &rotation_str) {
+Rotation Rotation::fromRpyStr(const string& rotation_str) {
   Vector3 rpy = Vector3::fromVecStr(rotation_str);
   return Rotation::fromRpy(rpy.x, rpy.y, rpy.z);
 }
 
 // ------------------- Color Implementation -------------------
 
-Color Color::fromColorStr(const std::string &vector_str) {
+Color Color::fromColorStr(const std::string& vector_str) {
   std::vector<std::string> pieces;
   std::vector<float> values = tokenize<float>(vector_str, (" "));
   if (values.size() != 4) {
     std::ostringstream error_msg;
     error_msg << "Error parsing Color string (" << vector_str
-              << "): It needs to contain exactly 4 values for rbdl color!";
+        << "): It needs to contain exactly 4 values for rbdl color!";
     throw URDFParseError(error_msg.str());
   }
 
   return Color(values[0], values[1], values[2], values[3]);
 }
 
-// ------------------- Transform Implementation -------------------
+// ----------------- -- Transform Implementation -------------------
 
-Transform Transform::fromXml(TiXmlElement *xml) {
+Transform Transform::fromXml(TiXmlElement* xml) {
   Transform t;
   if (xml) {
-    const char *xyz_str = xml->Attribute("xyz");
+    const char* xyz_str = xml->Attribute("xyz");
     if (xyz_str != NULL) {
       t.position = Vector3::fromVecStr(xyz_str);
     }
 
-    const char *rpy_str = xml->Attribute("rpy");
+    const char* rpy_str = xml->Attribute("rpy");
     if (rpy_str != NULL) {
       t.rotation = Rotation::fromRpyStr(rpy_str);
     }

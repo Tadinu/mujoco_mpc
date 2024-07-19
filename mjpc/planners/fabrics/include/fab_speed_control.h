@@ -9,13 +9,15 @@ class FabDamper {
  public:
   FabDamper() = default;
 
-  FabDamper(CaSX x, CaSX beta, CaSX a_ex, CaSX a_le, CaSX eta, FabDifferentialMap dm,
-            CaSX lagrangian_execution, bool const_beta_expression = false)
-      : x_(std::move(x)),
-        beta_(std::move(beta)),
-        eta_(std::move(eta)),
+  FabDamper(const CaSX& x, const CaSX& beta, const CaSX& a_ex, const CaSX& a_le, const CaSX& eta,
+            FabDifferentialMap dm, const CaSX& lagrangian_execution, bool const_beta_expression = false)
+      : x_(x),
+        beta_(beta),
+        eta_(eta),
         dm_(std::move(dm)),
-        lg_(std::move(lagrangian_execution)),
+        lg_(lagrangian_execution),
+        a_ex_(a_ex),
+        a_le_(a_le),
         constant_beta_expression_(const_beta_expression) {}
 
   CaSX substitute_beta(const CaSX& a_ex_fun, const CaSX& a_le_fun) const {
@@ -33,7 +35,6 @@ class FabDamper {
   CaSXDict symbolic_parameters() const { return symbolic_params_; }
 
  protected:
-  bool constant_beta_expression_ = false;
   CaSX beta_;
   CaSX eta_;
   CaSX x_;
@@ -42,6 +43,7 @@ class FabDamper {
   CaSX a_ex_;
   CaSX a_le_;
   CaSXDict symbolic_params_;
+  bool constant_beta_expression_ = false;
 };
 
 class FabInterpolator {

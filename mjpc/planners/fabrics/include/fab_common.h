@@ -5,12 +5,17 @@
 
 #include <casadi/casadi.hpp>
 #include <variant>
+#include <shared_mutex>
 
 using CaSX = casadi::SX;
 using CaMX = casadi::MX;
 using CaSXDict = casadi::SXDict;
 using CaSXPair = std::pair<std::string, CaSX>;
 using CaSXVector = casadi::SXVector;
+
+using CaDM = casadi::DM;
+using CaDMVector = casadi::DMVector;
+
 using CaElement = casadi::SXElem;
 using CaDouble = casadi::Matrix<double>;
 using CaSlice = casadi::Slice;
@@ -31,10 +36,20 @@ using FabVariantVector = std::vector<FabVariant<TVariant...>>;
 // Highest accuracy without harming matrix inverse 1e-7
 static constexpr auto FAB_EPS = 1e-6;
 
-struct FabError : public std::runtime_error {
-  explicit FabError(const std::string& error_msg) : std::runtime_error(error_msg) {}
+#define FAB_DEBUG (0)
+#define FAB_USE_ACTUATOR_VELOCITY (1)
+#define FAB_USE_ACTUATOR_MOTOR (!FAB_USE_ACTUATOR_VELOCITY)
+#define FAB_ACTUATOR_VELOCITY_KV (10)
+#define FAB_DRAW_TRAJECTORY (1)
 
-  explicit FabError(const char* error_msg) : std::runtime_error(error_msg) {}
+using FabSharedMutexLock = std::shared_lock<std::shared_mutex>;
+
+struct FabError : public std::runtime_error {
+  explicit FabError(const std::string& error_msg) : std::runtime_error(error_msg), message_(error_msg) {
+  }
+
+  explicit FabError(const char* error_msg) : std::runtime_error(error_msg), message_(error_msg) {
+  }
 
   static FabError customized(std::string expression, std::string message) {
     FabError error("");
@@ -55,8 +70,10 @@ struct FabError : public std::runtime_error {
 
 struct FabParamNotFoundError : public std::runtime_error {
   explicit FabParamNotFoundError(const std::string& error_msg)
-      : std::runtime_error(std::string("[Param not found]: ") + error_msg) {}
+    : std::runtime_error(std::string("[Param not found]: ") + error_msg) {
+  }
 
   explicit FabParamNotFoundError(const char* error_msg)
-      : std::runtime_error(std::string("[Param not found]: ") + error_msg) {}
+    : std::runtime_error(std::string("[Param not found]: ") + error_msg) {
+  }
 };

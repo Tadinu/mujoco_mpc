@@ -8,22 +8,29 @@
 #include "mjpc/planners/fabrics/include/fab_core_util.h"
 #include "mjpc/planners/fabrics/include/fab_variables.h"
 
+using FabDiffMapArg = FabNamedMap<uint8_t, CaSX>;
+
 class FabDifferentialMap {
  public:
   FabDifferentialMap() = default;
 
-  FabDifferentialMap(CaSX phi, FabVariables vars, const FabNamedMap<bool, CaSX>& kwargs = {})
+  FabDifferentialMap(CaSX phi, FabVariables vars, const FabDiffMapArg& kwargs = {})
       : phi_(std::move(phi)), vars_(std::move(vars)) {
     const auto q = vars_.position_var();
     const auto qdot = vars_.velocity_var();
     J_ = CaSX::jacobian(phi_, q);
-    if (auto* jdot_sign = fab_core::get_arg_value<bool>(kwargs, "Jdot_sign")) {
-      Jdot_ = (*jdot_sign ? 1 : -1) * CaSX::jacobian(CaSX::mtimes(J_, qdot), q);
+    uint8_t jdot_sign = -1;
+    if (auto* jdot_sign_ptr = fab_core::get_arg_value<uint8_t>(kwargs, "Jdot_sign")) {
+      jdot_sign = *jdot_sign_ptr;
     }
+    Jdot_ = jdot_sign * CaSX::jacobian(CaSX::mtimes(J_, qdot), q);
   }
 
   CaSX J() const { return J_; }
+
   CaSX Jdotqdot() const { return CaSX::mtimes(Jdot_, qdot()); }
+
+  FabVariables vars() const { return vars_; }
   CaSX q() const { return vars_.position_var(); }
   CaSX qdot() const { return vars_.velocity_var(); }
   CaSX phi() const { return phi_; }
@@ -31,8 +38,6 @@ class FabDifferentialMap {
 
   CaSXDict parameters() const { return vars_.parameters(); }
   CaSXDict state_variables() const { return vars_.state_variables(); }
-
-  FabVariables vars() const { return vars_; }
 
   virtual void concretize() {
     func_ = std::make_shared<FabCasadiFunction>("func_", vars_,
@@ -55,17 +60,19 @@ class FabDifferentialMap {
   std::shared_ptr<FabCasadiFunction> func_ = nullptr;
 };
 
+using FabDifferentialMapPtr = std::shared_ptr<FabDifferentialMap>;
+
 class FabDynamicDifferentialMap : public FabDifferentialMap {
  public:
   FabDynamicDifferentialMap() = default;
 
   FabDynamicDifferentialMap(const FabVariables& vars,
-                            const std::vector<std::string>& ref_names = {"x_ref", "xdot_ref", "xddot_ref"},
-                            const FabNamedMap<bool, CaSX>& kwargs = {})
-      : FabDifferentialMap(vars.position_var() - vars.parameter(x_ref_name_), vars, kwargs) {
-    x_ref_name_ = ref_names[0];
-    xdot_ref_name_ = ref_names[1];
-    xddot_ref_name_ = ref_names[2];
+                            std::vector<std::string> ref_names = {"x_ref", "xdot_ref", "xddot_ref"},
+                            const FabDiffMapArg& kwargs = {})
+      : FabDifferentialMap(vars.position_var() - vars.parameter(ref_names[0]), vars, kwargs) {
+    x_ref_name_ = std::move(ref_names[0]);
+    xdot_ref_name_ = std::move(ref_names[1]);
+    xddot_ref_name_ = std::move(ref_names[2]);
     phi_dot_ = vars.velocity_var() - vars.parameter(xdot_ref_name_);
   }
 
@@ -106,7 +113,7 @@ class FabExplicitDifferentialMap : public FabDifferentialMap {
  public:
   FabExplicitDifferentialMap() = default;
 
-  FabExplicitDifferentialMap(CaSX phi, FabVariables vars, const FabNamedMap<bool, CaSX>& kwargs)
+  FabExplicitDifferentialMap(CaSX phi, FabVariables vars, const FabDiffMapArg& kwargs)
       : FabDifferentialMap(std::move(phi), std::move(vars), kwargs) {
     this->J_ = *fab_core::get_arg_value<decltype(this->J_)>(kwargs, "J");
     this->Jdot_ = *fab_core::get_arg_value<decltype(this->Jdot_)>(kwargs, "Jdot");

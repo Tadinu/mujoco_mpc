@@ -19,14 +19,20 @@ class FabSpectralSemiSprays {
   FabSpectralSemiSprays() = default;
 
   FabSpectralSemiSprays(
-      CaSX M, const FabNamedMap<CaSX, FabVariables, FabTrajectories, std::vector<std::string>>& kwargs)
-      : M_(std::move(M)) {
+      CaSX M, const FabNamedMap<CaSX, FabVariables, FabTrajectories, std::vector<std::string>>& kwargs) {
+    initialize(std::move(M), kwargs);
+  }
+
+  void initialize(CaSX M,
+                  const FabNamedMap<CaSX, FabVariables, FabTrajectories, std::vector<std::string>>& kwargs) {
+    M_ = std::move(M);
     // [x_ref_name_, xdot_ref_name_, xddot_ref_name_]
     if (kwargs.contains("ref_names")) {
-      const auto ref_names = *fab_core::get_arg_value<std::vector<std::string>>(kwargs, "ref_names");
-      x_ref_name_ = ref_names[0];
-      xdot_ref_name_ = ref_names[1];
-      xddot_ref_name_ = ref_names[2];
+      auto ref_names = *fab_core::get_arg_value<std::vector<std::string>>(kwargs, "ref_names");
+      assert(ref_names.size() == 3);
+      x_ref_name_ = std::move(ref_names[0]);
+      xdot_ref_name_ = std::move(ref_names[1]);
+      xddot_ref_name_ = std::move(ref_names[2]);
     }
 
     // [f_]
@@ -60,20 +66,25 @@ class FabSpectralSemiSprays {
       J_ref_inv_ = CaSX::eye(size);
     } else if (kwargs.contains("J_ref")) {
       J_ref_ = *fab_core::get_arg_value<decltype(J_ref_)>(kwargs, "J_ref");
-      std::cout << "Casadi pseudo inverse is used in Lagrangian" << std::endl;
+      FAB_PRINT("Casadi pseudo inverse is used in Lagrangian");
       const auto size = x_ref().size().first;
       const auto J_ref_transpose = J_ref_.T();
       J_ref_inv_ = CaSX::mtimes(J_ref_transpose,
                                 CaSX::inv(CaSX::mtimes(J_ref_, J_ref_transpose) + CaSX::eye(size) * FAB_EPS));
     }
 
+#if 0
     // [xdot_d_]
-    xdot_d_ = CaSX::zeros(x().size().first);
+    auto xdot_d_ = CaSX::zeros(1, vars_.position_var().size().first);
+#endif
   }
 
-  CaSX x() const { return vars_.position_var(); }
+  std::vector<std::string> ref_names() const { return {x_ref_name_, xdot_ref_name_, xddot_ref_name_}; }
 
-  CaSX xdot() const { return vars_.velocity_var(); }
+  virtual CaSX x() const { return vars_.position_var(); }
+
+  virtual CaSX xdot() const { return vars_.velocity_var(); }
+  virtual CaSX xddot() const { return xddot_; }
 
   FabVariables vars() const { return vars_; }
 
@@ -82,25 +93,23 @@ class FabSpectralSemiSprays {
   CaSX M() const { return M_; }
 
   CaSX Minv() const {
-    std::cout << "Casadi pseudo inverse is used in spec" << std::endl;
+    FAB_PRINT("Casadi pseudo inverse is used in spec");
     return CaSX::pinv(M_ + CaSX::eye(x().size().first) * FAB_EPS);
   }
 
   bool is_dynamic() const { return vars_.parameters().contains(x_ref_name_); }
 
-  std::vector<std::string> ref_names() const { return {x_ref_name_, xdot_ref_name_, xddot_ref_name_}; }
-
   CaSX x_ref() const { return vars_.parameter(x_ref_name_); }
 
-  bool has_h() const { return !CaSX::is_equal(h_, CaSX::zeros()); }
+  bool has_h() const { return !h_.is_empty(); }
 
   CaSX h() const { return has_h() ? h_ : CaSX::mtimes(Minv(), f_); }
 
-  bool has_f() const { return !CaSX::is_equal(f_, CaSX::zeros()); }
+  bool has_f() const { return !f_.is_empty(); }
 
   CaSX f() const { return has_f() ? f_ : CaSX::mtimes(M(), h_); }
 
-  bool empty() const { return has_f() && has_h(); }
+  bool empty() const { return !(has_f() || has_h()); }
 
   void concretize() {
     if (empty()) {
@@ -151,14 +160,16 @@ class FabSpectralSemiSprays {
       return FabSpectralSemiSprays(
           M() + b.M(), {{"h", h() + b.h()},
                         {"var", all_vars},
-                        {"ref_names", std::get<std::vector<std::string>>(all_ref_arguments["ref_names"])},
-                        {"J_ref", std::get<CaSX>(all_ref_arguments["J_ref"])}});
+                        {"ref_names", fab_core::get_variant_value<std::vector<std::string>>(
+                                          all_ref_arguments["ref_names"])},
+                        {"J_ref", fab_core::get_variant_value<CaSX>(all_ref_arguments["J_ref"])}});
     } else {
       return FabSpectralSemiSprays(
           M() + b.M(), {{"f", f() + b.f()},
                         {"var", all_vars},
-                        {"ref_names", std::get<std::vector<std::string>>(all_ref_arguments["ref_names"])},
-                        {"J_ref", std::get<CaSX>(all_ref_arguments["J_ref"])}});
+                        {"ref_names", fab_core::get_variant_value<std::vector<std::string>>(
+                                          all_ref_arguments["ref_names"])},
+                        {"J_ref", fab_core::get_variant_value<CaSX>(all_ref_arguments["J_ref"])}});
     }
   }
 
@@ -178,32 +189,43 @@ class FabSpectralSemiSprays {
     const auto xdot = vars_.velocity_var();
     const auto M_pulled_subst_x = CaSX::substitute(M_pulled, x, dm.phi());
 
+#if 0
     const auto dm_phidot = dm.phidot();
-    // print(xdot, dm_phidot)
-    // print(xdot.size(), dm_phidot.size())
-    // print(xdot.sparsity(), dm_phidot.sparsity())
-    // for i in range(xdot.size1()):
-    // print(i, xdot[i], dm_phidot[i])
-    // print("sparsity", i, xdot[i].sparsity(), dm_phidot[i].sparsity())
-    // print("dm_phidot", i, dm_phidot[i].is_scalar(), "nnz: ", dm_phidot[i].nnz())
+    FAB_PRINTDB("===========");
+    FAB_PRINTDB("DM J");
+    FAB_PRINTDB("DM VARS");
+    dm.vars().print_self();
+    FAB_PRINTDB(xdot, dm_phidot);
+    FAB_PRINTDB(xdot.size(), dm_phidot.size());
+    FAB_PRINTDB(xdot.sparsity(), dm_phidot.sparsity());
+    for (auto i = 0; i < xdot.size1(); ++i) {
+      FAB_PRINTDB(i, fab_core::get_casx(xdot, i), fab_core::get_casx(dm_phidot, i));
+      FAB_PRINTDB("sparsity", fab_core::get_casx(xdot, i).sparsity(),
+                      fab_core::get_casx(dm_phidot, i).sparsity());
+      FAB_PRINTDB("dm_phidot", i, fab_core::get_casx(dm_phidot, i).is_scalar(),
+                      "nnz:", fab_core::get_casx(dm_phidot, i).nnz());
+    }
+#endif
 
-    const auto M_pulled_subst_x_xdot = CaSX::substitute(M_pulled_subst_x, xdot, dm.phidot());
+    auto M_pulled_subst_x_xdot = CaSX::substitute(M_pulled_subst_x, xdot, dm.phidot());
 
     const auto f_pulled_subst_x = CaSX::substitute(f_pulled, x, dm.phi());
-    const auto f_pulled_subst_x_xdot = CaSX::substitute(f_pulled_subst_x, xdot, dm.phidot());
+    auto f_pulled_subst_x_xdot = CaSX::substitute(f_pulled_subst_x, xdot, dm.phidot());
 
     CaSXDict new_parameters;
     FabVariables::append_variants<CaSX>(new_parameters, vars_.parameters());
     FabVariables::append_variants<CaSX>(new_parameters, dm.parameters());
-    const auto new_vars = FabVariables(dm.state_variables(), new_parameters);
-    const auto J_ref = dm.J();
+    auto new_vars = FabVariables(dm.state_variables(), new_parameters);
+    auto J_ref = dm.J();
     if (is_dynamic()) {
-      return FabSpectralSemiSprays(
-          M_pulled_subst_x_xdot,
-          {{"f", f_pulled_subst_x_xdot}, {"var", new_vars}, {"J", J_ref}, {"ref_names", ref_names()}});
+      return FabSpectralSemiSprays(std::move(M_pulled_subst_x_xdot), {{"f", std::move(f_pulled_subst_x_xdot)},
+                                                                      {"var", std::move(new_vars)},
+                                                                      {"J", std::move(J_ref)},
+                                                                      {"ref_names", ref_names()}});
     }
     return FabSpectralSemiSprays(
-        M_pulled_subst_x_xdot, {{"f", f_pulled_subst_x_xdot}, {"var", new_vars}, {"ref_names", ref_names()}});
+        std::move(M_pulled_subst_x_xdot),
+        {{"f", std::move(f_pulled_subst_x_xdot)}, {"var", std::move(new_vars)}, {"ref_names", ref_names()}});
   }
 
   FabSpectralSemiSprays dynamic_pull(const FabDynamicDifferentialMap& dm) const {
@@ -234,11 +256,10 @@ class FabSpectralSemiSprays {
   std::string xddot_ref_name_ = "xddot_ref";
   FabVariables vars_;
   CaSX M_;
-  CaSX f_ = CaSX::zeros();
-  CaSX h_ = CaSX::zeros();
+  CaSX f_;
+  CaSX h_;
   CaSX J_ref_;
   CaSX J_ref_inv_;
-  CaSX xdot_d_;
   CaSX xddot_;
   std::shared_ptr<FabCasadiFunction> func_ = nullptr;
   FabTrajectories refTrajs_;

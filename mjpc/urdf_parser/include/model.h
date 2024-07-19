@@ -8,16 +8,17 @@
 #include "mjpc/urdf_parser/include/joint.h"
 #include "mjpc/urdf_parser/include/link.h"
 
+#define URDF_MODEL_DEBUG_LOG (0)
+
 using namespace std;
 
 namespace urdf {
-
 struct UrdfModel {
   string name;
 
   // JOINTS
   map<string, JointPtr> joint_map;
-  vector<JointType> actuated_types = {JointType::PRISMATIC, JointType::REVOLUTE, JointType::CONTINUOUS};
+  vector<JointType> actuated_joint_types;
   map<string, int> joint_name_map;
   vector<string> actuated_joint_names;
   void init_joint_name_map();
@@ -32,6 +33,7 @@ struct UrdfModel {
 
   JointPtr get_joint(const string& name);
   vector<JointPtr> get_joints(const string& base_name, const string& endtip_name);
+  int get_dof() const;
 
   // LINKS
   string base_link_name;
@@ -57,15 +59,15 @@ struct UrdfModel {
     parent_name_map.clear();
     material_map.clear();
     root_link = nullptr;
-  };
+  }
 
-  shared_ptr<UrdfModel> fromUrdfStr(const string& xml_string);
-  shared_ptr<UrdfModel> fromUrdfFile(const string& urdf_path);
+  void print_self() const;
+
+  bool fromUrdfStr(const string& xml_string);
+  bool fromUrdfFile(const string& urdf_path);
 
   // base_name can be any link, not necessarily root
   vector<string> get_chain(const string& base_name, const string& endtip_name, bool joints = true,
                            bool links = true, bool fixed = true);
 };
-
-using ModelPtr = shared_ptr<UrdfModel>;
 }  // namespace urdf

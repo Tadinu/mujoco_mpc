@@ -15,18 +15,20 @@
 #ifndef MJPC_TASK_H_
 #define MJPC_TASK_H_
 
+#include <mujoco/mujoco.h>
+
 #include <array>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 
-#include <mujoco/mujoco.h>
 #include "mjpc/norm.h"
+#include "mjpc/planners/fabrics/include/fab_forward_kinematics.h"
+#include "mjpc/planners/fabrics/include/fab_config.h"
 #include "mjpc/planners/rmp/include/core/rmp_state.h"
 
 namespace mjpc {
-
 // tolerance for risk-neutral cost
 inline constexpr double kRiskNeutralTolerance = 1.0e-6;
 
@@ -34,16 +36,17 @@ inline constexpr double kRiskNeutralTolerance = 1.0e-6;
 inline constexpr int kMaxCostTerms = 128;
 
 class Task;
+class Planner;
+
+#define MJPC_LOCK_TASK_DATA_ACCESS std::lock_guard<std::mutex> lock(task_data_mutex_);
 
 // abstract class for a residual function
 class AbstractResidualFn {
- public:
+public:
   virtual ~AbstractResidualFn() = default;
 
-  virtual void Residual(const mjModel* model, const mjData* data,
-                        double* residual) const = 0;
-  virtual void CostTerms(double* terms, const double* residual,
-                         bool weighted) const = 0;
+  virtual void Residual(const mjModel* model, const mjData* data, double* residual) const = 0;
+  virtual void CostTerms(double* terms, const double* residual, bool weighted) const = 0;
   virtual double CostValue(const double* residual) const = 0;
 
   // copies weights and parameters from the Task instance. This should be
@@ -53,16 +56,15 @@ class AbstractResidualFn {
 
 // base implementation for ResidualFn implementations
 class BaseResidualFn : public AbstractResidualFn {
- public:
+public:
   explicit BaseResidualFn(const Task* task);
   virtual ~BaseResidualFn() = default;
 
-  void CostTerms(double* terms, const double* residual,
-                 bool weighted) const override;
+  void CostTerms(double* terms, const double* residual, bool weighted) const override;
   double CostValue(const double* residual) const override;
   void Update() override;
 
- protected:
+protected:
   int num_residual_;
   int num_term_;
   int num_trace_;
@@ -78,10 +80,13 @@ class BaseResidualFn : public AbstractResidualFn {
 
 // Thread-safe interface for classes that implement MJPC task specifications
 class Task {
- public:
+public:
   // constructor
   Task() = default;
   virtual ~Task() = default;
+
+  // Fabrics config
+  virtual FabPlannerConfig get_fabrics_config() const { return FabPlannerConfig(); }
 
   // delegates to ResidualLocked, while holding a lock
   std::unique_ptr<AbstractResidualFn> Residual() const;
@@ -89,8 +94,7 @@ class Task {
   // ----- methods ----- //
   // calls Residual on the pointer returned from InternalResidual(), while
   // holding a lock
-  void Residual(const mjModel* model, const mjData* data,
-                double* residual) const;
+  void Residual(const mjModel* model, const mjData* data, double* residual) const;
 
   // Must be called whenever parameters or weights change outside Transition or
   // Reset, so that calls to Residual use the new parameters.
@@ -120,8 +124,8 @@ class Task {
   // holding a lock
   double CostValue(const double* residual) const;
 
-  virtual void ModifyScene(const mjModel* model, const mjData* data,
-                           mjvScene* scene) const {}
+  virtual void ModifyScene(const mjModel* model, const mjData* data, mjvScene* scene) const {
+  }
 
   virtual std::string Name() const = 0;
   virtual std::string XmlPath() const = 0;
@@ -129,37 +133,54 @@ class Task {
   static constexpr int OBSTACLES_NUM = 10;
   virtual int GetTargetObjectId() const { return -1; }
   virtual int GetTargetObjectGeomId() const { return -1; }
-  virtual bool CheckBlocking(const double start[], const double end[]) {return false;}
+  virtual bool CheckBlocking(const double start[], const double end[]) { return false; }
 
   // model
   mjModel* model_ = nullptr;
   mjData* data_ = nullptr;
+  Planner* planner_ = nullptr;
   mjvScene* scene_ = nullptr;
-  virtual const mjtNum* GetStartPos() { return nullptr;}
+
+  virtual const mjtNum* GetStartPos() { return nullptr; }
   virtual const mjtNum* GetStartVel() { return nullptr; }
   virtual const mjtNum* GetGoalPos() { return nullptr; }
 
-  static int GetBodyMocapId(const mjModel* model, const char* body_name) {
-    if (model) {
-      int goal = mj_name2id(model, mjOBJ_BODY, body_name);
-      return model->body_mocapid[goal];
+
+  virtual std::vector<double> QueryJointPos(int dof) const {
+    return {};
+  }
+
+  virtual std::vector<double> QueryJointVel(int dof) const {
+    return {};
+  }
+
+
+  void SetPlanner(Planner* planner) { planner_ = planner; }
+  Planner* Planner() { return planner_; }
+
+  int GetBodyMocapId(const char* body_name) const {
+    if (model_) {
+      int goal = mj_name2id(model_, mjOBJ_BODY, body_name);
+      return model_->body_mocapid[goal];
     }
     return -1;
   }
 
-  static void SetBodyMocapPos(const mjModel* model, const mjData* data,
-                              const char* body_name, const double* pos) {
-    if (model && data) {
-      int bodyMocapId = GetBodyMocapId(model, body_name);
-      mju_copy3(&data->mocap_pos[3*bodyMocapId], pos);
-      data->mocap_pos[3*bodyMocapId+2] = 0.01;
-      //std::cout << body_name << ":" << bodyMocapId << " " << pos[0] << " " << pos[1] << std::endl;
+  void SetBodyMocapPos(const char* body_name, const double* pos) {
+    if (data_) {
+      int bodyMocapId = GetBodyMocapId(body_name);
+      mju_copy3(&data_->mocap_pos[3 * bodyMocapId], pos);
+      data_->mocap_pos[3 * bodyMocapId + 2] = 0.01;
+      // std::cout << body_name << ":" << bodyMocapId << " " << pos[0] << " " << pos[1] << std::endl;
     }
   }
-  static mjtNum* QueryBodyMocapPos(const mjModel* model, const mjData* data,
-                                   const char* body_name) {
-    int bodyMocapId = GetBodyMocapId(model, body_name);
-    return &data->mocap_pos[3*bodyMocapId];
+
+  mjtNum* QueryBodyMocapPos(const char* body_name) const {
+    if (data_) {
+      int bodyMocapId = GetBodyMocapId(body_name);
+      return &data_->mocap_pos[3 * bodyMocapId];
+    }
+    return nullptr;
   }
 
   void SetGeomColor(uint geom_id, const float* rgba) const {
@@ -198,23 +219,29 @@ class Task {
 
   // mutex which should be held on changes to data queried from mjdata
   mutable std::mutex task_data_mutex_;
-  virtual void QueryObstacleStatesX() {}
-  inline std::vector<StateX> GetObstacleStatesX() {
+
+
+  virtual bool QueryGoalReached() {
+    return false;
+  }
+
+  virtual void QueryObstacleStatesX() {
+  }
+
+  std::vector<StateX> GetObstacleStatesX() const {
     std::vector<StateX> obstacle_statesX;
     {
-      std::lock_guard<std::mutex> lock(task_data_mutex_);
+      MJPC_LOCK_TASK_DATA_ACCESS;
       obstacle_statesX = obstacle_statesX_;
     }
     return obstacle_statesX;
   }
 
- protected:
+protected:
   // returns a pointer to the ResidualFn instance that's used for physics
   // stepping and plotting, and is internal to the class
   virtual BaseResidualFn* InternalResidual() = 0;
-  const BaseResidualFn* InternalResidual() const {
-    return const_cast<Task*>(this)->InternalResidual();
-  }
+  const BaseResidualFn* InternalResidual() const { return const_cast<Task*>(this)->InternalResidual(); }
   // returns an object which can compute the residual function. the function
   // can assume that a lock on mutex_ is held when it's called
   virtual std::unique_ptr<AbstractResidualFn> ResidualLocked() const = 0;
@@ -223,17 +250,20 @@ class Task {
   // measuring contact forces), which will call the sensor callback, which calls
   // ResidualLocked. In order to avoid such resource contention, mutex_ might be
   // temporarily unlocked, but it must be locked again before returning.
-  virtual void TransitionLocked(mjModel* model, mjData* data) {}
+  virtual void TransitionLocked(mjModel* model, mjData* data) {
+  }
+
   // implementation of Task::Reset() which can assume a lock is held
-  virtual void ResetLocked(const mjModel* model) {}
+  virtual void ResetLocked(const mjModel* model) {
+  }
+
   // mutex which should be held on changes to InternalResidual.
   mutable std::mutex mutex_;
 
- private:
+private:
   // initial residual parameters from model
   void SetFeatureParameters(const mjModel* model);
 };
-
-}  // namespace mjpc
+} // namespace mjpc
 
 #endif  // MJPC_TASK_H_

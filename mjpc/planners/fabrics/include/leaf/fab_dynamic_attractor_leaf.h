@@ -8,7 +8,7 @@
 #include "mjpc/planners/fabrics/include/fab_diff_map.h"
 #include "mjpc/planners/fabrics/include/fab_energy.h"
 #include "mjpc/planners/fabrics/include/fab_parameterized_map.h"
-#include "mjpc/planners/fabrics/include/fab_planner_config.h"
+#include "mjpc/planners/fabrics/include/fab_config.h"
 #include "mjpc/planners/fabrics/include/fab_variables.h"
 #include "mjpc/planners/fabrics/include/leaf/fab_dynamic_leaf.h"
 
@@ -26,7 +26,7 @@ class FabGenericDynamicAttractorLeaf : public FabDynamicLeaf {
     set_forward_map(attractor_name);
   }
 
-  void set_forward_map(const std::string& goal_name) {
+  void set_forward_map(const std::string& goal_name) override {
     const auto weight_name = std::string("weight_") + goal_name;
     const auto& parent_params = parent_vars_.parameters();
     if (parent_params.contains(weight_name)) {
@@ -36,24 +36,22 @@ class FabGenericDynamicAttractorLeaf : public FabDynamicLeaf {
     }
     geom_params_ = {{weight_name, weight_var_}};
     parent_vars_.add_parameters(geom_params_);
-    forward_map_ = FabDifferentialMap(forward_kinematics_, parent_vars_);
+    forward_map_ = std::make_shared<FabDifferentialMap>(forward_kinematics_, parent_vars_);
   }
 
-  void set_potential(const std::function<CaSX(const CaSX& x)>& potential) {
-    const auto psi = weight_var_ * potential(xrel_);
-    const auto h_psi = CaSX::gradient(psi, xrel_);
-    geom_ = FabWeightedGeometry({{"h", h_psi}, {"var", relative_vars_}});
+  void set_potential(const std::function<CaSX(const CaSX& x)>& potential) override {
+    const auto psi = weight_var_ * potential(x_rel_);
+    geom_ = FabGeometry({{"h", CaSX::gradient(psi, x_rel_)}, {"var", relative_vars_}});
   }
 
-  void set_metric(const std::function<CaSX(const CaSX& x)>& metric) {
-    auto lagrangian_psi = CaSX::dot(xdot_rel_, CaSX::mtimes(metric(xrel_), xdot_rel_));
+  void set_metric(const std::function<CaSX(const CaSX& x)>& metric) override {
+    auto lagrangian_psi = CaSX::dot(xdot_rel_, CaSX::mtimes(metric(x_rel_), xdot_rel_));
     lag_ = FabLagrangian(std::move(lagrangian_psi), {{"var", relative_vars_}});
   }
 
-  FabDifferentialMap map() const { return forward_map_; }
+  virtual FabDifferentialMapPtr map() const override { return forward_map_; }
 
  protected:
-  CaSXDict geom_params_;
   CaSX weight_var_;
-  FabDifferentialMap forward_map_;
+  std::shared_ptr<FabDifferentialMap> forward_map_;
 };

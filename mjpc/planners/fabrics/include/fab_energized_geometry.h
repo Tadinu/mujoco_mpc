@@ -21,10 +21,11 @@ class FabWeightedGeometry : public FabSpectralSemiSprays {
                                                  FabSpectralSemiSprays, std::vector<std::string>>& kwargs) {
     // [x_ref_name_, xdot_ref_name_, xddot_ref_name_]
     if (kwargs.contains("ref_names")) {
-      const auto ref_names = *fab_core::get_arg_value<std::vector<std::string>>(kwargs, "ref_names");
-      x_ref_name_ = ref_names[0];
-      xdot_ref_name_ = ref_names[1];
-      xddot_ref_name_ = ref_names[2];
+      auto ref_names = *fab_core::get_arg_value<std::vector<std::string>>(kwargs, "ref_names");
+      assert(ref_names.size() == 3);
+      x_ref_name_ = std::move(ref_names[0]);
+      xdot_ref_name_ = std::move(ref_names[1]);
+      xddot_ref_name_ = std::move(ref_names[2]);
     }
 
     // [le_]
@@ -34,30 +35,25 @@ class FabWeightedGeometry : public FabSpectralSemiSprays {
 
     // [h_, M_, refTrajs_]
     if (kwargs.contains("g")) {
-      geom_ = *fab_core::get_arg_value<FabGeometry>(kwargs, "g");
-      assert(fab_core::check_compatibility(le_, geom_));
-      vars_ = geom_.vars() + le_.vars();
-      refTrajs_ = FabVariables::join_refTrajs(le_.refTrajs(), geom_.refTrajs());
-      this->h_ = geom_.h();
+      const auto geom = *fab_core::get_arg_value<FabGeometry>(kwargs, "g");
+      assert(fab_core::check_compatibility(le_, geom));
+      vars_ = geom.vars() + le_.vars();
+      refTrajs_ = FabVariables::join_refTrajs(le_.refTrajs(), geom.refTrajs());
+      this->h_ = geom.h();
       this->M_ = le_.S().M();
     } else if (kwargs.contains("s")) {
       const auto s = *fab_core::get_arg_value<FabSpectralSemiSprays>(kwargs, "s");
       assert(fab_core::check_compatibility(le_, s));
-      const auto refTrajs = FabVariables::join_refTrajs(le_.refTrajs(), s.refTrajs());
-      FabSpectralSemiSprays(
-          s.M(), {{"f", s.f()}, {"var", s.vars()}, {"refTrajs", refTrajs}, {"ref_names", ref_names()}});
+      auto refTrajs = FabVariables::join_refTrajs(le_.refTrajs(), s.refTrajs());
+      initialize(
+          s.M(),
+          {{"f", s.f()}, {"var", s.vars()}, {"refTrajs", std::move(refTrajs)}, {"ref_names", s.ref_names()}});
     }
   }
 
-  std::vector<std::string> ref_names() const { return {x_ref_name_, xdot_ref_name_, xddot_ref_name_}; }
-
-  CaSX x() const { return le_.x(); }
-
-  CaSX xdot() const { return le_.xdot(); }
-  CaSX xddot() const { return xddot_; }
+  CaSX x() const override { return le_.x(); }
+  CaSX xdot() const override { return le_.xdot(); }
   CaSX alpha() const { return alpha_; }
-
-  FabGeometry geom() const { return geom_; }
 
   FabWeightedGeometry operator+(const FabWeightedGeometry& b) const {
     return FabWeightedGeometry(*this) += b;
@@ -65,8 +61,8 @@ class FabWeightedGeometry : public FabSpectralSemiSprays {
 
   FabWeightedGeometry& operator+=(const FabWeightedGeometry& b) {
     assert(fab_core::check_compatibility(*this, b));
-    const auto all_le = le_ + b.le_;
     const auto spec = static_cast<FabSpectralSemiSprays>(*this) + static_cast<FabSpectralSemiSprays>(b);
+    const auto all_le = le_ + b.le_;
     *this = FabWeightedGeometry({{"le", all_le}, {"s", spec}, {"ref_names", spec.ref_names()}});
     return *this;
   }
@@ -102,26 +98,20 @@ class FabWeightedGeometry : public FabSpectralSemiSprays {
   }
 
   FabWeightedGeometry pull(const FabDifferentialMap& dm) const {
-    const auto spec = FabSpectralSemiSprays::pull(dm);
-    const auto le_pulled = le_.pull(dm);
-    return FabWeightedGeometry({{"le", le_pulled}, {"s", spec}, {"ref_names", ref_names()}});
+    auto spec = FabSpectralSemiSprays::pull(dm);
+    auto le_pulled = le_.pull(dm);
+    return FabWeightedGeometry(
+        {{"s", std::move(spec)}, {"le", std::move(le_pulled)}, {"ref_names", ref_names()}});
   }
 
   FabWeightedGeometry dynamic_pull(const FabDynamicDifferentialMap& dm) const {
-    const auto spec = FabSpectralSemiSprays::dynamic_pull(dm);
-    const auto le_pulled = le_.dynamic_pull(dm);
-    return FabWeightedGeometry({{"s", spec}, {"le", le_pulled}, {"ref_names", dm.ref_names()}});
+    auto spec = FabSpectralSemiSprays::dynamic_pull(dm);
+    auto le_pulled = le_.dynamic_pull(dm);
+    return FabWeightedGeometry(
+        {{"s", std::move(spec)}, {"le", std::move(le_pulled)}, {"ref_names", dm.ref_names()}});
   }
 
  protected:
-  FabGeometry geom_;
   FabLagrangian le_;
   CaSX alpha_;
-  CaSX xddot_;
-  std::string x_ref_name_ = "x_ref";
-  std::string xdot_ref_name_ = "xdot_ref";
-  std::string xddot_ref_name_ = "xddot_ref";
-  FabVariables vars_;
-  std::shared_ptr<FabCasadiFunction> func_ = nullptr;
-  FabTrajectories refTrajs_;
 };

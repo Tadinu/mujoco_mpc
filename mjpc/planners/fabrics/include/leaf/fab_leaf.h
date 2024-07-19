@@ -11,18 +11,22 @@
 #include "mjpc/planners/fabrics/include/fab_geometry.h"
 #include "mjpc/planners/fabrics/include/fab_variables.h"
 
+#define LEAF_VAR_NAME(var_name) std::string(#var_name) + leaf_name_
+#define CASX_SYM(var_name, dim) CaSX::sym(LEAF_VAR_NAME(var_name), dim)
+
 class FabLeaf {
  public:
   FabLeaf() = default;
   virtual ~FabLeaf() = default;
 
-  FabLeaf(FabVariables parent_variables, std::string leaf_name, CaSX fk = CaSX::zeros(), const int dim = 1)
+  FabLeaf(FabVariables parent_variables, std::string leaf_name, const CaSX& fk = CaSX::zeros(),
+          const int dim = 1)
       : parent_vars_(std::move(parent_variables)),
         leaf_name_(std::move(leaf_name)),
-        x_(CaSX::sym(std::string("x_") + leaf_name_, dim)),
-        xdot_(CaSX::sym(std::string("xdot_") + leaf_name_, dim)),
-        leaf_vars_(FabVariables({{x_.name(), x_}, {xdot_.name(), xdot_}})),
-        forward_kinematics_(std::move(fk)),
+        x_(CASX_SYM(x_, dim)),
+        xdot_(CASX_SYM(xdot_, dim)),
+        leaf_vars_(FabVariables({{LEAF_VAR_NAME(x_), x_}, {LEAF_VAR_NAME(xdot_), xdot_}})),
+        forward_kinematics_(fk),
         diffmap_(std::make_shared<FabDifferentialMap>(forward_kinematics_, parent_vars_)) {}
 
   void set_params(const CaSXDict& kwargs) {
@@ -37,9 +41,19 @@ class FabLeaf {
   CaSX xdot() const { return xdot_; }
   std::string name() const { return leaf_name_; }
 
-  FabWeightedGeometry geometry() const { return geom_; }
+  FabVariables vars() const { return leaf_vars_; }
+  FabGeometry geometry() const { return geom_; }
   FabLagrangian lagrangian() const { return lag_; }
-  std::shared_ptr<FabDifferentialMap> map() const { return diffmap_; }
+  virtual FabDifferentialMapPtr map() const { return diffmap_; }
+
+  void print_self() const {
+    FAB_PRINT("LEAF", name());
+    leaf_vars_.print_self();
+  }
+
+  virtual void set_potential(const std::function<CaSX(const CaSX& x)>& potential) {}
+  virtual void set_metric(const std::function<CaSX(const CaSX& x)>& metric) {}
+  virtual void set_forward_map(const std::string& goal_name) {}
 
   void concretize() {
     diffmap_->concretize();
@@ -49,7 +63,8 @@ class FabLeaf {
 
   CaSX get_parent_var_param(const std::string& var_name, const size_t dim) const {
     const auto parent_var_params = parent_vars_.parameters();
-    return parent_var_params.contains(var_name) ? parent_var_params.at(var_name) : CaSX::sym(var_name, dim);
+    return parent_var_params.contains(var_name) ? parent_var_params.at(var_name)
+                                                : CaSX::sym(var_name, casadi_int(dim));
   }
 
   CaSXDict evaluate(const FabCasadiArgMap& kwargs) {
@@ -57,7 +72,7 @@ class FabLeaf {
     const auto x = res.at("phi");
     const auto J = res.at("J");
     const auto Jdot = res.at("Jdot");
-    const auto xdot = CaSX::dot(J, std::get<CaSX>(kwargs.at("qdot")));
+    const auto xdot = CaSX::dot(J, fab_core::get_variant_value<CaSX>(kwargs.at("qdot")));
 #if 1
     return {{"x", x}, {"xdot", xdot}};
 #else
@@ -95,7 +110,8 @@ class FabLeaf {
   FabVariables leaf_vars_;
   CaSX forward_kinematics_;
   FabLagrangian lag_;
-  FabWeightedGeometry geom_;
+  FabGeometry geom_;
+  CaSXDict geom_params_;
   std::shared_ptr<FabDifferentialMap> diffmap_ = nullptr;
   CaSXDict p_;
 };

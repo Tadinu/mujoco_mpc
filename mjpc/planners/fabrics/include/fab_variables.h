@@ -1,5 +1,6 @@
 #pragma once
 
+#include <any>
 #include <casadi/casadi.hpp>
 #include <stdexcept>
 #include <variant>
@@ -17,6 +18,28 @@ class FabVariables {
       : state_variables_(std::move(state_variables)),
         parameters_(std::move(parameters)),
         parameter_values_(std::move(parameter_values)) {}
+
+  void print_self() const {
+    const auto self_size = size();
+    const auto vars_size = vars().size();
+    FAB_PRINT("SIZE", self_size, "VARS SIZE", vars_size);
+    assert(self_size == vars_size);
+    FAB_PRINT("STATE VARS --");
+    for (const auto& [var_name, var] : state_variables_) {
+      FAB_PRINT(var_name, ":", var);
+    }
+
+    FAB_PRINT("PARAMS --");
+    for (const auto& [param_name, param] : parameters_) {
+      FAB_PRINT(param_name, ":", param);
+    }
+
+    FAB_PRINT("PARAM VALS --");
+    for (const auto& [param_val_name, param_val] : parameter_values_) {
+      FAB_PRINT(param_val_name, ":");
+      fab_core::print_variant(param_val);
+    }
+  }
 
   CaSX position_var() const {
     const auto state_variable_names = fab_core::get_map_keys(state_variables_);
@@ -41,18 +64,11 @@ class FabVariables {
     return all;
   }
 
+  size_t size() const { return state_variables_.size() + parameters_.size(); }
   bool empty() const { return state_variables_.empty() && parameters_.empty(); }
 
   CaSX state_var(const std::string& name) const {
     return state_variables_.contains(name) ? state_variables_.at(name) : CaSX();
-  }
-
-  CaSX parameter(const std::string& name) const {
-    return parameters_.contains(name) ? parameters_.at(name) : CaSX();
-  }
-
-  double parameter_value(const std::string& name) {
-    return parameter_values_.contains(name) ? std::get<double>(parameter_values_.at(name)) : -1;
   }
 
   CaSXDict state_variables() const { return state_variables_; }
@@ -62,6 +78,15 @@ class FabVariables {
   }
 
   CaSXDict parameters() const { return parameters_; }
+
+  CaSX parameter(const std::string& name) const {
+    return parameters_.contains(name) ? parameters_.at(name) : CaSX();
+  }
+
+  double parameter_value(const std::string& name) {
+    return parameter_values_.contains(name) ? fab_core::get_variant_value<double>(parameter_values_.at(name))
+                                            : -1;
+  }
 
   void add_parameter(std::string name, CaSX value) {
     parameters_.insert_or_assign(std::move(name), std::move(value));
@@ -80,8 +105,6 @@ class FabVariables {
       parameter_values_.insert_or_assign(std::move(param_value.first), std::move(param_value.second));
     }
   }
-
-  size_t size() const { return state_variables_.size() + parameters_.size(); }
 
   template <typename T, typename TNamedMap = std::map<std::string, T>>
   static void append_variants(TNamedMap& variants1, const TNamedMap& variants2, bool overwrite = false) {

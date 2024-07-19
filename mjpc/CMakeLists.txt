@@ -126,7 +126,8 @@ set(LIB_MJPC_HEADERS
         planners/fabrics/include/leaf/fab_dynamic_attractor_leaf.h
         planners/fabrics/include/fab_forward_kinematics.h
         planners/fabrics/include/fab_planner.h
-        planners/fabrics/include/fab_planner_config.h
+        planners/fabrics/include/fab_config.h
+        planners/fabrics/include/fab_robot.h
         planners/fabrics/include/fab_speed_control.h
         estimators/estimator.h
         estimators/unscented.h

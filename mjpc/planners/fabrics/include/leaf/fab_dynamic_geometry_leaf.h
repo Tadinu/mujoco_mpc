@@ -23,6 +23,7 @@
 class FabGenericDynamicGeometryLeaf : public FabDynamicLeaf {
  public:
   FabGenericDynamicGeometryLeaf() = default;
+
   FabGenericDynamicGeometryLeaf(FabVariables parent_variables, std::string leaf_name, const int dim = 1,
                                 const int dim_ref = 1, CaSX forward_kinematics = CaSX::zeros(),
                                 const CaSXDict& reference_params = CaSXDict())
@@ -30,7 +31,7 @@ class FabGenericDynamicGeometryLeaf : public FabDynamicLeaf {
                        std::move(forward_kinematics), reference_params) {}
 
   void set_geometry(const std::function<CaSX(const CaSX& x, const CaSX& xdot)>& geometry) {
-    geom_ = FabWeightedGeometry({{"h", geometry(x_, xdot_)}, {"var", leaf_vars_}});
+    geom_ = FabGeometry({{"h", geometry(x_, xdot_)}, {"var", leaf_vars_}});
   }
 
   void set_finsler_structure(const std::function<CaSX(const CaSX& x, const CaSX& xdot)>& finsler_structure) {

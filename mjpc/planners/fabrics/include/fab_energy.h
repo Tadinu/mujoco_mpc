@@ -19,9 +19,9 @@ class FabLagrangian {
  public:
   FabLagrangian() = default;
 
-  FabLagrangian(CaSX l, const FabNamedMap<CaSX, FabVariables, FabTrajectories, FabSpectralSemiSprays,
-                                          std::vector<std::string>>& kwargs)
-      : l_(std::move(l)) {
+  FabLagrangian(const CaSX& lag, const FabNamedMap<CaSX, FabVariables, FabTrajectories, FabSpectralSemiSprays,
+                                                   std::vector<std::string>>& kwargs)
+      : l_(lag) {
     // [x_ref_name_, xdot_ref_name_, xddot_ref_name_]
     if (kwargs.contains("ref_names")) {
       const auto ref_names = *fab_core::get_arg_value<std::vector<std::string>>(kwargs, "ref_names");
@@ -48,7 +48,7 @@ class FabLagrangian {
     // [J_ref_, J_ref_inv_]
     if (kwargs.contains("J_ref")) {
       J_ref_ = *fab_core::get_arg_value<decltype(J_ref_)>(kwargs, "J_ref");
-      std::cout << "Casadi pseudo inverse is used in Lagrangian" << std::endl;
+      FAB_PRINT("Casadi pseudo inverse is used in Lagrangian");
       const auto J_ref_transpose = J_ref_.T();
       J_ref_inv_ = CaSX::mtimes(
           J_ref_transpose,
@@ -60,7 +60,7 @@ class FabLagrangian {
       H_ = *fab_core::get_arg_value<decltype(H_)>(kwargs, "hamiltonian");
       S_ = *fab_core::get_arg_value<decltype(S_)>(kwargs, "spec");
     } else {
-      applyEulerLagrange();
+      apply_euler_lagrange();
     }
   }
 
@@ -129,12 +129,13 @@ class FabLagrangian {
       all_ref_arguments = {{"ref_names", all_ref_names}, {"J_ref", J_ref}};
     }
 
-    return FabLagrangian(l_ + b.l_,
-                         {{"spec", S_ + b.S_},
-                          {"hamiltonian", H_ + b.H_},
-                          {"var", all_vars},
-                          {"ref_names", std::get<std::vector<std::string>>(all_ref_arguments["ref_names"])},
-                          {"J_ref", std::get<CaSX>(all_ref_arguments["J_ref"])}});
+    return FabLagrangian(
+        l_ + b.l_,
+        {{"spec", S_ + b.S_},
+         {"hamiltonian", H_ + b.H_},
+         {"var", all_vars},
+         {"ref_names", fab_core::get_variant_value<std::vector<std::string>>(all_ref_arguments["ref_names"])},
+         {"J_ref", fab_core::get_variant_value<CaSX>(all_ref_arguments["J_ref"])}});
   }
 
   FabLagrangian& operator+=(const FabLagrangian& b) {
@@ -142,11 +143,11 @@ class FabLagrangian {
     return *this;
   }
 
-  void applyEulerLagrange() {
+  void apply_euler_lagrange() {
     const auto dL_dxdot = CaSX::gradient(l_, xdot());
     const auto dL_dx = CaSX::gradient(l_, x());
-    const auto d2L_dxdxdot = CaSX::jacobian(dL_dx, xdot());
-    const auto d2L_dxdot2 = CaSX::jacobian(dL_dxdot, xdot());
+    auto d2L_dxdxdot = CaSX::jacobian(dL_dx, xdot());
+    auto d2L_dxdot2 = CaSX::jacobian(dL_dxdot, xdot());
     auto f_rel = CaSX::zeros(x().size().first);
     auto en_rel = CaSX::zeros(1);
 
@@ -161,14 +162,13 @@ class FabLagrangian {
       const auto f_rel2 = CaSX::mtimes(d2L_dxdotdxp, _xdot_ref);
       f_rel += f_rel1 + f_rel2;
       en_rel += CaSX::dot(dL_dxpdot, _xdot_ref);
-
-      const auto F = d2L_dxdxdot;
-      const auto M = d2L_dxdot2;
-      const auto f_e = -dL_dx;
-      const auto f = CaSX::mtimes(F.T(), xdot()) + f_e + f_rel;
-      H_ = CaSX::dot(dL_dxdot, xdot()) - l_ + en_rel;
-      S_ = decltype(S_)(M, {{"f", f}, {"var", vars_}, {"refTrajs", refTrajs_}});
     }
+    const auto F = std::move(d2L_dxdxdot);
+    auto M = std::move(d2L_dxdot2);
+    const auto f_e = -dL_dx;
+    auto f = CaSX::mtimes(F.T(), xdot()) + f_e + f_rel;
+    H_ = CaSX::dot(dL_dxdot, xdot()) - l_ + en_rel;
+    S_ = decltype(S_)(std::move(M), {{"f", std::move(f)}, {"var", vars_}, {"refTrajs", refTrajs_}});
   }
 
   void concretize() {
@@ -203,9 +203,9 @@ class FabLagrangian {
       // refTrajs.push_back(traj.pull(dm));
     }
     if (is_dynamic()) {
-      return FabLagrangian(l_subst2, {{"var", new_vars}, {"J_ref", dm.J()}, {"ref_nanes", ref_names()}});
+      return FabLagrangian(l_subst2, {{"var", new_vars}, {"J_ref", dm.J()}, {"ref_names", ref_names()}});
     } else {
-      return FabLagrangian(l_subst2, {{"var", new_vars}, {"ref_nanes", ref_names()}});
+      return FabLagrangian(l_subst2, {{"var", new_vars}, {"ref_names", ref_names()}});
     }
   }
 

@@ -28,7 +28,7 @@ class FabGeometry {
       vars_ = *fab_core::get_arg_value<decltype(vars_)>(kwargs, "var");
     } else if (kwargs.contains("s")) {
       const auto s = *fab_core::get_arg_value<FabSpectralSemiSprays>(kwargs, "s");
-      h_ = s.h();
+      h_ = s.h();  // NOTE: this uses s.vars()
       vars_ = s.vars();
     }
 

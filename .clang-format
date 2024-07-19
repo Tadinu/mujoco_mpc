@@ -2,4 +2,7 @@
 Language: Cpp
 BasedOnStyle: Google
 ColumnLimit: 110
+IndentWidth: 2
+AccessModifierOffset: -2
+TabWidth: 2
 ...

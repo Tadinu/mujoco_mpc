@@ -18,19 +18,20 @@
 #include <vector>
 
 #include "mjpc/planners/cross_entropy/planner.h"
+#include "mjpc/planners/fabrics/include/fab_planner.h"
 #include "mjpc/planners/gradient/planner.h"
 #include "mjpc/planners/ilqg/planner.h"
 #include "mjpc/planners/ilqs/planner.h"
 #include "mjpc/planners/planner.h"
+#include "mjpc/planners/rmp/include/core/rmp_space.h"
+#include "mjpc/planners/rmp/include/planner/rmp_planner.h"
 #include "mjpc/planners/robust/robust_planner.h"
 #include "mjpc/planners/sample_gradient/planner.h"
 #include "mjpc/planners/sampling/planner.h"
-#include "mjpc/planners/rmp/include/planner/rmp_planner.h"
-#include "mjpc/planners/rmp/include/core/rmp_space.h"
-#include "mjpc/planners/fabrics/include/fab_planner.h"
 
 namespace mjpc {
 const char kPlannerNames[] =
+    "Fabrics\n"
     "RMP\n"
     "Sampling\n"
     "Gradient\n"
@@ -46,14 +47,14 @@ std::vector<std::unique_ptr<mjpc::Planner>> LoadPlanners() {
   std::vector<std::unique_ptr<mjpc::Planner>> planners;
 
   // NOTE: The adding order below must match [kPlannerNames]
+  planners.emplace_back(new FabPlanner);
   planners.emplace_back(new rmp::RMPPlanner<rmp::CylindricalSpace>);
-  //planners.emplace_back(new rmp::RMPPlanner<rmp::Space<2>>);
+  // planners.emplace_back(new rmp::RMPPlanner<rmp::Space<2>>);
   planners.emplace_back(new mjpc::SamplingPlanner);
   planners.emplace_back(new mjpc::GradientPlanner);
   planners.emplace_back(new mjpc::iLQGPlanner);
   planners.emplace_back(new mjpc::iLQSPlanner);
-  planners.emplace_back(
-      new RobustPlanner(std::make_unique<mjpc::SamplingPlanner>()));
+  planners.emplace_back(new RobustPlanner(std::make_unique<mjpc::SamplingPlanner>()));
   planners.emplace_back(new mjpc::CrossEntropyPlanner);
   planners.emplace_back(new mjpc::SampleGradientPlanner);
   return planners;
