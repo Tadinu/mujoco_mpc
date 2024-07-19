@@ -105,7 +105,7 @@ class FabGeometricPrimitive {
  protected:
   std::string name_;
   CaSX position_;
-  CaSX origin_ = CaSX::eye(4);
+  CaSX origin_ = fab_math::CASX_TRANSF_IDENTITY;
   FabNamedMap<double, std::vector<double>> parameters_;
   CaSXDict sym_parameters_;
 };
@@ -139,10 +139,10 @@ class FabCapsule : public FabGeometricPrimitive {
   CaSX sym_length() const { return sym_length_; }
 
   CaSXVector center() const {
-    auto tf_origin_center_0 = CaSX::eye(4);
+    auto tf_origin_center_0 = fab_math::CASX_TRANSF_IDENTITY;
     tf_origin_center_0.set(0.5 * sym_length_, false, CaSlice(2, 3));
     const auto tf_center_0 = CaSX::mtimes(origin_, tf_origin_center_0);
-    auto tf_origin_center_1 = CaSX::eye(4);
+    auto tf_origin_center_1 = fab_math::CASX_TRANSF_IDENTITY;
     tf_origin_center_1.set(-0.5 * sym_length_, false, CaSlice(2, 3));
     const auto tf_center_1 = CaSX::mtimes(origin_, tf_origin_center_1);
     CaSX center_0, center_1;

@@ -1,19 +1,116 @@
 #pragma once
 
 #include <algorithm>
+#include <any>
 #include <casadi/casadi.hpp>
 #include <regex>
+#include <variant>
 #include <vector>
 
+// abseil
+#include "absl/strings/ascii.h"
+#include "absl/strings/str_split.h"
+
+// fabrics
 #include "mjpc/planners/fabrics/include/fab_common.h"
 
+#define FAB_PRINT(...) fab_core::print(__VA_ARGS__)
+#define FAB_PRINTDB(...) fab_core::printdb(__VA_ARGS__)
+
 namespace fab_core {
+template <typename... TArgs>
+static void print(TArgs&&... var) {
+  ((std::cout << var << " "), ...) << std::endl;
+}
+
+template <typename... TArgs>
+static void printdb(TArgs&&... var) {
+#if FAB_DEBUG
+  print(std::forward<TArgs>(var)...);
+#endif
+}
+
+template <typename... TArgs>
+static void print_variant(const FabVariant<TArgs...>& var, const std::string& var_name = "") {
+  (
+      [&]() {
+        if (const auto* var_value_ptr = std::get_if<TArgs>(&var)) {
+          const auto var_value = *var_value_ptr;
+          if (!var_name.empty()) {
+            std::cout << var_name << ": ";
+          }
+          if constexpr (std::is_same_v<TArgs, std::any>) {
+            if (var_value.has_value()) {
+              try {
+                std::cout << std::any_cast<std::string>(var_value) << std::endl;
+              } catch (const std::bad_any_cast& e) {
+              }
+            }
+          } else if constexpr (std::is_same_v<TArgs, CaSX>) {
+            std::cout << var_value << ": " << var_value.size() << std::endl;
+          } else {
+            std::cout << var_value << std::endl;
+          }
+        }
+      }(),
+      ...);
+}
+
+template <typename... TArgs>
+static void print_named_map(const FabNamedMap<TArgs...>& vars) {
+  for (const auto& [name, var] : vars) {
+    print_variant(var, name);
+  }
+}
+
+template <typename... TArgs>
+static void print_named_mapdb(const FabNamedMap<TArgs...>& vars) {
+#if FAB_DEBUG
+  print_named_map(vars);
+#endif
+}
+
+template <typename TArg, typename TMap = std::map<std::string, TArg>>
+static void print_named_map2(const TMap& map, const char* label = nullptr) {
+  if (label) print(label);
+  for (const auto& [name, val] : map) {
+    print(name, ":", val);
+  }
+}
+
+template <typename TArg, typename TMap = std::map<std::string, TArg>>
+static void print_named_map2db(const TMap& map, const char* label = nullptr) {
+#if FAB_DEBUG
+  print_named_map2(map, label);
+#endif
+}
+
+template <typename T, typename... Types>
+struct is_any_type : std::disjunction<std::is_same<T, Types>...> {};
+
+template <typename T, typename... Types>
+constexpr bool is_any() {
+  return (std::is_same_v<T, Types> || ...);
+}
+
+template <typename T>
+constexpr bool is_convertible_to_casx() {
+  return is_any<T, int, double, std::vector<int>, std::vector<double>, std::vector<std::vector<double>>,
+                CaSX>();
+}
+
 template <typename TMap>
 static std::vector<std::string> get_map_keys(const TMap& variants) {
+#if 1
   std::vector<std::string> names;
   std::transform(variants.begin(), variants.end(), std::back_inserter(names),
                  [](auto& variant) { return variant.first; });
   return names;
+#else
+  // c++20
+  auto kv = std::views::keys(variants);
+  return {kv.begin(), kv.end()};
+#endif
 }
 
 template <typename TValue, typename TMap>
@@ -29,12 +126,55 @@ static bool has_collection_element(const TCollection& collection, const T& elem)
   return std::find(collection.begin(), collection.end(), elem) != collection.end();
 }
 
-static std::string join(const std::vector<std::string> inputs, const std::string& token) {
+template <typename TCollection, class TPredicate>
+static bool has_collection_element_if(const TCollection& collection, const TPredicate& pred) {
+  return std::find_if(collection.begin(), collection.end(), pred) != collection.end();
+}
+
+template <typename T>
+static std::string join(const std::vector<T>& inputs, const std::string& delimiter = ",") {
   std::string result;
   for (const auto& str : inputs) {
-    result += str + token;
+    if constexpr (std::is_same_v<T, std::string>) {
+      result += str;
+    } else if constexpr (std::is_same_v<T, CaSX>) {
+      result += str.get_str();
+    } else {
+      result += std::to_string(str);
+    }
+    result += delimiter;
   }
-  if (const auto pos = result.find_last_of(token); pos != std::string::npos) {
+  if (const auto pos = result.find_last_of(delimiter); pos != std::string::npos) {
+    result.erase(pos);
+  }
+  return result;
+}
+
+template <typename TKey, typename TValue>
+static std::string join(const std::map<TKey, TValue>& inputs, const std::string& delimiter = ",") {
+  std::string result;
+  for (const auto& [key, val] : inputs) {
+    result += "{";
+
+    // Key
+    if constexpr (std::is_same_v<TKey, std::string>) {
+      result += key;
+    } else {
+      result += std::to_string(key);
+    }
+    result += ",";
+
+    // Value
+    if constexpr (std::is_same_v<TValue, std::string>) {
+      result += val;
+    } else if constexpr (std::is_same_v<TValue, CaSX>) {
+      result += val.get_str();
+    } else {
+      result += std::to_string(val);
+    }
+    result += "}" + delimiter + "\n";
+  }
+  if (const auto pos = result.find_last_of(delimiter); pos != std::string::npos) {
     result.erase(pos);
   }
   return result;
@@ -51,14 +191,100 @@ static const TArg* get_arg_value(const FabNamedMap<TArgs...>& kwargs, const char
   return nullptr;
 }
 
+template <typename T, typename TVariant>
+static T get_variant_value(const TVariant& variant) {
+  if (const auto* value_ptr = std::get_if<T>(&variant)) {
+    return *value_ptr;
+  }
+  return T();
+}
+
+template <typename T, typename TVariant>
+static bool get_variant_value2(const TVariant& variant, T& out) {
+  if (const auto* value_ptr = std::get_if<T>(&variant)) {
+    out = *value_ptr;
+    return true;
+  }
+  return false;
+}
+
+template <typename... TArgs>
+static std::any get_variant_value_any(const FabVariant<TArgs...>& var) {
+  std::any res;
+  (
+      [&]() {
+        if (const auto* value_ptr = std::get_if<TArgs>(&var)) {
+          res = std::any(*value_ptr);
+        }
+      }(),
+      ...);
+  return res;
+}
+
 template <typename T>
-static std::vector<T> tokenize(const std::string& text, const std::string& token) {
+static bool get_any_value(const std::any& any_var, T& out_val) {
+  try {
+    out_val = std::any_cast<T>(any_var);
+    return true;
+  } catch (const std::bad_any_cast& e) {
+    return false;
+  }
+}
+
+template <typename... TArgs>
+static FabNamedAnyMap get_named_any_map(const FabNamedMap<TArgs...>& vars) {
+  FabNamedAnyMap res;
+  for (const auto& [name, val] : vars) {
+    res.insert_or_assign(name, get_variant_value_any<TArgs...>(val));
+  }
+  return res;
+}
+
+template <typename... TArgs>
+static CaSXDict get_casx_dict(const FabNamedMap<TArgs...>& vars) {
+  CaSXDict res;
+  for (const auto& item_var : vars) {
+    (
+        [&]() {
+          const auto& name = item_var.first;
+          const auto& var = item_var.second;
+          TArgs val;
+          if (get_variant_value2<TArgs>(var, val)) {
+            res.insert_or_assign(name, CaSX(val));
+          }
+        }(),
+        ...);
+  }
+  return res;
+}
+
+template <typename... TArgs>
+static bool variant_to_casx(const FabVariant<TArgs...>& var, CaSX& out) {
+  bool res = false;
+  (
+      [&]() {
+        // std::cout << typeid(TArgs).name() << std::endl;
+        if constexpr (is_convertible_to_casx<TArgs>()) {
+          TArgs val;
+          if (get_variant_value2<TArgs>(var, val)) {
+            out = CaSX(val);
+            res = true;
+          }
+        }
+      }(),
+      ...);
+  return res;
+}
+
+template <typename T>
+static std::vector<T> tokenize(const std::string& text, const std::string& delimiter = " ") {
+#if 0
   std::vector<T> results;
   std::stringstream size_stream(text);
   bool has_token = true;
   do {
     std::string token;
-    has_token = bool(getline(size_stream, token, ' '));
+    has_token = bool(getline(size_stream, token, delimiter[0]));
     if constexpr (std::is_same_v<T, std::string>) {
       results.emplace_back(std::move(token));
     } else if constexpr (std::is_scalar_v<T>) {
@@ -68,14 +294,30 @@ static std::vector<T> tokenize(const std::string& text, const std::string& token
     }
   } while (has_token);
   return results;
+#else
+  std::vector<T> results;
+  std::vector<std::string> strings = absl::StrSplit(text, delimiter);
+  if constexpr (std::is_same_v<T, std::string>) {
+    std::transform(strings.begin(), strings.end(), std::back_inserter(results),
+                   [](auto& token) { return absl::StripAsciiWhitespace(token); });
+  } else {
+    std::transform(strings.begin(), strings.end(), std::back_inserter(results), [](auto& token) {
+      if constexpr (std::is_floating_point_v<T>) {
+        return std::stod(token);
+      } else if constexpr (std::is_scalar_v<T>) {
+        return std::stoi(token);
+      }
+    });
+  }
+#endif
 }
 
 // -----------------------------------------------------------------------------------------------------------
 // CASADI UTILS ==
 //
-static bool is_casx_sparse(const CaSX& expr) { return !CaSX::symvar(expr).empty(); }
+static bool is_casx_sparse(const CaSX& expr) { return CaSX::symvar(expr).empty(); }
 
-static CaSX casx_sym(const std::string& name) { return CaSX::sym(name, 1); }
+static CaSX casx_sym(const std::string& name, const casadi_int dim = 1) { return CaSX::sym(name, dim); }
 
 static bool is_equal_SXPair(const CaSXPair& left, const CaSXPair& right) {
   return (left.first == right.first) && CaSX::is_equal(left.second, right.second);
@@ -107,63 +349,68 @@ static bool check_compatibility(const TGeometricComponent1& a, const TGeometricC
   return true;
 }
 
-static CaSX outer_product(const CaSX& a, const CaSX& b) {
-  const auto m = a.size().first;
-  const auto A = CaSX(CaSX::repmat(a.T(), m)).T();
-  const auto B = CaSX::repmat(b.T(), m);
-  return CaSX::times(A, B);
-}
-
-static CaSX get_casx(const CaSX& a, const std::vector<casadi_int>& filtering_indices) {
+static CaSX get_casx(const CaSX& a, const std::vector<int>& filtering_indices, bool indx1 = false) {
   CaSX elem;
-  a.get(elem, false, filtering_indices);
+  if (filtering_indices.size() == 1) {
+    a.get(elem, indx1, filtering_indices[0], filtering_indices[0]);
+  } else {
+    a.get(elem, indx1, filtering_indices);
+  }
   return elem;
 }
 
-static CaSX get_casx(const CaSX& a, const casadi_int index) {
+static CaSX get_casx(const CaSX& a, const casadi_int index, bool indx1 = false) {
   CaSX elem;
-  a.get(elem, false, CaSlice(index));
+  a.get(elem, indx1, CaSlice(index));
   return elem;
 }
 
-static CaSX get_casx(const CaSX& a, const casadi_int start_idx, const casadi_int end_idx) {
+static CaSX get_casx(const CaSX& a, const std::array<casadi_int, 2>& indices, bool indx1 = false) {
   CaSX elem;
-  a.get(elem, false, CaSlice(start_idx, end_idx));
+  a.get(elem, indx1, CaSlice(indices[0], indices[1]));
   return elem;
 }
 
-static CaSX get_casx2(const CaSX& a, const casadi_int index_1, const casadi_int index_2) {
+static CaSX get_casx2(const CaSX& a, const casadi_int index_1, const casadi_int index_2, bool indx1 = false) {
   CaSX elem;
-  a.get(elem, false, CaSlice(index_1), CaSlice(index_2));
+  a.get(elem, indx1, CaSlice(index_1), CaSlice(index_2));
   return elem;
 }
 
-static CaSX get_casx2(const CaSX& a, const std::array<casadi_int, 2> index_1, const casadi_int index_2) {
+static CaSX get_casx2(const CaSX& a, const std::array<casadi_int, 2> index_1, const casadi_int index_2,
+                      bool indx1 = false) {
   CaSX elem;
-  a.get(elem, false, CaSlice(index_1[0], index_1[1]), CaSlice(index_2));
+  a.get(elem, indx1, CaSlice(index_1[0], index_1[1]), CaSlice(index_2));
   return elem;
 }
 
 static CaSX get_casx2(const CaSX& a, const std::array<casadi_int, 2> index_1,
-                      const std::array<casadi_int, 2> index_2) {
+                      const std::array<casadi_int, 2> index_2, bool indx1 = false) {
   CaSX elem;
-  a.get(elem, false, CaSlice(index_1[0], index_1[1]), CaSlice(index_2[0], index_2[1]));
+  a.get(elem, indx1, CaSlice(index_1[0], index_1[1]), CaSlice(index_2[0], index_2[1]));
   return elem;
 }
 
-static void set_casx(CaSX& a, const casadi_int index, const CaSX& b) { a.set(b, false, CaSlice(index)); }
-static void set_casx(CaSX& a, const casadi_int start_idx, const casadi_int end_idx, const CaSX& b) {
-  a.set(b, false, CaSlice(start_idx, end_idx));
+static void set_casx(CaSX& a, const casadi_int index, const CaSX& b, bool indx1 = false) {
+  a.set(b, indx1, CaSlice(index));
 }
-static void set_casx2(CaSX& a, const casadi_int index_1, const casadi_int index_2, const CaSX& b) {
-  a.set(b, false, CaSlice(index_1), CaSlice(index_2));
+
+static void set_casx(CaSX& a, const std::array<casadi_int, 2>& indices, const CaSX& b, bool indx1 = false) {
+  a.set(b, indx1, CaSlice(indices[0], indices[1]));
 }
+
+static void set_casx2(CaSX& a, const casadi_int index_1, const casadi_int index_2, const CaSX& b,
+                      bool indx1 = false) {
+  a.set(b, indx1, CaSlice(index_1), CaSlice(index_2));
+}
+
 static void set_casx2(CaSX& a, const std::array<casadi_int, 2> index_1, const casadi_int index_2,
-                      const CaSX& b) {
-  a.set(b, false, CaSlice(index_1[0], index_1[1]), CaSlice(index_2));
+                      const CaSX& b, bool indx1 = false) {
+  a.set(b, indx1, CaSlice(index_1[0], index_1[1]), CaSlice(index_2));
 }
+
 static void set_casx2(CaSX& a, const std::array<casadi_int, 2> index_1,
-                      const std::array<casadi_int, 2> index_2, const CaSX& b) {
-  a.set(b, false, CaSlice(index_1[0], index_1[1]), CaSlice(index_2[0], index_2[1]));
+                      const std::array<casadi_int, 2> index_2, const CaSX& b, bool indx1 = false) {
+  a.set(b, indx1, CaSlice(index_1[0], index_1[1]), CaSlice(index_2[0], index_2[1]));
 }
-};  // namespace fab_core
+}  // namespace fab_core
