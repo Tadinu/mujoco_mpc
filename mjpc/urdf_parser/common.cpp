@@ -1,5 +1,7 @@
 #include "mjpc/urdf_parser/include/common.h"
 
+#include "absl/strings/ascii.h"
+
 using namespace urdf;
 using namespace std;
 
@@ -10,25 +12,28 @@ Vector3 Vector3::UnitY = {0., 1., 0.};
 Vector3 Vector3::UnitZ = {0., 0., 1.};
 
 template <typename T>
-static std::vector<T> tokenize(const std::string &text, const std::string &token) {
+static std::vector<T> tokenize(const std::string& text, const std::string& token) {
   std::vector<T> results;
-  std::stringstream size_stream(text);
+  std::stringstream stream(std::string(absl::StripAsciiWhitespace(text)));
   bool has_token = true;
   do {
     std::string token;
-    has_token = bool(getline(size_stream, token, ' '));
+    has_token = bool(getline(stream, token, ' '));
+    if (token.empty()) {
+      continue;
+    }
     if constexpr (std::is_same_v<T, std::string>) {
       results.emplace_back(std::move(token));
-    } else if constexpr (std::is_scalar_v<T>) {
-      results.push_back(std::stoi(token));
     } else if constexpr (std::is_floating_point_v<T>) {
       results.push_back(std::stod(token));
+    } else if constexpr (std::is_scalar_v<T>) {
+      results.push_back(std::stoi(token));
     }
   } while (has_token);
   return results;
 }
 
-Vector3 Vector3::fromVecStr(const string &vector_str) {
+Vector3 Vector3::fromVecStr(const string& vector_str) {
   Vector3 vec;
 
   vector<string> pieces;
@@ -47,35 +52,27 @@ Vector3 Vector3::fromVecStr(const string &vector_str) {
   return vec;
 }
 
-Vector3 Vector3::operator+(const Vector3 &other) { return Vector3(x + other.x, y + other.y, z + other.z); }
+Vector3 Vector3::operator+(const Vector3& other) const { return {x + other.x, y + other.y, z + other.z}; }
+
+Vector3 Vector3::operator*(const double scale) const { return {x * scale, y * scale, z * scale}; }
 
 // ------------------- Quaternion Implementation -------------------
 Rotation Rotation::Zero = {0., 0., 0., 1.};
-void Rotation::set_rpy(double &roll, double &pitch, double &yaw) {
-  double sqw;
-  double sqx;
-  double sqy;
-  double sqz;
 
-  sqx = x * x;
-  sqy = y * y;
-  sqz = z * z;
-  sqw = w * w;
+void Rotation::set_rpy() {
+  const double sqx = x * x;
+  const double sqy = y * y;
+  const double sqz = z * z;
+  const double sqw = w * w;
 
-  roll = atan2(2 * (y * z + w * x), sqw - sqx - sqy + sqz);
-  double s = -2 * (x * z - w * y);
-  if (s <= -1.) {
-    pitch = -0.5 * M_PI;
-  } else if (s >= 1.) {
-    pitch = 0.5 * M_PI;
-  } else {
-    pitch = asin(s);
-  }
-  yaw = atan2(2 * (x * y + w * z), sqw + sqx - sqy - sqz);
+  rpy.x = atan2(2 * (y * z + w * x), sqw - sqx - sqy + sqz);
+  const double s = -2 * (x * z - w * y);
+  rpy.y = (s <= -1.) ? -M_PI_2 : (s >= 1.) ? M_PI_2 : asin(s);
+  rpy.z = atan2(2 * (x * y + w * z), sqw + sqx - sqy - sqz);
 }
 
 void Rotation::normalize() {
-  double s = sqrt(x * x + y * y + z * z + w * w);
+  const double s = sqrt(x * x + y * y + z * z + w * w);
   if (s == 0.0) {
     x = 0.0;
     y = 0.0;
@@ -87,6 +84,7 @@ void Rotation::normalize() {
     z /= s;
     w /= s;
   }
+  set_rpy();
 }
 
 Rotation Rotation::get_inverse() const {
@@ -101,10 +99,11 @@ Rotation Rotation::get_inverse() const {
     result.z = -1 * z / norm;
   }
 
+  result.set_rpy();
   return result;
 }
 
-Rotation Rotation::operator*(const Rotation &other) const {
+Rotation Rotation::operator*(const Rotation& other) const {
   Rotation result;
 
   result.x = (w * other.x) + (x * other.w) + (y * other.z) - (z * other.y);
@@ -112,10 +111,11 @@ Rotation Rotation::operator*(const Rotation &other) const {
   result.z = (w * other.z) + (x * other.y) - (y * other.x) + (z * other.w);
   result.w = (w * other.w) - (x * other.x) - (y * other.y) - (z * other.z);
 
+  result.set_rpy();
   return result;
 }
 
-Vector3 Rotation::operator*(const Vector3 &vec) const {
+Vector3 Rotation::operator*(const Vector3& vec) const {
   Rotation t;
   Vector3 result;
 
@@ -133,32 +133,31 @@ Vector3 Rotation::operator*(const Vector3 &vec) const {
   return result;
 }
 
-Rotation Rotation::fromRpy(double roll, double pitch, double yaw) {
+Rotation Rotation::fromRpy(const double roll, const double pitch, const double yaw) {
   Rotation rot;
-  double phi, the, psi;
+  rot.rpy = {roll, pitch, yaw};
 
-  phi = roll / 2.0;
-  the = pitch / 2.0;
-  psi = yaw / 2.0;
+  const double phi = 0.5 * roll;
+  const double theta = 0.5 * pitch;
+  const double psi = 0.5 * yaw;
 
-  rot.x = (sin(phi) * cos(the) * cos(psi)) - (cos(phi) * sin(the) * sin(psi));
-  rot.y = (cos(phi) * sin(the) * cos(psi)) + (sin(phi) * cos(the) * sin(psi));
-  rot.z = (cos(phi) * cos(the) * sin(psi)) - (sin(phi) * sin(the) * cos(psi));
-  rot.w = (cos(phi) * cos(the) * cos(psi)) + (sin(phi) * sin(the) * sin(psi));
+  rot.x = (sin(phi) * cos(theta) * cos(psi)) - (cos(phi) * sin(theta) * sin(psi));
+  rot.y = (cos(phi) * sin(theta) * cos(psi)) + (sin(phi) * cos(theta) * sin(psi));
+  rot.z = (cos(phi) * cos(theta) * sin(psi)) - (sin(phi) * sin(theta) * cos(psi));
+  rot.w = (cos(phi) * cos(theta) * cos(psi)) + (sin(phi) * sin(theta) * sin(psi));
 
   rot.normalize();
-
   return rot;
 };
 
-Rotation Rotation::fromRpyStr(const string &rotation_str) {
-  Vector3 rpy = Vector3::fromVecStr(rotation_str);
-  return Rotation::fromRpy(rpy.x, rpy.y, rpy.z);
+Rotation Rotation::fromRpyStr(const string& rotation_str) {
+  const Vector3 rpy = Vector3::fromVecStr(rotation_str);
+  return fromRpy(rpy.x, rpy.y, rpy.z);
 }
 
 // ------------------- Color Implementation -------------------
 
-Color Color::fromColorStr(const std::string &vector_str) {
+Color Color::fromColorStr(const std::string& vector_str) {
   std::vector<std::string> pieces;
   std::vector<float> values = tokenize<float>(vector_str, (" "));
   if (values.size() != 4) {
@@ -168,21 +167,19 @@ Color Color::fromColorStr(const std::string &vector_str) {
     throw URDFParseError(error_msg.str());
   }
 
-  return Color(values[0], values[1], values[2], values[3]);
+  return {values[0], values[1], values[2], values[3]};
 }
 
-// ------------------- Transform Implementation -------------------
+// ----------------- -- Transform Implementation -------------------
 
-Transform Transform::fromXml(TiXmlElement *xml) {
+Transform Transform::fromXml(TiXmlElement* xml) {
   Transform t;
   if (xml) {
-    const char *xyz_str = xml->Attribute("xyz");
-    if (xyz_str != NULL) {
+    if (const char* xyz_str = xml->Attribute("xyz")) {
       t.position = Vector3::fromVecStr(xyz_str);
     }
 
-    const char *rpy_str = xml->Attribute("rpy");
-    if (rpy_str != NULL) {
+    if (const char* rpy_str = xml->Attribute("rpy")) {
       t.rotation = Rotation::fromRpyStr(rpy_str);
     }
   }
