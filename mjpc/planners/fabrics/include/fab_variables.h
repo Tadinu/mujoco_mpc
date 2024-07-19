@@ -1,5 +1,6 @@
 #pragma once
 
+#include <any>
 #include <casadi/casadi.hpp>
 #include <stdexcept>
 #include <variant>
@@ -7,7 +8,7 @@
 #include "mjpc/planners/fabrics/include/fab_core_util.h"
 
 class FabVariables {
- public:
+public:
   using FabTrajectory = FabVariables;
   using FabTrajectories = std::vector<FabTrajectory>;
   FabVariables() = default;
@@ -17,6 +18,28 @@ class FabVariables {
       : state_variables_(std::move(state_variables)),
         parameters_(std::move(parameters)),
         parameter_values_(std::move(parameter_values)) {}
+
+  void print_self() const {
+    const auto self_size = size();
+    const auto vars_size = all_vars().size();
+    FAB_PRINT("TOTAL SIZE", self_size, "VARS SIZE", vars_size);
+    assert(self_size == vars_size);
+    FAB_PRINT("STATE VARS --");
+    for (const auto& [var_name, var] : state_variables_) {
+      FAB_PRINT(var_name, ":", var, var.size());
+    }
+
+    FAB_PRINT("PARAMS --");
+    for (const auto& [param_name, param] : parameters_) {
+      FAB_PRINT(param_name, ":", param, param.size());
+    }
+
+    FAB_PRINT("PARAM VALS --");
+    for (const auto& [param_val_name, param_val] : parameter_values_) {
+      FAB_PRINT(param_val_name, ":");
+      fab_core::print_variant(param_val);
+    }
+  }
 
   CaSX position_var() const {
     const auto state_variable_names = fab_core::get_map_keys(state_variables_);
@@ -34,65 +57,60 @@ class FabVariables {
     return state_var(state_variable_names[1]);
   }
 
-  CaSXDict vars() const {
+  CaSXDict all_vars() const {
     CaSXDict all;
     append_variants<CaSX>(all, state_variables_, true);
     append_variants<CaSX>(all, parameters_, true);
     return all;
   }
 
+  size_t size() const { return state_variables_.size() + parameters_.size(); }
   bool empty() const { return state_variables_.empty() && parameters_.empty(); }
 
   CaSX state_var(const std::string& name) const {
     return state_variables_.contains(name) ? state_variables_.at(name) : CaSX();
   }
 
-  CaSX parameter(const std::string& name) const {
-    return parameters_.contains(name) ? parameters_.at(name) : CaSX();
-  }
-
-  double parameter_value(const std::string& name) {
-    return parameter_values_.contains(name) ? std::get<double>(parameter_values_.at(name)) : -1;
-  }
-
   CaSXDict state_variables() const { return state_variables_; }
 
-  void add_state_variable(std::string name, CaSX value) {
-    state_variables_.insert_or_assign(std::move(name), std::move(value));
+  void add_state_variable(std::string name, const CaSX& value) {
+    state_variables_.insert_or_assign(std::move(name), value);
   }
 
   CaSXDict parameters() const { return parameters_; }
 
-  void add_parameter(std::string name, CaSX value) {
-    parameters_.insert_or_assign(std::move(name), std::move(value));
+  CaSX parameter(const std::string& name) const {
+    return parameters_.contains(name) ? parameters_.at(name) : CaSX();
   }
 
-  void add_parameters(CaSXDict params) {
-    for (auto param : std::move(params)) {
-      parameters_.insert_or_assign(std::move(param.first), std::move(param.second));
-    }
+  double parameter_value(const std::string& name) const {
+    return parameter_values_.contains(name) ? fab_core::get_variant_value<double>(parameter_values_.at(name))
+                                            : -1;
   }
+
+  void add_parameter(std::string name, const CaSX& value) {
+    parameters_.insert_or_assign(std::move(name), value);
+  }
+
+  void add_parameters(const CaSXDict& params) { append_variants<CaSX>(parameters_, params, true); }
 
   FabDoubleScalarMap parameter_values() const { return parameter_values_; }
 
-  void add_parameter_values(FabDoubleScalarMap param_values) {
-    for (auto param_value : std::move(param_values)) {
-      parameter_values_.insert_or_assign(std::move(param_value.first), std::move(param_value.second));
-    }
+  void add_parameter_values(const FabDoubleScalarMap& param_values) {
+    append_variants<FabVariant<double, std::vector<double>>>(parameter_values_, param_values, true);
   }
 
-  size_t size() const { return state_variables_.size() + parameters_.size(); }
-
   template <typename T, typename TNamedMap = std::map<std::string, T>>
-  static void append_variants(TNamedMap& variants1, const TNamedMap& variants2, bool overwrite = false) {
-    for (const auto& other_var : variants2) {
-      const auto& other_key = other_var.first;
-      const auto& other_val = other_var.second;
+  static void append_variants(TNamedMap& variants1, const TNamedMap& variants2, bool overwrite) {
+    for (const auto& [other_key, other_val] : variants2) {
       if (overwrite) {
         variants1.insert_or_assign(other_key, other_val);
       } else if constexpr (std::is_same_v<T, CaSX>) {
         if (variants1.contains(other_key)) {
           if (!CaSX::is_equal(variants1[other_key], other_val)) {
+            if (other_key == "radius_body_base_link") {
+              FAB_PRINTDB(other_key, variants1[other_key], other_val);
+            }
             std::string new_key = other_key;
             int counter = 0;
             do {
@@ -107,15 +125,11 @@ class FabVariables {
     }
   }
 
-  FabVariables operator+(const FabVariables& other) const {
-    FabVariables v = *this;
-    v += other;
-    return v;
-  }
+  FabVariables operator+(const FabVariables& other) const { return FabVariables(*this) += other; }
 
   FabVariables& operator+=(const FabVariables& other) {
-    append_variants<CaSX>(state_variables_, other.state_variables());
-    append_variants<CaSX>(parameters_, other.parameters());
+    append_variants<CaSX>(state_variables_, other.state_variables(), false);
+    append_variants<CaSX>(parameters_, other.parameters(), false);
     append_variants<std::variant<double>>(parameter_values_, other.parameter_values(), true);
     return *this;
   }
@@ -145,11 +159,12 @@ class FabVariables {
     return unique_items;
   }
 
- protected:
+protected:
   CaSXDict state_variables_;
   CaSXDict parameters_;
   FabDoubleScalarMap parameter_values_;
 };
+using FabVariablesPtr = std::shared_ptr<FabVariables>;
 
 using FabTrajectory = FabVariables::FabTrajectory;
 using FabTrajectories = FabVariables::FabTrajectories;

@@ -20,8 +20,8 @@
 #include "mjpc/task.h"
 #include "mjpc/tasks/acrobot/acrobot.h"
 #include "mjpc/tasks/allegro/allegro.h"
-#include "mjpc/tasks/bimanual/insert/insert.h"
 #include "mjpc/tasks/bimanual/handover/handover.h"
+#include "mjpc/tasks/bimanual/insert/insert.h"
 #include "mjpc/tasks/bimanual/reorient/reorient.h"
 #include "mjpc/tasks/cartpole/cartpole.h"
 #include "mjpc/tasks/fingers/fingers.h"
@@ -41,7 +41,6 @@
 #include "mjpc/tasks/walker/walker.h"
 
 namespace mjpc {
-
 std::vector<std::shared_ptr<Task>> GetTasks() {
   return {
       std::make_shared<Particle>(),
@@ -69,4 +68,4 @@ std::vector<std::shared_ptr<Task>> GetTasks() {
       std::make_shared<Walker>(),
   };
 }
-}  // namespace mjpc
+} // namespace mjpc

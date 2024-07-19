@@ -14,12 +14,13 @@
 
 #include "mjpc/task.h"
 
-#include <cstring>
-#include <mutex>
-#include <memory>
-
 #include <absl/strings/match.h>
 #include <mujoco/mujoco.h>
+
+#include <cstring>
+#include <memory>
+#include <mutex>
+
 #include "mjpc/norm.h"
 #include "mjpc/utilities.h"
 
@@ -41,8 +42,7 @@ void Task::SetFeatureParameters(const mjModel* model) {
 
   // search custom numeric in model for "residual"
   for (int i = 0; i < model->nnumeric; i++) {
-    if (absl::StartsWith(model->names + model->name_numericadr[i],
-                         "residual_")) {
+    if (absl::StartsWith(model->names + model->name_numericadr[i], "residual_")) {
       num_parameters += 1;
     }
   }
@@ -53,31 +53,25 @@ void Task::SetFeatureParameters(const mjModel* model) {
   // set values
   int shift = 0;
   for (int i = 0; i < model->nnumeric; i++) {
-    if (absl::StartsWith(model->names + model->name_numericadr[i],
-                         "residual_select_")) {
+    if (absl::StartsWith(model->names + model->name_numericadr[i], "residual_select_")) {
       parameters[shift++] = DefaultResidualSelection(model, i);
-    } else if (absl::StartsWith(model->names + model->name_numericadr[i],
-                                "residual_")) {
+    } else if (absl::StartsWith(model->names + model->name_numericadr[i], "residual_")) {
       parameters[shift++] = model->numeric_data[model->numeric_adr[i]];
     }
   }
 }
 
-BaseResidualFn::BaseResidualFn(const Task* task) : task_(task) {
-  Update();
-}
+BaseResidualFn::BaseResidualFn(const Task* task) : task_(task) { Update(); }
 
 // compute weighted cost terms
-void BaseResidualFn::CostTerms(double* terms, const double* residual,
-                               bool weighted) const {
+void BaseResidualFn::CostTerms(double* terms, const double* residual, bool weighted) const {
   int f_shift = 0;
   int p_shift = 0;
   for (int k = 0; k < num_term_; k++) {
     // running cost
     terms[k] =
         (weighted ? weight_[k] : 1) * Norm(nullptr, nullptr, residual + f_shift,
-                                           DataAt(norm_parameter_, p_shift),
-                                           dim_norm_residual_[k], norm_[k]);
+                                           DataAt(norm_parameter_, p_shift), dim_norm_residual_[k], norm_[k]);
 
     // shift residual
     f_shift += dim_norm_residual_[k];
@@ -127,8 +121,7 @@ std::unique_ptr<mjpc::AbstractResidualFn> Task::Residual() const {
   return ResidualLocked();
 }
 
-void Task::Residual(const mjModel* model, const mjData* data,
-                              double* residual) const {
+void Task::Residual(const mjModel* model, const mjData* data, double* residual) const {
   std::lock_guard<std::mutex> lock(mutex_);
   InternalResidual()->Residual(model, data, residual);
 }
@@ -193,8 +186,7 @@ void Task::Reset(const mjModel* model) {
 
   // get number of traces
   for (int i = 0; i < model->nsensor; i++) {
-    if (std::strncmp(model->names + model->name_sensoradr[i], "trace",
-                     5) == 0) {
+    if (std::strncmp(model->names + model->name_sensoradr[i], "trace", 5) == 0) {
       num_trace += 1;
     }
   }
@@ -234,10 +226,13 @@ void Task::Reset(const mjModel* model) {
 
     weight[i] = s[1];
     num_norm_parameter[i] = norm_parameter_dimension;
-    mju_copy(DataAt(norm_parameter, parameter_shift), s + 4,
-             num_norm_parameter[i]);
+    mju_copy(DataAt(norm_parameter, parameter_shift), s + 4, num_norm_parameter[i]);
     parameter_shift += num_norm_parameter[i];
   }
+
+  // Reset ray_starts, ray_ends
+  ray_starts.resize(3 * obstacles_num, 0);
+  ray_ends.resize(3 * obstacles_num, 0);
 
   // set residual parameters
   this->SetFeatureParameters(model);
@@ -251,8 +246,7 @@ void Task::CostTerms(double* terms, const double* residual) const {
   return InternalResidual()->CostTerms(terms, residual, /*weighted=*/true);
 }
 
-void Task::UnweightedCostTerms(double* terms,
-                                         const double* residual) const {
+void Task::UnweightedCostTerms(double* terms, const double* residual) const {
   std::lock_guard<std::mutex> lock(mutex_);
   return InternalResidual()->CostTerms(terms, residual, /*weighted=*/false);
 }
