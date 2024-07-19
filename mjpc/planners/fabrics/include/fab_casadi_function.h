@@ -6,6 +6,7 @@
 #include <variant>
 
 #include "mjpc/planners/fabrics/include/fab_common.h"
+#include "mjpc/planners/fabrics/include/fab_core_util.h"
 #include "mjpc/planners/fabrics/include/fab_variables.h"
 
 using FabCasadiArg =
@@ -13,51 +14,81 @@ using FabCasadiArg =
 using FabCasadiArgMap = std::map<std::string, FabCasadiArg>;
 
 class FabCasadiFunction {
- public:
+public:
   FabCasadiFunction() = default;
-  FabCasadiFunction(std::string name, const FabVariables& variables, CaSXDict expression)
-      : name_(std::move(name)), inputs_(variables.vars()), expression_(std::move(expression)) {
+
+  FabCasadiFunction(std::string name, const FabVariables& variables, CaSXDict expressions)
+      : name_(std::move(name)),
+        inputs_(variables.all_vars()),
+        expressions_(std::move(expressions)),
+        arguments_(fab_core::get_casx_dict(variables.parameter_values())) {
     create_function();
   }
 
-  std::vector<std::string> input_keys_;
+  std::vector<std::string> input_names_;
+  CaSXVector input_values_;
   std::vector<std::string> expression_names_;
-  CaSXVector list_expressions_;
-  CaSXVector input_expressions_;
-  std::map<int, float> input_sizes_;
+  CaSXVector expression_values_;
 
   void create_function() {
-    // 1- Create [list_expressions_] <- [expression_]
-    expression_names_ = fab_core::get_map_keys(expression_);
-    std::sort(expression_names_.begin(), expression_names_.end());
-    std::transform(expression_names_.begin(), expression_names_.end(), std::back_inserter(list_expressions_),
-                   [this](auto& exp_name) { return expression_[exp_name]; });
-
-    // 2- Create [input_expressions_] <- [inputs_]
-    input_keys_ = fab_core::get_map_keys(inputs_);
-    std::sort(input_keys_.begin(), input_keys_.end());
-    std::transform(input_keys_.begin(), input_keys_.end(), std::back_inserter(input_expressions_),
+#if 0
+    // 1- Create [input_names_, input_values_] <- [inputs_]
+    input_names_ = fab_core::get_map_keys(inputs_);
+    std::sort(input_names_.begin(), input_names_.end());
+    std::transform(input_names_.begin(), input_names_.end(), std::back_inserter(input_values_),
                    [this](auto& input_key) { return inputs_[input_key]; });
 
+    // 2- Create [expression_names_, expression_values_] <- [expressions_]
+    expression_names_ = fab_core::get_map_keys(expressions_);
+    std::sort(expression_names_.begin(), expression_names_.end());
+    std::transform(expression_names_.begin(), expression_names_.end(), std::back_inserter(expression_values_),
+                   [this](auto& exp_name) { return expressions_[exp_name]; });
+#else
+    // 1- Create [input_values_] <- [inputs_]
+    input_names_ = fab_core::get_map_keys(inputs_);
+    input_values_ = fab_core::get_map_values<CaSX>(inputs_);
+    FAB_PRINTDB("INPUTS", input_names_.size(), input_values_.size());
+
+    // 2- Create [expression_values_] <- [expressions_]
+    expression_names_ = fab_core::get_map_keys(expressions_);
+    expression_values_ = fab_core::get_map_values<CaSX>(expressions_);
+    FAB_PRINTDB("EXPRESSIONS", expression_names_.size(), expression_values_.size());
+#endif
+
     // 3- Create [function_]
-    function_ = casadi::Function(name_, input_expressions_, list_expressions_);
+    FAB_PRINTDB("CREATE FUNCTION", input_values_.size(), expression_values_.size());
+    FAB_PRINTDB("INPUT VALUES", fab_core::join(input_values_), ",");
+    function_ = CaFunction(name_, input_values_, expression_values_, input_names_, expression_names_
+                           /*, {{"allow_free", true}}*/);
   }
 
-  casadi::Function function() const { return function_; }
+  CaFunction function() const { return function_; }
+
+  void print_self() const {
+    FAB_PRINT(name_);
+    FAB_PRINT(input_values_);
+    FAB_PRINT(expression_values_);
+  }
 
   CaSXDict evaluate(const FabCasadiArgMap& kwargs) {
-    auto fill_arg = [this](const std::string& arg_name, const FabCasadiArg& arg_value,
-                           const std::vector<std::string>& arg_name_list) {
-      if ((arg_name == arg_name_list[0]) || (arg_name == arg_name_list[1])) {
-        if (const auto* arg_values_ptr = std::get_if<std::vector<double>>(&arg_value)) {
-          for (auto i = 0; i < arg_values_ptr->size(); ++i) {
-            arguments_.insert_or_assign(std::string(arg_name_list[0]) + "_" + std::to_string(i),
-                                        (*arg_values_ptr)[i]);
-          }
+    // Process arguments
+    FAB_PRINTDB("KWARGS", kwargs.size());
+    fab_core::print_named_mapdb(kwargs);
+    FAB_PRINTDB("----------------");
+    // arguments_.clear();
+    auto fill_arg = [this](const std::string& arg_name, const FabCasadiArg& arg,
+                           const std::vector<std::string>& arg_prefix_name_list) {
+      const bool bArg_matched =
+          arg_prefix_name_list.empty() ||
+          fab_core::has_collection_element_if(
+              arg_prefix_name_list, [&arg_name](const auto& prefix) { return arg_name.starts_with(prefix); });
+      if (bArg_matched) {
+        CaSX arg_val;
+        if (fab_core::variant_to_casx(arg, arg_val)) {
+          arguments_.insert_or_assign(arg_name, arg_val);
         }
-        return true;
       }
-      return false;
+      return bArg_matched;
     };
 
     for (const auto& [arg_name, arg_value] : kwargs) {
@@ -69,64 +100,50 @@ class FabCasadiFunction {
       } else if (fill_arg(arg_name, arg_value, {"radius_obst_dynamic", "radius_obsts_dynamic"})) {
       } else if (fill_arg(arg_name, arg_value, {"x_obst_cuboid", "x_obsts_cuboid"})) {
       } else if (fill_arg(arg_name, arg_value, {"size_obst_cuboid", "size_obsts_cuboid"})) {
-      } else if ((arg_name == "radius_body") || (arg_name == "links")) {
-        std::vector<std::string> body_size_intputs;
-        std::transform(
-            input_keys_.begin(), input_keys_.end(), std::back_inserter(body_size_intputs),
-            [](auto& input_key) { return (input_key.rfind("radius_body", 0) == 0) ? input_key : ""; });
-        for (const auto& body_size_input : body_size_intputs) {
+      } else if (arg_name.starts_with("radius_body") || arg_name.starts_with("links")) {
+        std::vector<std::string> body_size_input_keys;
+        std::copy_if(input_names_.begin(), input_names_.end(), std::back_inserter(body_size_input_keys),
+                     [](auto& input_key) { return input_key.starts_with("radius_body"); });
+
+        for (const auto& body_size_key : body_size_input_keys) {
           if (const auto* arg_values = std::get_if<std::map<int, double>>(&arg_value)) {
-            for (const auto& [link_nr, body_radius] : *arg_values) {
-              if (body_size_input.find(std::to_string(link_nr)) != std::string::npos) {
-                arguments_.insert_or_assign(body_size_input, body_radius);
+            for (const auto& [link_no, body_radius] : *arg_values) {
+              if (body_size_key.find(std::to_string(link_no)) != std::string::npos) {
+                arguments_.insert_or_assign(body_size_key, body_radius);
               }
             }
           }
         }
-      } else if (const auto* arg_value_ptr = std::get_if<double>(&arg_value)) {
-        arguments_.insert_or_assign(arg_name, *arg_value_ptr);
+      } else {
+        fill_arg(arg_name, arg_value, {});
       }
     }
+    fab_core::print_named_map2db<CaSX>(arguments_, "ARGUMENTS");
+    FAB_PRINTDB("----------------");
 
-    // Inputs
-    std::vector<double> inputs;
-    for (const auto& input_key : input_keys_) {
-      if (arguments_.contains(input_key)) {
-        inputs.push_back(std::get<double>(arguments_[input_key]));
-      }
-    }
-
-    // Evaluate
+    // Evaluate, invoking [function_(inputs)]
     // Example:
     // auto v1_dm = casadi::DM({1,2,3,4,5});
     // auto v2_dm = casadi::DM({5,4,3,2,1});
     // const auto &result = f_(std::vector<casadi::DM>{{v1_dm}, {v2_dm}});
-    const auto list_array_outputs = function_(casadi::DMVector{inputs});
-    CaSXDict outputs;
-    if constexpr (std::is_same_v<decltype(list_array_outputs), casadi::DM>) {
-      outputs.insert_or_assign(fab_core::get_map_keys(expression_)[0], list_array_outputs);
-      return outputs;
-    }
-
-    for (auto i = 0; i < expression_names_.size(); ++i) {
-      const auto& expression_name = expression_names_[i];
-      const auto& raw_output = list_array_outputs[i];
-      const auto raw_output_size = raw_output.size();
-      if ((raw_output_size == decltype(raw_output_size){1, 1}) || (raw_output_size.second == 1)) {
-        casadi::Matrix<double> m;
-        raw_output.get(m, true, casadi::Slice(0));
-        outputs.insert_or_assign(expression_name, m);
-      } else {
-        outputs.insert_or_assign(expression_name, raw_output);
+    CaSXDict outputs = function_(arguments_);
+    FAB_PRINTDB("OUTPUTS", outputs);
+    for (auto& [name, val] : outputs) {
+      const auto val_size = val.size();
+      if ((val_size == decltype(val_size){1, 1}) || (val_size.second == 1)) {
+        val = fab_core::get_casx2(
+            val, {std::numeric_limits<casadi_int>::min(), std::numeric_limits<casadi_int>::max()}, 0);
       }
     }
     return outputs;
   }
 
- protected:
+protected:
   std::string name_;
   CaSXDict inputs_;
-  CaSXDict expression_;
-  FabNamedMap<double, std::vector<double>> arguments_;
-  casadi::Function function_;
+  CaSXDict expressions_;
+  CaSXDict arguments_;
+  CaFunction function_;
 };
+
+using FabCasadiFunctionPtr = std::shared_ptr<FabCasadiFunction>;

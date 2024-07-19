@@ -13,49 +13,57 @@
 enum class FabRobotBaseType : uint8_t { DIFF_DRIVE, HOLONOMIC };
 
 class FabForwardKinematics {
- public:
+public:
   virtual CaSX casadi(const CaSX& q, const FabVariant<int, std::string>& child_link,
-                      const FabVariant<int, std::string>& parent_link = FabVariant<int, std::string>(),
-                      CaSX link_transf = CaSX::eye(4), bool position_only = false) {
-    return CaSX();
+                      const FabVariant<int, std::string>& parent_link = {},
+                      const CaSX& link_transf = fab_math::CASX_TRANSF_IDENTITY, bool position_only = false) {
+    return {};
   }
 
   virtual int n() { return n_; }
 
- protected:
+protected:
   int n_ = 0;
-  CaSX mount_transformation_ = CaSX::eye(4);
+  CaSX mount_transformation_ = fab_math::CASX_TRANSF_IDENTITY;
 };
 
+using FabForwardKinematicsPtr = std::shared_ptr<FabForwardKinematics>;
+
 class FabURDFForwardKinematics : public FabForwardKinematics {
- public:
+public:
   FabURDFForwardKinematics() = default;
 
-  FabURDFForwardKinematics(const std::string& urdf_file, const std::string& root_link_name,
-                           const std::vector<std::string> endtip_names,
+  FabURDFForwardKinematics(std::string urdf_file, std::string base_link_name,
+                           std::vector<std::string> endtip_names,
                            const FabRobotBaseType base_type = FabRobotBaseType::HOLONOMIC)
-      : urdf_file_(urdf_file),
-        root_link_name_(root_link_name),
-        endtip_names_(endtip_names),
+      : urdf_file_(std::move(urdf_file)),
+        base_link_name_(std::move(base_link_name)),
+        endtip_names_(std::move(endtip_names)),
         base_type_(base_type) {
-    read_urdf();
-    // n_ = robot.degrees_of_freedom();
+    assert(read_urdf());
+    n_ = robot_model_.get_dof();
     q_ca_ = CaSX::sym("q", n_);
-    if (base_type == FabRobotBaseType::DIFF_DRIVE) {
+    if (FabRobotBaseType::DIFF_DRIVE == base_type) {
       q_base_ = CaSX::sym("q_base", 3);
-      generate_functions();
+      compose_functions();
     }
   }
 
-  int n() override { return (base_type_ == FabRobotBaseType::DIFF_DRIVE) ? (n_ + 3) : n_; }
+  int n() override { return (FabRobotBaseType::DIFF_DRIVE == base_type_) ? (n_ + 3) : n_; }
 
-  void read_urdf() { robot_model_.fromUrdfFile(urdf_file_); }
+  bool read_urdf() {
+    robot_model_.base_link_name = base_link_name_;
+    robot_model_.endtip_names = endtip_names_;
+    // TODO: TAKE FROM PARAM
+    robot_model_.actuated_joint_types = {urdf::JointType::PRISMATIC};
+    return robot_model_.fromUrdfFile(urdf_file_);
+  }
 
-  void generate_functions() {
+  void compose_functions() {
     fks_.clear();
     for (const auto& link : robot_model_.get_links()) {
       CaSX q;
-      if (base_type_ == FabRobotBaseType::DIFF_DRIVE) {
+      if (FabRobotBaseType::DIFF_DRIVE == base_type_) {
         q = CaSX::vertcat({q_base_, q_ca_});
       } else {
         q = q_ca_;
@@ -66,9 +74,9 @@ class FabURDFForwardKinematics : public FabForwardKinematics {
 
   // Returns the forward kinematics as a casadi function
   CaSX get_robot_fk(const std::string& base_name, const std::string& endtip_name, const CaSX& q,
-                    const CaSX& link_transf = CaSX::eye(4)) {
+                    const CaSX& link_transf = fab_math::CASX_TRANSF_IDENTITY) {
     const auto joint_list = robot_model_.get_joints(robot_model_.root_link->name, endtip_name);
-    auto T_fk = CaSX::eye(4);
+    auto T_fk = fab_math::CASX_TRANSF_IDENTITY;
     for (const auto& joint : joint_list) {
       const auto& joint_transf = joint->parent_to_joint_transform;
 
@@ -81,20 +89,26 @@ class FabURDFForwardKinematics : public FabForwardKinematics {
         } break;
 
         case urdf::JointType::PRISMATIC: {
-          const CaSX axis = (joint->axis == urdf::Vector3::Zero) ? CaSX(urdf::Vector3::UnitX.to_vector())
-                                                                 : CaSX(joint->axis.to_vector());
+          const urdf::Vector3 axis =
+              (joint->axis == urdf::Vector3::Zero) ? urdf::Vector3::UnitX : joint->axis;
           const auto joint_frame = fab_math::prismatic(
-              xyz, rpy, joint->axis, fab_core::get_casx(q, robot_model_.joint_name_map[joint->name]));
+              xyz, rpy, axis, fab_core::get_casx(q, robot_model_.joint_name_map[joint->name]));
+
+#if 0
+          FAB_PRINTDB("AXIS", axis.to_string());
+          FAB_PRINTDB("JOINT FRAME", joint_frame, xyz.to_string(), rpy.to_string(),
+                            robot_model_.joint_name_map[joint->name],
+                            fab_core::get_casx(q, robot_model_.joint_name_map[joint->name]));
+#endif
           T_fk = CaSX::mtimes(T_fk, joint_frame);
         } break;
 
         case urdf::JointType::REVOLUTE:
         case urdf::JointType::CONTINUOUS: {
-          CaSX axis = (joint->axis == urdf::Vector3::Zero) ? CaSX(urdf::Vector3::UnitX.to_vector())
-                                                           : CaSX(joint->axis.to_vector());
-          axis = (1. / CaSX::norm_1(axis)) * axis;
+          urdf::Vector3 axis = (joint->axis == urdf::Vector3::Zero) ? urdf::Vector3::UnitX : joint->axis;
+          axis = double((1. / CaSX::norm_2(axis.to_vector())).scalar()) * axis;
           const auto joint_frame = fab_math::revolute(
-              xyz, rpy, joint->axis, fab_core::get_casx(q, robot_model_.joint_name_map[joint->name]));
+              xyz, rpy, axis, fab_core::get_casx(q, robot_model_.joint_name_map[joint->name]));
           T_fk = CaSX::mtimes(T_fk, joint_frame);
         } break;
 
@@ -102,27 +116,28 @@ class FabURDFForwardKinematics : public FabForwardKinematics {
           break;
       }
     }
-
     return CaSX::mtimes(T_fk, link_transf);
   }
 
   CaSX casadi(const CaSX& q, const FabVariant<int, std::string>& child_link,
-              const FabVariant<int, std::string>& parent_link = FabVariant<int, std::string>(),
-              CaSX link_transf = CaSX::eye(4), bool position_only = false) override {
-    std::string parent_link_name = std::get<std::string>(parent_link);
+              const FabVariant<int, std::string>& parent_link = {},
+              const CaSX& link_transf = fab_math::CASX_TRANSF_IDENTITY, bool position_only = false) override {
+    auto parent_link_name = fab_core::get_variant_value<std::string>(parent_link);
     if (parent_link_name.empty()) {
-      parent_link_name = root_link_name_;
+      parent_link_name = base_link_name_;
     }
 
-    const std::string child_link_name = std::get<std::string>(child_link);
+    const auto child_link_name = fab_core::get_variant_value<std::string>(child_link);
     if (!robot_model_.get_link(child_link_name)) {
-      throw FabError(child_link_name + " :Link not found in URDF model");
+      throw FabError(child_link_name + " :Link not found in URDF model " + robot_model_.name);
     }
 
     CaSX fk;
     if (base_type_ == FabRobotBaseType::DIFF_DRIVE) {
-      fk = get_robot_fk(parent_link_name, child_link_name,
-                        fab_core::get_casx(q, 2, std::numeric_limits<casadi_int>::max()), link_transf);
+      fk = get_robot_fk(
+          parent_link_name, child_link_name,
+          fab_core::get_casx(q, std::array<casadi_int, 2>{2, std::numeric_limits<casadi_int>::max()}),
+          link_transf);
       const CaSX q_2 = fab_core::get_casx(q, 2);
       const CaSX c = CaSX::cos(q_2);
       const CaSX s = CaSX::sin(q_2);
@@ -137,15 +152,20 @@ class FabURDFForwardKinematics : public FabForwardKinematics {
       fk = get_robot_fk(parent_link_name, child_link_name, q, link_transf);
       fk = CaSX::mtimes(mount_transformation_, fk);
     }
+
+    if (position_only) {
+      fk = fab_core::get_casx2(fk, {0, 3}, 3);
+    }
+
     return fk;
   }
 
- protected:
+protected:
   urdf::UrdfModel robot_model_;
   std::string urdf_file_;
   CaSX q_ca_;
   CaSX q_base_;
-  std::string root_link_name_;
+  std::string base_link_name_;
   std::vector<std::string> endtip_names_;
   FabRobotBaseType base_type_;
   std::map<std::string, CaFunction> fks_;

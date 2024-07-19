@@ -14,44 +14,49 @@
 #include "mjpc/planners/fabrics/include/leaf/fab_leaf.h"
 
 class FabGenericGeometryLeaf : public FabLeaf {
- public:
+public:
   FabGenericGeometryLeaf() = default;
-  FabGenericGeometryLeaf(FabVariables parent_vars, std::string leaf_name, CaSX phi = CaSX())
-      : FabLeaf(std::move(parent_vars), std::move(leaf_name), std::move(phi)) {}
+
+  FabGenericGeometryLeaf(FabVariablesPtr parent_vars, std::string leaf_name, const CaSX& phi = CaSX())
+      : FabLeaf(std::move(parent_vars), std::move(leaf_name), phi) {}
 
   void set_geometry(const std::function<CaSX(const CaSX& x, const CaSX& xdot)>& geometry) {
+    // TODO
     // new_parameters, h_geometry = parse_symbolic_input(geometry, x, xdot, name=self._leaf_name)
     // self._parent_variables.add_parameters(new_parameters)
-    geom_ = FabWeightedGeometry({{"h", geometry(x_, xdot_)}, {"var", leaf_vars_}});
+    geom_ = std::make_shared<FabGeometry>(FabGeometryArgs{{"h", geometry(x_, xdot_)}, {"var", leaf_vars_}});
   }
 
   void set_finsler_structure(const std::function<CaSX(const CaSX& x, const CaSX& xdot)>& finsler_structure) {
+    // TODO
     // new_parameters, lagrangian_geometry = parse_symbolic_input(finsler_structure, x_, xdot_,
     // name=self._leaf_name) self._parent_variables.add_parameters(new_parameters)
-    lag_ = FabLagrangian(finsler_structure(x_, xdot_), {{"var", leaf_vars_}});
+    lag_ =
+        std::make_shared<FabLagrangian>(finsler_structure(x_, xdot_), FabLagrangianArgs{{"var", leaf_vars_}});
   }
 };
 
 class FabAvoidanceLeaf : public FabGenericGeometryLeaf {
- public:
-  FabAvoidanceLeaf(FabVariables parent_vars, std::string leaf_name, CaSX phi = CaSX())
-      : FabGenericGeometryLeaf(std::move(parent_vars), std::move(leaf_name), std::move(phi)) {}
+public:
+  FabAvoidanceLeaf(FabVariablesPtr parent_vars, std::string leaf_name, const CaSX& phi = CaSX())
+      : FabGenericGeometryLeaf(std::move(parent_vars), std::move(leaf_name), phi) {}
 };
 
 class FabLimitLeaf : public FabGenericGeometryLeaf {
- public:
-  FabLimitLeaf(const FabVariables& parent_vars, const int joint_index, const double limit,
+public:
+  FabLimitLeaf(const FabVariablesPtr& parent_vars, const int joint_index, const double limit,
                const int limit_index)
       : FabGenericGeometryLeaf(
             parent_vars,
             (std::string("limit_joint_") + std::to_string(joint_index) + "_" + std::to_string(limit_index)) +
                 "_leaf",
-            ((limit_index == 0)   ? (fab_core::get_casx(parent_vars.position_var(), joint_index) - limit)
-             : (limit_index == 1) ? (limit - fab_core::get_casx(parent_vars.position_var(), joint_index))
+            ((limit_index == 0)   ? (fab_core::get_casx(parent_vars->position_var(), joint_index) - limit)
+             : (limit_index == 1) ? (limit - fab_core::get_casx(parent_vars->position_var(), joint_index))
                                   : CaSX())) {
     set_forward_map();
   }
 
+private:
   void set_forward_map() {
     diffmap_ = std::make_shared<FabDifferentialMap>(forward_kinematics_, parent_vars_);
   }
@@ -62,24 +67,24 @@ class FabLimitLeaf : public FabGenericGeometryLeaf {
  * This leaf is not parameterized as it is not changing at runtimeself.
  */
 class FabSelfCollisionLeaf : public FabGenericGeometryLeaf {
- public:
+public:
   FabSelfCollisionLeaf() = default;
 
-  FabSelfCollisionLeaf(FabVariables parent_vars, CaSX fk, const std::string& collision_link_1_name,
+  FabSelfCollisionLeaf(FabVariablesPtr parent_vars, const CaSX& fk, const std::string& collision_link_1_name,
                        const std::string& collision_link_2_name)
       : FabGenericGeometryLeaf(
-            std::move(parent_vars),
-            std::string("self_collision_") + collision_link_1_name + "_" + collision_link_2_name,
-            std::move(fk)) {
+            parent_vars, std::string("self_collision_") + collision_link_1_name + "_" + collision_link_2_name,
+            fk) {
     set_forward_map(collision_link_1_name, collision_link_2_name);
   }
 
+private:
   void set_forward_map(const std::string& collision_link_1_name, const std::string& collision_link_2_name) {
     const auto radius_body_1_name = std::string("radius_body_") + collision_link_1_name;
     const auto radius_body_2_name = std::string("radius_body_") + collision_link_2_name;
     const CaSX radius_body_1_var = get_parent_var_param(radius_body_1_name, 1);
     const CaSX radius_body_2_var = get_parent_var_param(radius_body_2_name, 1);
-    parent_vars_.add_parameters(
+    parent_vars_->add_parameters(
         {{radius_body_1_name, radius_body_1_var}, {radius_body_2_name, radius_body_2_var}});
     auto phi = CaSX::norm_2(forward_kinematics_) / (radius_body_1_var + radius_body_2_var) - 1;
     diffmap_ = std::make_shared<FabDifferentialMap>(std::move(phi), parent_vars_);
@@ -93,16 +98,17 @@ class FabSelfCollisionLeaf : public FabGenericGeometryLeaf {
  * to the constructor.
  */
 class FabObstacleLeaf : public FabGenericGeometryLeaf {
- public:
+public:
   FabObstacleLeaf() = default;
 
-  FabObstacleLeaf(FabVariables parent_vars, CaSX fk, const std::string& obstacle_name,
+  FabObstacleLeaf(FabVariablesPtr parent_vars, const CaSX& fk, const std::string& obstacle_name,
                   const std::string& collision_link_name)
       : FabGenericGeometryLeaf(std::move(parent_vars), obstacle_name + "_" + collision_link_name + "_leaf",
-                               std::move(fk)) {
+                               fk) {
     set_forward_map(obstacle_name, collision_link_name);
   }
 
+private:
   void set_forward_map(const std::string& obstacle_name, const std::string& collision_link_name) {
     const auto radius_obstacle_name = std::string("radius_") + obstacle_name;
     const CaSX radius_obstacle_var = get_parent_var_param(radius_obstacle_name, 1);
@@ -117,7 +123,7 @@ class FabObstacleLeaf : public FabGenericGeometryLeaf {
     geom_params_ = {{reference_name, reference_var},
                     {radius_obstacle_name, radius_obstacle_var},
                     {radius_body_name, radius_body_var}};
-    parent_vars_.add_parameters(geom_params_);
+    parent_vars_->add_parameters(geom_params_);
 
 #if 1
     const auto& sphere_1_pos_var = reference_var;
@@ -129,9 +135,6 @@ class FabObstacleLeaf : public FabGenericGeometryLeaf {
                                                              radius_body_var, radius_var);
 #endif
   }
-
- protected:
-  CaSXDict geom_params_;
 };
 
 /*
@@ -150,88 +153,92 @@ class FabObstacleLeaf : public FabGenericGeometryLeaf {
  * At runtime, one has to specify phi and d phi / d x.
  */
 class FabESDFGeometryLeaf : public FabGenericGeometryLeaf {
- public:
+public:
   FabESDFGeometryLeaf() = default;
 
-  FabESDFGeometryLeaf(FabVariables parent_vars, std::string collision_link_name, CaSX collision_fk)
+  FabESDFGeometryLeaf(FabVariablesPtr parent_vars, std::string collision_link_name, const CaSX& collision_fk)
       : FabGenericGeometryLeaf(std::move(parent_vars), std::string("esdf_leaf_") + collision_link_name,
                                CaSX::sym(std::string("esdf_phi_") + collision_link_name, 1)),
         collision_link_name_(std::move(collision_link_name)),
-        collision_fk_(std::move(collision_fk)) {
+        collision_fk_(collision_fk) {
     set_forward_map();
   }
 
+private:
   void set_forward_map() {
-    const CaSX q = parent_vars_.position_var();
+    const CaSX q = parent_vars_->position_var();
     const CaSX J_collision_link = CaSX::jacobian(collision_fk_, q);
     const CaSX J_esdf = CaSX::sym(std::string("esdf_J_") + collision_link_name_, 3).T();
 
     CaSX J = CaSX::mtimes(J_esdf, J_collision_link);
     CaSX Jdot_esdf = CaSX::sym(std::string("esdf_Jdot_") + collision_link_name_, q.size().first).T();
     const auto radius_body_name = std::string("radius_body_") + collision_link_name_;
-    CaSXDict explicit_jacobians = {{std::string("esdf_phi_") + collision_link_name_, forward_kinematics_},
-                                   {std::string("esdf_J_") + collision_link_name_, J_esdf},
-                                   {std::string("esdf_Jdot_") + collision_link_name_, Jdot_esdf}};
-    parent_vars_.add_parameters(std::move(explicit_jacobians));
+    const CaSXDict explicit_jacobians = {
+        {std::string("esdf_phi_") + collision_link_name_, forward_kinematics_},
+        {std::string("esdf_J_") + collision_link_name_, J_esdf},
+        {std::string("esdf_Jdot_") + collision_link_name_, Jdot_esdf}};
+    parent_vars_->add_parameters(explicit_jacobians);
 
     const CaSX radius_body_var = get_parent_var_param(radius_body_name, 1);
-    parent_vars_.add_parameters({{radius_body_name, radius_body_var}});
+    parent_vars_->add_parameters({{radius_body_name, radius_body_var}});
 
     CaSX phi_reduced = forward_kinematics_ - radius_body_var;
     diffmap_ = std::make_shared<FabExplicitDifferentialMap>(
         std::move(phi_reduced), parent_vars_,
-        FabNamedMap<bool, CaSX>{{"J", std::move(J)}, {"Jdot", std::move(Jdot_esdf)}});
+        FabDiffMapArg{{"J", std::move(J)}, {"Jdot", std::move(Jdot_esdf)}});
   }
 
- protected:
+protected:
   std::string collision_link_name_;
   CaSX collision_fk_;
 };
 
 class FabPlaneConstraintGeometryLeaf : public FabGenericGeometryLeaf {
- public:
+public:
   FabPlaneConstraintGeometryLeaf() = default;
 
-  FabPlaneConstraintGeometryLeaf(FabVariables parent_vars, std::string constraint_name,
-                                 std::string collision_link_name, CaSX collision_fk)
+  FabPlaneConstraintGeometryLeaf(FabVariablesPtr parent_vars, std::string constraint_name,
+                                 std::string collision_link_name, const CaSX& collision_fk)
       : FabGenericGeometryLeaf(std::move(parent_vars), collision_link_name + "_" + constraint_name,
                                collision_fk),
         constraint_name_(std::move(constraint_name)),
         collision_link_name_(std::move(collision_link_name)),
-        collision_fk_(std::move(collision_fk)) {
+        collision_fk_(collision_fk) {
     set_forward_map();
   }
 
+private:
   void set_forward_map() {
-    const CaSX q = parent_vars_.position_var();
+    const CaSX q = parent_vars_->position_var();
     const auto radius_body_name = std::string("radius_body_") + collision_link_name_;
     const CaSX radius_body_var = get_parent_var_param(radius_body_name, 1);
     const CaSX constraint_var = get_parent_var_param(constraint_name_, 4);
 
-    parent_vars_.add_parameters({{radius_body_name, radius_body_var}, {constraint_name_, constraint_var}});
+    parent_vars_->add_parameters({{radius_body_name, radius_body_var}, {constraint_name_, constraint_var}});
     diffmap_ = std::make_shared<FabParameterizedPlaneConstraintMap>(parent_vars_, forward_kinematics_,
                                                                     constraint_var, radius_body_var);
   }
 
- protected:
+protected:
   std::string constraint_name_;
   std::string collision_link_name_;
   CaSX collision_fk_;
 };
 
 class FabCapsuleSphereLeaf : public FabGenericGeometryLeaf {
- public:
+public:
   FabCapsuleSphereLeaf() = default;
 
-  FabCapsuleSphereLeaf(FabVariables parent_vars, std::string capsule_name, std::string sphere_name,
-                       CaSX capsule_center_1, CaSX capsule_center_2)
+  FabCapsuleSphereLeaf(FabVariablesPtr parent_vars, std::string capsule_name, std::string sphere_name,
+                       const CaSX& capsule_center_1, const CaSX& capsule_center_2)
       : FabGenericGeometryLeaf(std::move(parent_vars), capsule_name + "_" + sphere_name + "_leaf"),
         capsule_name_(std::move(capsule_name)),
         sphere_name_(std::move(sphere_name)),
-        capsule_centers_({std::move(capsule_center_1), std::move(capsule_center_2)}) {
+        capsule_centers_({capsule_center_1, capsule_center_2}) {
     set_forward_map();
   }
 
+private:
   void set_forward_map() {
     auto capsule_radius_name = std::string("radius_") + capsule_name_;
     const CaSX capsule_radius_var = get_parent_var_param(capsule_radius_name, 1);
@@ -243,7 +250,7 @@ class FabCapsuleSphereLeaf : public FabGenericGeometryLeaf {
     const auto obstacle_dim = capsule_centers_[0].size().first;
     const CaSX sphere_center_var = get_parent_var_param(sphere_center_name, obstacle_dim);
 
-    parent_vars_.add_parameters({
+    parent_vars_->add_parameters({
         {std::move(sphere_radius_name), sphere_radius_var},
         {std::move(capsule_radius_name), capsule_radius_var},
         {std::move(sphere_center_name), sphere_center_var},
@@ -253,25 +260,26 @@ class FabCapsuleSphereLeaf : public FabGenericGeometryLeaf {
                                                      capsule_radius_var, sphere_radius_var);
   }
 
- protected:
+protected:
   std::string capsule_name_;
   std::string sphere_name_;
   std::vector<CaSX> capsule_centers_;
 };
 
 class FabCapsuleCuboidLeaf : public FabGenericGeometryLeaf {
- public:
+public:
   FabCapsuleCuboidLeaf() = default;
 
-  FabCapsuleCuboidLeaf(FabVariables parent_vars, std::string capsule_name, std::string cuboid_name,
-                       CaSX capsule_center_1, CaSX capsule_center_2)
+  FabCapsuleCuboidLeaf(FabVariablesPtr parent_vars, std::string capsule_name, std::string cuboid_name,
+                       const CaSX& capsule_center_1, const CaSX& capsule_center_2)
       : FabGenericGeometryLeaf(std::move(parent_vars), capsule_name + "_" + cuboid_name + "_leaf"),
         capsule_name_(std::move(capsule_name)),
         cuboid_name_(std::move(cuboid_name)),
-        capsule_centers_({std::move(capsule_center_1), std::move(capsule_center_2)}) {
+        capsule_centers_({capsule_center_1, capsule_center_2}) {
     set_forward_map();
   }
 
+private:
   void set_forward_map() {
     auto capsule_radius_name = std::string("radius_") + capsule_name_;
     const CaSX capsule_radius_var = get_parent_var_param(capsule_radius_name, 1);
@@ -283,7 +291,7 @@ class FabCapsuleCuboidLeaf : public FabGenericGeometryLeaf {
     auto cuboid_center_name = std::string("x_") + cuboid_name_;
     const CaSX cuboid_center_var = get_parent_var_param(cuboid_center_name, cuboid_dim);
 
-    parent_vars_.add_parameters({
+    parent_vars_->add_parameters({
         {std::move(cuboid_size_name), cuboid_size_var},
         {std::move(capsule_radius_name), capsule_radius_var},
         {std::move(cuboid_center_name), cuboid_center_var},
@@ -293,7 +301,7 @@ class FabCapsuleCuboidLeaf : public FabGenericGeometryLeaf {
                                                      capsule_radius_var, cuboid_size_var);
   }
 
- protected:
+protected:
   std::string capsule_name_;
   std::string cuboid_name_;
   std::vector<CaSX> capsule_centers_;
@@ -303,16 +311,17 @@ class FabCapsuleCuboidLeaf : public FabGenericGeometryLeaf {
  * Leaf for geometry of a cuboid (3D) obstacle with respect to the collision sphere
  */
 class FabSphereCuboidLeaf : public FabGenericGeometryLeaf {
- public:
+public:
   FabSphereCuboidLeaf() = default;
 
-  FabSphereCuboidLeaf(FabVariables parent_vars, CaSX fk, const std::string& obstacle_name,
+  FabSphereCuboidLeaf(FabVariablesPtr parent_vars, const CaSX& fk, const std::string& obstacle_name,
                       const std::string& collision_link_name)
       : FabGenericGeometryLeaf(std::move(parent_vars), obstacle_name + "_" + collision_link_name + "_leaf",
-                               std::move(fk)) {
+                               fk) {
     set_forward_map(obstacle_name, collision_link_name);
   }
 
+private:
   void set_forward_map(const std::string& obstacle_name, const std::string& collision_link_name) {
     const auto radius_body_name = std::string("radius_body_") + collision_link_name;
     const CaSX radius_body_var = get_parent_var_param(radius_body_name, 1);
@@ -324,9 +333,9 @@ class FabSphereCuboidLeaf : public FabGenericGeometryLeaf {
     const auto cuboid_center_name = std::string("x_") + obstacle_name;
     const CaSX cuboid_center_var = get_parent_var_param(cuboid_center_name, 3);
 
-    parent_vars_.add_parameters({{radius_body_name, radius_body_var},
-                                 {cuboid_size_name, cuboid_size_var},
-                                 {cuboid_center_name, cuboid_center_var}});
+    parent_vars_->add_parameters({{radius_body_name, radius_body_var},
+                                  {cuboid_size_name, cuboid_size_var},
+                                  {cuboid_center_name, cuboid_center_var}});
 
     const auto& sphere_center_var = forward_kinematics_;
     diffmap_ = std::make_shared<FabCuboidSphereMap>(parent_vars_, sphere_center_var, cuboid_center_var,
