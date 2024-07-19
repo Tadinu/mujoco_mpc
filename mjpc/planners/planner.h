@@ -24,13 +24,12 @@
 #include "mjpc/utilities.h"
 
 namespace mjpc {
-
 inline constexpr int kMaxTrajectory = 128;
 inline constexpr int kMaxTrajectoryLarge = 1028;
 
 // virtual planner
 class Planner {
- public:
+public:
   // destructor
   virtual ~Planner() = default;
 
@@ -61,8 +60,12 @@ class Planner {
   // iteration has completed
   virtual const Trajectory* BestTrajectory() = 0;
 
+
   // visualize planner-specific traces
   virtual void Traces(mjvScene* scn) = 0;
+
+  virtual void ClearTrace() {
+  }
 
   // planner-specific GUI elements
   virtual void GUI(mjUI& ui) = 0;
@@ -82,13 +85,13 @@ class Planner {
 // additional optional interface for planners that can produce several policy
 // proposals
 class RankedPlanner : public Planner {
- public:
+public:
   virtual ~RankedPlanner() = default;
   // optimizes policies, but rather than picking the best, generate up to
   // ncandidates. returns number of candidates created. only called
   // from the planning thread.
   virtual int OptimizePolicyCandidates(int ncandidates, int horizon,
-                                        ThreadPool& pool) = 0;
+                                       ThreadPool& pool) = 0;
   // returns the total return for the nth candidate (or another score to
   // minimize). only called from the planning thread.
   virtual double CandidateScore(int candidate) const = 0;
@@ -100,7 +103,6 @@ class RankedPlanner : public Planner {
   // sets the nth candidate to the active policy.
   virtual void CopyCandidateToPolicy(int candidate) = 0;
 };
-
-}  // namespace mjpc
+} // namespace mjpc
 
 #endif  // MJPC_PLANNERS_PLANNER_H_

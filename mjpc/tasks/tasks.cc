@@ -42,7 +42,6 @@
 #include "mjpc/tasks/walker/walker.h"
 
 namespace mjpc {
-
 std::vector<std::shared_ptr<Task>> GetTasks() {
   return {
       std::make_shared<Particle>(),
@@ -71,4 +70,4 @@ std::vector<std::shared_ptr<Task>> GetTasks() {
       std::make_shared<Walker>(),
   };
 }
-}  // namespace mjpc
+} // namespace mjpc

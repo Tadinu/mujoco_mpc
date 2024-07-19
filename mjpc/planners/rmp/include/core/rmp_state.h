@@ -37,11 +37,12 @@ public:
   Vector pos_ = Vector::Zero();
   Matrix rot_ = Matrix::Identity();
   Vector vel_ = Vector::Zero();
+  Vector acc_ = Vector::Zero();
   Vector size_ = Vector::Zero();
   static constexpr int dim = d;
 
   // more derivatives to be added later
 };
-} // namespace rmp
+}  // namespace rmp
 
 #endif  // RMP_STATE_H
