@@ -32,25 +32,27 @@ static void printdb(TArgs&&... var) {
 template <typename... TArgs>
 static void print_variant(const FabVariant<TArgs...>& var, const std::string& var_name = "") {
   (
-    [&]() {
-      if (const auto* var_value_ptr = std::get_if<TArgs>(&var)) {
-        const auto var_value = *var_value_ptr;
-        if (!var_name.empty()) {
-          std::cout << var_name << ": ";
-        }
-        if constexpr (std::is_same_v<TArgs, std::any>) {
-          if (var_value.has_value()) {
-            try {
-              std::cout << std::any_cast<std::string>(var_value) << std::endl;
-            } catch (const std::bad_any_cast& e) {
-            }
+      [&]() {
+        if (const auto* var_value_ptr = std::get_if<TArgs>(&var)) {
+          const auto var_value = *var_value_ptr;
+          if (!var_name.empty()) {
+            std::cout << var_name << ": ";
           }
-        } else {
-          std::cout << var_value << std::endl;
+          if constexpr (std::is_same_v<TArgs, std::any>) {
+            if (var_value.has_value()) {
+              try {
+                std::cout << std::any_cast<std::string>(var_value) << std::endl;
+              } catch (const std::bad_any_cast& e) {
+              }
+            }
+          } else if constexpr (std::is_same_v<TArgs, CaSX>) {
+            std::cout << var_value << ": " << var_value.size() << std::endl;
+          } else {
+            std::cout << var_value << std::endl;
+          }
         }
-      }
-    }(),
-    ...);
+      }(),
+      ...);
 }
 
 template <typename... TArgs>
@@ -63,7 +65,7 @@ static void print_named_map(const FabNamedMap<TArgs...>& vars) {
 template <typename... TArgs>
 static void print_named_mapdb(const FabNamedMap<TArgs...>& vars) {
 #if FAB_DEBUG
-  print_named_mapdb(std::forward<TArgs>(var)...);
+  print_named_map(vars);
 #endif
 }
 
@@ -171,12 +173,12 @@ template <typename... TArgs>
 static std::any get_variant_value_any(const FabVariant<TArgs...>& var) {
   std::any res;
   (
-    [&]() {
-      if (const auto* value_ptr = std::get_if<TArgs>(&var)) {
-        res = std::any(*value_ptr);
-      }
-    }(),
-    ...);
+      [&]() {
+        if (const auto* value_ptr = std::get_if<TArgs>(&var)) {
+          res = std::any(*value_ptr);
+        }
+      }(),
+      ...);
   return res;
 }
 
@@ -250,10 +252,10 @@ template <typename TGeometricComponent1, typename TGeometricComponent2>
 static bool check_compatibility(const TGeometricComponent1& a, const TGeometricComponent2& b) {
   if (a.x().size() != b.x().size()) {
     throw FabError::customized("Operation invalid", std::string("Different dimensions: ") +
-                                                    std::to_string(a.x().size().first) + "x" +
-                                                    std::to_string(a.x().size().second) + "vs. " +
-                                                    std::to_string(b.x().size().first) + "x" +
-                                                    std::to_string(b.x().size().second));
+                                                        std::to_string(a.x().size().first) + "x" +
+                                                        std::to_string(a.x().size().second) + "vs. " +
+                                                        std::to_string(b.x().size().first) + "x" +
+                                                        std::to_string(b.x().size().second));
   }
 
   if (!CaSX::is_equal(a.x(), b.x())) {
@@ -327,4 +329,4 @@ static void set_casx2(CaSX& a, const std::array<casadi_int, 2> index_1,
                       const std::array<casadi_int, 2> index_2, const CaSX& b, bool indx1 = false) {
   a.set(b, indx1, CaSlice(index_1[0], index_1[1]), CaSlice(index_2[0], index_2[1]));
 }
-} // namespace fab_core
+}  // namespace fab_core

@@ -8,7 +8,7 @@
 #include "mjpc/planners/fabrics/include/fab_core_util.h"
 
 class FabVariables {
- public:
+public:
   using FabTrajectory = FabVariables;
   using FabTrajectories = std::vector<FabTrajectory>;
   FabVariables() = default;
@@ -22,16 +22,16 @@ class FabVariables {
   void print_self() const {
     const auto self_size = size();
     const auto vars_size = vars().size();
-    FAB_PRINT("SIZE", self_size, "VARS SIZE", vars_size);
+    FAB_PRINT("TOTAL SIZE", self_size, "VARS SIZE", vars_size);
     assert(self_size == vars_size);
     FAB_PRINT("STATE VARS --");
     for (const auto& [var_name, var] : state_variables_) {
-      FAB_PRINT(var_name, ":", var);
+      FAB_PRINT(var_name, ":", var, var.size());
     }
 
     FAB_PRINT("PARAMS --");
     for (const auto& [param_name, param] : parameters_) {
-      FAB_PRINT(param_name, ":", param);
+      FAB_PRINT(param_name, ":", param, param.size());
     }
 
     FAB_PRINT("PARAM VALS --");
@@ -168,7 +168,7 @@ class FabVariables {
     return unique_items;
   }
 
- protected:
+protected:
   CaSXDict state_variables_;
   CaSXDict parameters_;
   FabDoubleScalarMap parameter_values_;

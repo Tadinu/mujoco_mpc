@@ -10,12 +10,12 @@
 #include <stdexcept>
 
 #include "mjpc/planners/fabrics/include/fab_common.h"
+#include "mjpc/planners/fabrics/include/fab_config.h"
 #include "mjpc/planners/fabrics/include/fab_diff_map.h"
 #include "mjpc/planners/fabrics/include/fab_energized_geometry.h"
 #include "mjpc/planners/fabrics/include/fab_energy.h"
 #include "mjpc/planners/fabrics/include/fab_forward_kinematics.h"
 #include "mjpc/planners/fabrics/include/fab_geometry.h"
-#include "mjpc/planners/fabrics/include/fab_config.h"
 #include "mjpc/planners/fabrics/include/fab_robot.h"
 #include "mjpc/planners/fabrics/include/fab_spectral_semi_sprays.h"
 #include "mjpc/planners/fabrics/include/fab_speed_control.h"
@@ -89,8 +89,9 @@ public:
     } else if (const auto* geom_leaf = dynamic_cast<const FabGenericGeometryLeaf*>(leaf)) {
       add_geometry(*geom_leaf->map(), geom_leaf->lagrangian(), geom_leaf->geometry());
     } else if (const auto* dyn_geom_leaf = dynamic_cast<const FabGenericDynamicGeometryLeaf*>(leaf)) {
-      add_dynamic_geometry(*dyn_geom_leaf->map(), *dyn_geom_leaf->dynamic_map(), *dyn_geom_leaf->map(),
-                           dyn_geom_leaf->lagrangian(), dyn_geom_leaf->geometry());
+      add_dynamic_geometry(*dyn_geom_leaf->map(), *dyn_geom_leaf->dynamic_map(),
+                           *dyn_geom_leaf->geometry_map(), dyn_geom_leaf->lagrangian(),
+                           dyn_geom_leaf->geometry());
     }
 
     leaves_.insert_or_assign(leaf->name(), *leaf);
@@ -176,9 +177,8 @@ public:
   CaSX get_forward_kinematics(const std::string& link_name, bool position_only = true) {
     const auto fk = robot_->fk();
     assert(fk);
-    return fk
-             ? fk->casadi(vars_.position_var(), link_name, {}, fab_math::CASX_TRANSF_IDENTITY, position_only)
-             : CaSX();
+    return fk ? fk->casadi(vars_.position_var(), link_name, {}, fab_math::CASX_TRANSF_IDENTITY, position_only)
+              : CaSX();
   }
 
   void add_capsule_sphere_geometry(const std::string& obstacle_name, const std::string& capsule_name,
@@ -230,11 +230,13 @@ public:
                                                const std::string& collision_link_name, const CaSX& fk,
                                                const CaSXDict& reference_params,
                                                int dynamic_obstacle_dimension = 3) {
+    assert(dynamic_obstacle_dimension == fk.size().first);
     auto dyn_spherical_obstacle_leaf = FabDynamicObstacleLeaf(
         vars_, fab_core::get_casx(fk, std::array<casadi_int, 2>{0, dynamic_obstacle_dimension}),
         obstacle_name, collision_link_name, reference_params);
     dyn_spherical_obstacle_leaf.set_geometry(config_.collision_geometry);
     dyn_spherical_obstacle_leaf.set_finsler_structure(config_.collision_finsler);
+    dyn_spherical_obstacle_leaf.vars().print_self();
     add_leaf(&dyn_spherical_obstacle_leaf);
   }
 
@@ -268,8 +270,8 @@ public:
     const auto fk_2 = get_forward_kinematics(collision_link_2_name);
     const auto fk = fk_2 - fk_1;
     if (fab_core::is_casx_sparse(fk)) {
-      FAB_PRINT(std::string("Expression [") + fk.get_str() + "] for links " + collision_link_1_name +
-          "and " + collision_link_2_name + " is sparse and so skipped");
+      FAB_PRINT(std::string("Expression [") + fk.get_str() + "] for links " + collision_link_1_name + "and " +
+                collision_link_2_name + " is sparse and so skipped");
       auto geometry = FabSelfCollisionLeaf(vars_, fk, collision_link_1_name, collision_link_2_name);
       geometry.set_geometry(config_.self_collision_geometry);
       geometry.set_finsler_structure(config_.self_collision_finsler);
@@ -300,21 +302,17 @@ public:
 
     // [Goal composition]
     if (fab_core::has_collection_element(
-        std::array<FORCING_TYPE, 3>{
-            FORCING_TYPE::SPEED_CONTROLLED, FORCING_TYPE::FORCED,
-            FORCING_TYPE::FORCED_ENERGIZED
-        },
-        config_.forcing_type)) {
+            std::array<FORCING_TYPE, 3>{FORCING_TYPE::SPEED_CONTROLLED, FORCING_TYPE::FORCED,
+                                        FORCING_TYPE::FORCED_ENERGIZED},
+            config_.forcing_type)) {
       set_goal_component(problem_config_.goal_composition());
     }
 
     // [Execution Energy]
     if (fab_core::has_collection_element(
-        std::array<FORCING_TYPE, 3>{
-            FORCING_TYPE::SPEED_CONTROLLED, FORCING_TYPE::EXECUTION_ENERGY,
-            FORCING_TYPE::FORCED_ENERGIZED
-        },
-        config_.forcing_type)) {
+            std::array<FORCING_TYPE, 3>{FORCING_TYPE::SPEED_CONTROLLED, FORCING_TYPE::EXECUTION_ENERGY,
+                                        FORCING_TYPE::FORCED_ENERGIZED},
+            config_.forcing_type)) {
       set_execution_energy(FabExecutionLagrangian(vars_));
     }
 
@@ -365,12 +363,12 @@ public:
         const auto fk_0_3_3 = fab_core::get_casx2(fk, {0, 3}, 3);
         if (fab_core::is_casx_sparse(fk_0_3_3)) {
           FAB_PRINT(std::string("Expression ") + fk_0_3_3.get_str() + " for link " + link_name +
-              " is sparse and so skipped");
+                    " is sparse and so skipped");
           continue;
         }
       } else if (fab_core::is_casx_sparse(fk)) {
         FAB_PRINT(std::string("Expression ") + fk.get_str() + " for link " + link_name +
-            " is sparse and so skipped");
+                  " is sparse and so skipped");
         continue;
       }
 
@@ -420,19 +418,12 @@ public:
     std::vector<CaSXDict> reference_param_list;
     for (auto i = 0; i < number_dynamic_obstacles; ++i) {
       CaSXDict reference_params = {
-          {
-              std::string("x_obst_dynamic_") + std::to_string(i),
-              CaSX::sym(std::string("x_obst_dynamic_") + std::to_string(i), dynamic_obstacle_dimension)
-          },
-          {
-              std::string("xdot_obst_dynamic_") + std::to_string(i),
-              CaSX::sym(std::string("xdot_obst_dynamic_") + std::to_string(i), dynamic_obstacle_dimension)
-          },
-          {
-              std::string("xddot_obst_dynamic_") + std::to_string(i),
-              CaSX::sym(std::string("xddot_obst_dynamic_") + std::to_string(i), dynamic_obstacle_dimension)
-          }
-      };
+          {std::string("x_obst_dynamic_") + std::to_string(i),
+           CaSX::sym(std::string("x_obst_dynamic_") + std::to_string(i), dynamic_obstacle_dimension)},
+          {std::string("xdot_obst_dynamic_") + std::to_string(i),
+           CaSX::sym(std::string("xdot_obst_dynamic_") + std::to_string(i), dynamic_obstacle_dimension)},
+          {std::string("xddot_obst_dynamic_") + std::to_string(i),
+           CaSX::sym(std::string("xddot_obst_dynamic_") + std::to_string(i), dynamic_obstacle_dimension)}};
       reference_param_list.emplace_back(std::move(reference_params));
     }
 
@@ -441,9 +432,10 @@ public:
       const auto fk = get_forward_kinematics(link_name);
       if (fab_core::is_casx_sparse(fk)) {
         FAB_PRINT(std::string("Expression ") + fk.get_str() + " for link " + link_name +
-            "is sparse and so skipped");
+                  "is sparse and so skipped");
         continue;
       }
+      FAB_PRINT(link_name, ":ADD OBSTACLE GEOM: FK", fk, fk.size());
       for (auto i = 0; i < number_obstacles; ++i) {
         const auto obstacle_name = std::string("obst_") + std::to_string(i);
         add_spherical_obstacle_geometry(obstacle_name, link_name, fk);
@@ -555,7 +547,7 @@ public:
 #if 1
         xddot = forced_geometry_.xddot() -
                 (a_ex + beta_subst) *
-                (geometry_.xdot() - CaSX::mtimes(forced_geometry_.Minv(), target_velocity_));
+                    (geometry_.xdot() - CaSX::mtimes(forced_geometry_.Minv(), target_velocity_));
 #else
         xddot = forced_geometry_.xddot();
 #endif
@@ -589,7 +581,7 @@ public:
 
       default:
         throw FabError(std::to_string(int(config_.forcing_type)) + " :Unknown forcing type");
-    } // end switch(config_.forcing_type)
+    }  // end switch(config_.forcing_type)
 
     // CasadiFunction
     switch (control_mode) {
@@ -601,9 +593,8 @@ public:
       case FabControlMode::VEL: {
         assert(time_step > 0);
         vars_.print_self();
-        cafunc_ = std::make_shared<FabCasadiFunction>("fab_planner_func", vars_,
-                                                      CaSXDict
-                                                      {{"action", geometry_.xdot() + time_step * xddot}});
+        cafunc_ = std::make_shared<FabCasadiFunction>(
+            "fab_planner_func", vars_, CaSXDict{{"action", geometry_.xdot() + time_step * xddot}});
         break;
       }
     }
@@ -650,16 +641,19 @@ public:
     data_ = task_->data_;
 
     // dimensions
-    dim_state_ = model->nq + model->nv + model->na; // state dimension
-    dim_state_derivative_ = 2 * model->nv + model->na; // state derivative dimension
+    dim_state_ = model->nq + model->nv + model->na;     // state dimension
+    dim_state_derivative_ = 2 * model->nv + model->na;  // state derivative dimension
     // TODO: should be model->nu, 3 is only specific for Particle task
-    dim_action_ = 3; // action dimension
-    dim_sensor_ = model->nsensordata; // number of sensor values
+    dim_action_ = 3;                   // action dimension
+    dim_sensor_ = model->nsensordata;  // number of sensor values
     dim_max_ = std::max({dim_state_, dim_state_derivative_, dim_action_, model->nuser_sensor});
 
-    if (task.Name().starts_with("Particle") && (!trajectory_)) {
+    if (trajectory_) {
+      trajectory_->Reset(0);
+    } else {
       trajectory_ = std::make_shared<mjpc::Trajectory>();
-
+    }
+    if (task.Name().starts_with("Particle")) {
       // Robot
       init_robot(dim_action_, mjpc::GetModelPath("particle/point_robot.urdf"), "world", {"base_link"});
 
@@ -673,21 +667,27 @@ public:
       const std::vector<double> desired_pos = {goal_pos[0], goal_pos[1]};
       // assert(indices.size() == dim_action - 1);
       // assert(desired_pos.size() == dim_action - 1);
-      auto sub_goal_0 = std::make_shared<FabStaticSubGoal>(FabSubGoalConfig{
-          .name = "subgoal0",
-          .type = FabSubGoalType::STATIC,
-          .is_primary_goal = true,
-          .epsilon = 0.1,
-          .indices = indices,
-          .weight = 5.0,
-          .parent_link_name = "world",
-          .child_link_name = "base_link",
-          .desired_position = desired_pos
-      });
+      auto sub_goal_0 = std::make_shared<FabStaticSubGoal>(FabSubGoalConfig{.name = "subgoal0",
+                                                                            .type = FabSubGoalType::STATIC,
+                                                                            .is_primary_goal = true,
+                                                                            .epsilon = 0.1,
+                                                                            .indices = indices,
+                                                                            .weight = 5.0,
+                                                                            .parent_link_name = "world",
+                                                                            .child_link_name = "base_link",
+                                                                            .desired_position = desired_pos});
       goal.add_sub_goal(sub_goal_0);
 
       // Add geometry + energy components + [goal]
-      set_components(std::vector<std::string>({"base_link"}), {}, {}, goal, {}, mjpc::Task::OBSTACLES_NUM);
+      set_components(std::vector<std::string>({"base_link"}), {}, {}, goal, {},
+#if 1
+                     task_->AreObstaclesFixed() ? mjpc::Task::OBSTACLES_NUM : 0,
+                     task_->AreObstaclesFixed() ? 0 : mjpc::Task::OBSTACLES_NUM
+#else
+                     task_->AreObstaclesFixed() ? 0 : mjpc::Task::OBSTACLES_NUM,
+                     task_->AreObstaclesFixed() ? mjpc::Task::OBSTACLES_NUM : 0
+#endif
+      );
 
       // Concretize, calculating [xddot] + composing [cafunc_] based on it
       concretize(FAB_USE_ACTUATOR_VELOCITY ? FabControlMode::VEL : FabControlMode::ACC, 0.01);
@@ -700,15 +700,11 @@ public:
   }
 
   // reset memory to zeros
-  void Reset(int horizon, const double* initial_repeated_action = nullptr) override {
-  }
+  void Reset(int horizon, const double* initial_repeated_action = nullptr) override {}
 
-  void SetState(const mjpc::State& state) override {
-  }
+  void SetState(const mjpc::State& state) override {}
 
-  const mjpc::Trajectory* BestTrajectory() override {
-    return trajectory_.get();
-  }
+  const mjpc::Trajectory* BestTrajectory() override { return trajectory_.get(); }
 
   // visualize planner-specific traces
   void Traces(mjvScene* scn) override {
@@ -737,13 +733,11 @@ public:
   }
 
   // planner-specific GUI elements
-  void GUI(mjUI& ui) override {
-  }
+  void GUI(mjUI& ui) override {}
 
   // planner-specific plots
   void Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, int planner_shift, int timer_shift, int planning,
-             int* shift) override {
-  }
+             int* shift) override {}
 
   // return number of parameters optimized by planner
   int NumParameters() override { return 0; }
@@ -770,8 +764,8 @@ public:
         {"constraint_0", std::vector<double>{0, 0, 1, 0.0}},
         {"q", std::move(q)},
         {"qdot", std::move(qdot)},
-        {"x_goal_0", std::vector{goal_pos[0], goal_pos[1]}}, // EXCLUDING goal_pos[2]
-        {"weight_goal_0", std::vector{5.0}}, // irrelevant atm
+        {"x_goal_0", std::vector{goal_pos[0], goal_pos[1]}},  // EXCLUDING goal_pos[2]
+        {"weight_goal_0", std::vector{5.0}},                  // irrelevant atm
         {"radius_body_base_link", std::vector{0.01}},
     };
 
@@ -780,8 +774,10 @@ public:
     for (auto i = 0; i < mjpc::Task::OBSTACLES_NUM; ++i) {
       const auto& obstacle_i = obstacle_statesX[i];
       args.insert_or_assign(std::string("radius_obst_") + std::to_string(i), 3 * obstacle_i.size_[0]);
-      args.insert_or_assign(std::string("x_obst_") + std::to_string(i),
-                            std::vector{obstacle_i.pos_[0], obstacle_i.pos_[1], obstacle_i.pos_[2]});
+      args.insert_or_assign(
+          (task_->AreObstaclesFixed() ? std::string("x_obst_") : std::string("x_obst_dynamic_")) +
+              std::to_string(i),
+          std::vector{obstacle_i.pos_[0], obstacle_i.pos_[1], obstacle_i.pos_[2]});
     }
 
     // Compute action
@@ -794,8 +790,7 @@ public:
 
   // compute trajectory using nominal policy
 
-  void NominalTrajectory(int horizon, mjpc::ThreadPool& pool) override {
-  }
+  void NominalTrajectory(int horizon, mjpc::ThreadPool& pool) override {}
 
   // set action from policy
   void ActionFromPolicy(double* action, const double* state, double time, bool use_previous) override {
@@ -848,11 +843,11 @@ protected:
 
   // mjpc
   std::shared_ptr<mjpc::Trajectory> trajectory_ = nullptr;
-  int dim_state_ = 0; // state
-  int dim_state_derivative_ = 0; // state derivative
-  int dim_action_ = 0; // action
-  int dim_sensor_ = 0; // output (i.e., all sensors)
-  int dim_max_ = 0; // maximum dimension
+  int dim_state_ = 0;             // state
+  int dim_state_derivative_ = 0;  // state derivative
+  int dim_action_ = 0;            // action
+  int dim_sensor_ = 0;            // output (i.e., all sensors)
+  int dim_max_ = 0;               // maximum dimension
   mutable std::shared_mutex policy_mutex_;
   CaSX action_;
 };

@@ -16,7 +16,7 @@
 #include "mjpc/planners/fabrics/include/fab_variables.h"
 
 class FabLagrangian {
- public:
+public:
   FabLagrangian() = default;
 
   FabLagrangian(const CaSX& lag, const FabNamedMap<CaSX, FabVariables, FabTrajectories, FabSpectralSemiSprays,
@@ -91,6 +91,7 @@ class FabLagrangian {
 
   FabTrajectories refTrajs() const { return refTrajs_; }
 
+  // A dynamic Lagrangian: one defined using relative coordinates
   bool is_dynamic() const { return vars_.parameters().contains(x_ref_name_); }
 
   std::vector<std::string> ref_names() const { return {x_ref_name_, xdot_ref_name_, xddot_ref_name_}; }
@@ -144,10 +145,12 @@ class FabLagrangian {
   }
 
   void apply_euler_lagrange() {
-    const auto dL_dxdot = CaSX::gradient(l_, xdot());
-    const auto dL_dx = CaSX::gradient(l_, x());
-    auto d2L_dxdxdot = CaSX::jacobian(dL_dx, xdot());
-    auto d2L_dxdot2 = CaSX::jacobian(dL_dxdot, xdot());
+    const bool is_scalar = l_.is_scalar();
+    FAB_PRINT(is_scalar, "FabLagrangian::apply_euler_lagrange", l_, l_.size());
+    const auto dL_dx = is_scalar ? CaSX::gradient(l_, x()) : CaSX::jacobian(l_, x());
+    const auto dL_dxdot = is_scalar ? CaSX::gradient(l_, xdot()) : CaSX::jacobian(l_, xdot());
+    const auto d2L_dxdxdot = CaSX::jacobian(dL_dx, xdot());
+    const auto d2L_dxdot2 = CaSX::jacobian(dL_dxdot, xdot());
     auto f_rel = CaSX::zeros(x().size().first);
     auto en_rel = CaSX::zeros(1);
 
@@ -163,12 +166,14 @@ class FabLagrangian {
       f_rel += f_rel1 + f_rel2;
       en_rel += CaSX::dot(dL_dxpdot, _xdot_ref);
     }
-    const auto F = std::move(d2L_dxdxdot);
-    auto M = std::move(d2L_dxdot2);
+    const auto& F = d2L_dxdxdot;
+    const auto& M = d2L_dxdot2;
     const auto f_e = -dL_dx;
-    auto f = CaSX::mtimes(F.T(), xdot()) + f_e + f_rel;
+    FAB_PRINT(F.T(), F.T().size());
+    FAB_PRINT(xdot(), xdot().size());
+    const auto f = CaSX::mtimes(F.T(), xdot()) + f_e + f_rel;
     H_ = CaSX::dot(dL_dxdot, xdot()) - l_ + en_rel;
-    S_ = decltype(S_)(std::move(M), {{"f", std::move(f)}, {"var", vars_}, {"refTrajs", refTrajs_}});
+    S_ = decltype(S_)(M, {{"f", f}, {"var", vars_}, {"refTrajs", refTrajs_}});
   }
 
   void concretize() {
@@ -218,6 +223,7 @@ class FabLagrangian {
     throw FabError::customized("FabGeometry evaluation failed", "Function not defined");
   }
 
+  // Transformation of a relative spec (Xrel) into the static space X
   FabLagrangian dynamic_pull(const FabDynamicDifferentialMap& dm) const {
     const auto& l_pulled = l_;
     const auto l_pulled_subst_x = CaSX::substitute(l_pulled, x(), dm.phi());
@@ -225,7 +231,7 @@ class FabLagrangian {
     return FabLagrangian(l_pulled_subst_x_xdot, {{"var", dm.vars()}, {"ref_names", dm.ref_names()}});
   }
 
- protected:
+protected:
   CaSX l_;
   std::string x_ref_name_ = "x_ref";
   std::string xdot_ref_name_ = "xdot_ref";
@@ -267,7 +273,7 @@ class FabFinslerStructure : public FabLagrangian {
     throw FabError::customized("FabGeometry evaluation failed", "Function not defined");
   }
 
- protected:
+protected:
   CaSX lg_;
   std::shared_ptr<FabCasadiFunction> func_lg_ = nullptr;
 };
@@ -276,7 +282,7 @@ class FabFinslerStructure : public FabLagrangian {
 // EXECUTION LAGRANGIAN --
 //
 class FabExecutionLagrangian : public FabLagrangian {
- public:
+public:
   explicit FabExecutionLagrangian(FabVariables vars)
       : FabLagrangian(CaSX::dot(vars.velocity_var(), vars.velocity_var()), {{"var", std::move(vars)}}) {}
 };

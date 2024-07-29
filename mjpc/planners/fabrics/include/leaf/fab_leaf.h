@@ -15,7 +15,7 @@
 #define CASX_SYM(var_name, dim) CaSX::sym(LEAF_VAR_NAME(var_name), dim)
 
 class FabLeaf {
- public:
+public:
   FabLeaf() = default;
   virtual ~FabLeaf() = default;
 
@@ -48,7 +48,12 @@ class FabLeaf {
 
   void print_self() const {
     FAB_PRINT("LEAF", name());
-    leaf_vars_.print_self();
+    vars().print_self();
+    FAB_PRINT("PARENT VARS");
+    parent_vars_.print_self();
+    FAB_PRINT("DIFF MAP");
+    diffmap_->print_self();
+    FAB_PRINT("=============");
   }
 
   virtual void set_potential(const std::function<CaSX(const CaSX& x)>& potential) {}
@@ -102,7 +107,7 @@ class FabLeaf {
 #endif
   }
 
- protected:
+protected:
   FabVariables parent_vars_;
   std::string leaf_name_;
   CaSX x_;
@@ -112,6 +117,6 @@ class FabLeaf {
   FabLagrangian lag_;
   FabGeometry geom_;
   CaSXDict geom_params_;
-  std::shared_ptr<FabDifferentialMap> diffmap_ = nullptr;
+  FabDifferentialMapPtr diffmap_ = nullptr;
   CaSXDict p_;
 };

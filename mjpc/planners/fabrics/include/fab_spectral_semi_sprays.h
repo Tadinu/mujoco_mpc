@@ -15,17 +15,18 @@
 #include "mjpc/planners/fabrics/include/fab_variables.h"
 
 class FabSpectralSemiSprays {
- public:
+public:
   FabSpectralSemiSprays() = default;
 
   FabSpectralSemiSprays(
-      CaSX M, const FabNamedMap<CaSX, FabVariables, FabTrajectories, std::vector<std::string>>& kwargs) {
-    initialize(std::move(M), kwargs);
+      const CaSX& M,
+      const FabNamedMap<CaSX, FabVariables, FabTrajectories, std::vector<std::string>>& kwargs) {
+    initialize(M, kwargs);
   }
 
-  void initialize(CaSX M,
+  void initialize(const CaSX& M,
                   const FabNamedMap<CaSX, FabVariables, FabTrajectories, std::vector<std::string>>& kwargs) {
-    M_ = std::move(M);
+    M_ = M;
     // [x_ref_name_, xdot_ref_name_, xddot_ref_name_]
     if (kwargs.contains("ref_names")) {
       auto ref_names = *fab_core::get_arg_value<std::vector<std::string>>(kwargs, "ref_names");
@@ -187,27 +188,34 @@ class FabSpectralSemiSprays {
     const auto f_pulled = f_1 + f_2;
     const auto x = vars_.position_var();
     const auto xdot = vars_.velocity_var();
+    FAB_PRINTDB("M_pulled", M_pulled, M_pulled.size());
+    FAB_PRINTDB("x", x, x.size());
+    FAB_PRINTDB("xdot", xdot, xdot.size());
+    FAB_PRINTDB("dm.phi", dm.phi(), dm.phi().size());
+
     const auto M_pulled_subst_x = CaSX::substitute(M_pulled, x, dm.phi());
 
-#if 0
+#if 1
     const auto dm_phidot = dm.phidot();
     FAB_PRINTDB("===========");
     FAB_PRINTDB("DM J");
     FAB_PRINTDB("DM VARS");
     dm.vars().print_self();
-    FAB_PRINTDB(xdot, dm_phidot);
-    FAB_PRINTDB(xdot.size(), dm_phidot.size());
-    FAB_PRINTDB(xdot.sparsity(), dm_phidot.sparsity());
+    FAB_PRINTDB("xdot", xdot, xdot.size());
+    FAB_PRINTDB("dm_phidot", dm_phidot, dm_phidot.size());
+    FAB_PRINTDB("xdot sparsity", xdot.sparsity());
+    FAB_PRINTDB("dm_phidot sparsity", dm_phidot.sparsity());
     for (auto i = 0; i < xdot.size1(); ++i) {
       FAB_PRINTDB(i, fab_core::get_casx(xdot, i), fab_core::get_casx(dm_phidot, i));
       FAB_PRINTDB("sparsity", fab_core::get_casx(xdot, i).sparsity(),
-                      fab_core::get_casx(dm_phidot, i).sparsity());
+                  fab_core::get_casx(dm_phidot, i).sparsity());
       FAB_PRINTDB("dm_phidot", i, fab_core::get_casx(dm_phidot, i).is_scalar(),
-                      "nnz:", fab_core::get_casx(dm_phidot, i).nnz());
+                  "nnz:", fab_core::get_casx(dm_phidot, i).nnz());
     }
 #endif
 
-    auto M_pulled_subst_x_xdot = CaSX::substitute(M_pulled_subst_x, xdot, dm.phidot());
+    FAB_PRINT("M_pulled_subst_x", M_pulled_subst_x, M_pulled_subst_x.size());
+    const auto M_pulled_subst_x_xdot = CaSX::substitute(M_pulled_subst_x, xdot, dm.phidot());
 
     const auto f_pulled_subst_x = CaSX::substitute(f_pulled, x, dm.phi());
     auto f_pulled_subst_x_xdot = CaSX::substitute(f_pulled_subst_x, xdot, dm.phidot());
@@ -218,13 +226,13 @@ class FabSpectralSemiSprays {
     auto new_vars = FabVariables(dm.state_variables(), new_parameters);
     auto J_ref = dm.J();
     if (is_dynamic()) {
-      return FabSpectralSemiSprays(std::move(M_pulled_subst_x_xdot), {{"f", std::move(f_pulled_subst_x_xdot)},
-                                                                      {"var", std::move(new_vars)},
-                                                                      {"J", std::move(J_ref)},
-                                                                      {"ref_names", ref_names()}});
+      return FabSpectralSemiSprays(M_pulled_subst_x_xdot, {{"f", std::move(f_pulled_subst_x_xdot)},
+                                                           {"var", std::move(new_vars)},
+                                                           {"J", std::move(J_ref)},
+                                                           {"ref_names", ref_names()}});
     }
     return FabSpectralSemiSprays(
-        std::move(M_pulled_subst_x_xdot),
+        M_pulled_subst_x_xdot,
         {{"f", std::move(f_pulled_subst_x_xdot)}, {"var", std::move(new_vars)}, {"ref_names", ref_names()}});
   }
 
@@ -250,7 +258,7 @@ class FabSpectralSemiSprays {
     throw FabError::customized("FabSpectralSemiSprays evaluation failed", "Function not defined");
   }
 
- protected:
+protected:
   std::string x_ref_name_ = "x_ref";
   std::string xdot_ref_name_ = "xdot_ref";
   std::string xddot_ref_name_ = "xddot_ref";

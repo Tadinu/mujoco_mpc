@@ -198,6 +198,7 @@ void Particle::ResidualFn::Residual(const mjModel* model, const mjData* data, do
 void Particle::TransitionLocked(mjModel* model, mjData* data) {
   model_ = model;
   data_ = data;
+  obstacles_fixed_ = false;
   QueryObstacleStatesX();
   last_goal_reached_ = QueryGoalReached();
   if (last_goal_reached_) {
@@ -249,6 +250,7 @@ std::string ParticleFixed::Name() const { return "ParticleFixed"; }
 void ParticleFixed::TransitionLocked(mjModel* model, mjData* data) {
   model_ = model;
   data_ = data;
+  obstacles_fixed_ = true;
   QueryObstacleStatesX();
   last_goal_reached_ = QueryGoalReached();
   if (this->last_goal_reached_) {

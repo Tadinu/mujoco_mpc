@@ -4,8 +4,8 @@
 // https://github.com/tud-amr/fabrics
 
 #include <casadi/casadi.hpp>
-#include <variant>
 #include <shared_mutex>
+#include <variant>
 
 using CaSX = casadi::SX;
 using CaMX = casadi::MX;
@@ -36,20 +36,18 @@ using FabVariantVector = std::vector<FabVariant<TVariant...>>;
 // Highest accuracy without harming matrix inverse 1e-7
 static constexpr auto FAB_EPS = 1e-6;
 
-#define FAB_DEBUG (0)
+#define FAB_DEBUG (1)
 #define FAB_USE_ACTUATOR_VELOCITY (1)
 #define FAB_USE_ACTUATOR_MOTOR (!FAB_USE_ACTUATOR_VELOCITY)
-#define FAB_ACTUATOR_VELOCITY_KV (10)
+#define FAB_ACTUATOR_VELOCITY_KV (5)
 #define FAB_DRAW_TRAJECTORY (1)
 
 using FabSharedMutexLock = std::shared_lock<std::shared_mutex>;
 
 struct FabError : public std::runtime_error {
-  explicit FabError(const std::string& error_msg) : std::runtime_error(error_msg), message_(error_msg) {
-  }
+  explicit FabError(const std::string& error_msg) : std::runtime_error(error_msg), message_(error_msg) {}
 
-  explicit FabError(const char* error_msg) : std::runtime_error(error_msg), message_(error_msg) {
-  }
+  explicit FabError(const char* error_msg) : std::runtime_error(error_msg), message_(error_msg) {}
 
   static FabError customized(std::string expression, std::string message) {
     FabError error("");
@@ -70,10 +68,8 @@ struct FabError : public std::runtime_error {
 
 struct FabParamNotFoundError : public std::runtime_error {
   explicit FabParamNotFoundError(const std::string& error_msg)
-    : std::runtime_error(std::string("[Param not found]: ") + error_msg) {
-  }
+      : std::runtime_error(std::string("[Param not found]: ") + error_msg) {}
 
   explicit FabParamNotFoundError(const char* error_msg)
-    : std::runtime_error(std::string("[Param not found]: ") + error_msg) {
-  }
+      : std::runtime_error(std::string("[Param not found]: ") + error_msg) {}
 };

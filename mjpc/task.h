@@ -228,6 +228,9 @@ public:
   virtual void QueryObstacleStatesX() {
   }
 
+  bool obstacles_fixed_ = false;
+  bool AreObstaclesFixed() const { return obstacles_fixed_; }
+
   std::vector<StateX> GetObstacleStatesX() const {
     std::vector<StateX> obstacle_statesX;
     {

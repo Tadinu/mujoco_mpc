@@ -64,7 +64,7 @@ public:
       const bool bArg_matched =
           arg_prefix_name_list.empty() ||
           fab_core::has_collection_element_if(arg_prefix_name_list, [&arg_name](const auto& prefix) {
-            return absl::StartsWith(arg_name, prefix);
+            return arg_name.starts_with(prefix);
           });
       if (bArg_matched) {
         arguments_.insert_or_assign(arg_name, fab_core::get_variant_value_any(arg_value));

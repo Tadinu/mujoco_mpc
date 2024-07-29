@@ -5,10 +5,10 @@
 #include <memory>
 
 #include "mjpc/planners/fabrics/include/fab_common.h"
+#include "mjpc/planners/fabrics/include/fab_config.h"
 #include "mjpc/planners/fabrics/include/fab_diff_map.h"
 #include "mjpc/planners/fabrics/include/fab_energy.h"
 #include "mjpc/planners/fabrics/include/fab_parameterized_map.h"
-#include "mjpc/planners/fabrics/include/fab_config.h"
 #include "mjpc/planners/fabrics/include/fab_variables.h"
 #include "mjpc/planners/fabrics/include/leaf/fab_dynamic_leaf.h"
 
@@ -17,7 +17,7 @@
  * expression is passed as a string.
  */
 class FabGenericDynamicAttractorLeaf : public FabDynamicLeaf {
- public:
+public:
   FabGenericDynamicAttractorLeaf() = default;
 
   FabGenericDynamicAttractorLeaf(FabVariables root_variables, CaSX fk_goal, const std::string& attractor_name)
@@ -51,7 +51,7 @@ class FabGenericDynamicAttractorLeaf : public FabDynamicLeaf {
 
   virtual FabDifferentialMapPtr map() const override { return forward_map_; }
 
- protected:
+protected:
   CaSX weight_var_;
-  std::shared_ptr<FabDifferentialMap> forward_map_;
+  FabDifferentialMapPtr forward_map_ = nullptr;
 };

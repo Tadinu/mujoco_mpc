@@ -12,7 +12,7 @@
 #include "mjpc/planners/fabrics/include/fab_variables.h"
 
 class FabDynamicLeaf : public FabLeaf {
- public:
+public:
   FabDynamicLeaf() = default;
 
   FabDynamicLeaf(FabVariables parent_variables, std::string leaf_name, const int dim = 1,
@@ -44,22 +44,20 @@ class FabDynamicLeaf : public FabLeaf {
     }
 
     fk_vars_ = FabVariables({{LEAF_VAR_NAME(fk_x_), fk_x_}, {LEAF_VAR_NAME(fk_xdot_), fk_xdot_}}, ref_params);
-    diffmap_ = std::make_shared<FabDynamicDifferentialMap>(fk_vars_, fab_core::get_map_keys(ref_params));
 
 #if 0
     const auto phi_dynamic = x_ - x_ref_;
     const auto phi_dot_dynamic = xdot_ - xdot_ref_;
     const auto Jdotqdot_dynamic = -xddot_ref_;
 #endif
+    dynamic_map_ = std::make_shared<FabDynamicDifferentialMap>(fk_vars_, fab_core::get_map_keys(ref_params));
   }
 
-  std::shared_ptr<FabDynamicDifferentialMap> dynamic_map() const {
-    return std::dynamic_pointer_cast<FabDynamicDifferentialMap>(diffmap_);
-  }
+  FabDynamicDifferentialMapPtr dynamic_map() const { return dynamic_map_; }
 
   CaSX xdot_ref() const { return xdot_ref_; }
 
- protected:
+protected:
   int dim_ref_;
   CaSX fk_x_;
   CaSX fk_xdot_;
@@ -71,4 +69,5 @@ class FabDynamicLeaf : public FabLeaf {
   CaSX x_ref_;
   CaSX xdot_ref_;
   CaSX xddot_ref_;
+  FabDynamicDifferentialMapPtr dynamic_map_ = nullptr;
 };
