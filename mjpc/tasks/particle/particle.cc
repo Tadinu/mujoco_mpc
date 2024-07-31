@@ -139,11 +139,11 @@ void ResidualImpl(const mjModel* model, const mjData* data, const double goal[2]
   // ----- residual (2) ----- //
   mju_copy(residual + 4, data->ctrl, model->nu);
 }
-} // namespace
+}  // namespace
 
 bool Particle::QueryGoalReached() {
   return (rmp::vectorFromScalarArray<3>(GetParticlePos()) - rmp::vectorFromScalarArray<3>(GetGoalPos()))
-         .norm() < PARTICLE_GOAL_REACH_THRESHOLD;
+             .norm() < PARTICLE_GOAL_REACH_THRESHOLD;
 }
 
 void Particle::QueryObstacleStatesX() {
@@ -172,19 +172,30 @@ void Particle::QueryObstacleStatesX() {
 
     static constexpr int LIN_IDX = 3;
 #if 0
-    mjtNum obstacle_i_full_vel[6]; // rot+lin
+    mjtNum obstacle_i_full_vel[6];  // rot+lin
     mj_objectVelocity(model_, data_, mjOBJ_BODY, obstacle_i_id, obstacle_i_full_vel,
                       /*flg_local=*/0);
     mjtNum obstacle_i_lin_vel[StateX::dim];
     memcpy(obstacle_i_lin_vel, &obstacle_i_full_vel[LIN_IDX], sizeof(mjtNum) * StateX::dim);
+
+    mjtNum obstacle_i_full_acc[6];  // rot+lin
+    mj_objectAcceleration(model_, data_, mjOBJ_BODY, obstacle_i_id, obstacle_i_full_acc,
+                          /*flg_local=*/0);
+    mjtNum obstacle_i_lin_acc[StateX::dim];
+    memcpy(obstacle_i_lin_acc, &obstacle_i_full_acc[LIN_IDX], sizeof(mjtNum) * StateX::dim);
 #else
+    const auto obstacle_i_lin_idx = 6 * obstacle_i_id + LIN_IDX;
     mjtNum obstacle_i_lin_vel[StateX::dim];
-    mju_copy(obstacle_i_lin_vel, &data_->cvel[6 * obstacle_i_id + LIN_IDX], StateX::dim);
+    mju_copy(obstacle_i_lin_vel, &data_->cvel[obstacle_i_lin_idx], StateX::dim);
+
+    mjtNum obstacle_i_lin_acc[StateX::dim];
+    mju_copy(obstacle_i_lin_acc, &data_->cacc[obstacle_i_lin_idx], StateX::dim);
 #endif
     obstacle_statesX_.push_back(
         StateX{.pos_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_pos),
                .rot_ = rmp::quatFromScalarArray<StateX::dim>(obstacle_i_rot).toRotationMatrix(),
                .vel_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_lin_vel),
+               .acc_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_lin_acc),
                .size_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_size)});
   }
 }
@@ -198,7 +209,6 @@ void Particle::ResidualFn::Residual(const mjModel* model, const mjData* data, do
 void Particle::TransitionLocked(mjModel* model, mjData* data) {
   model_ = model;
   data_ = data;
-  obstacles_fixed_ = false;
   QueryObstacleStatesX();
   last_goal_reached_ = QueryGoalReached();
   if (last_goal_reached_) {
@@ -230,14 +240,19 @@ void Particle::ModifyScene(const mjModel* model, const mjData* data, mjvScene* s
 #endif
 }
 
-FabPlannerConfig Particle::get_fabrics_config() const {
-  FabPlannerConfig config;
-  config.geometry_plane_constraint = [](const CaSX& x, const CaSX& xdot) {
-    return (-2.0 / x) * CaSX::pow(xdot, 2);
-  };
-  config.finsler_plane_constraint = [](const CaSX& x, const CaSX& xdot) {
+FabPlannerConfig Particle::GetFabricsConfig(bool is_static_env) const {
+  static const auto f1 = [](const CaSX& x, const CaSX& xdot) { return (-2.0 / x) * CaSX::pow(xdot, 2); };
+  static const auto f2 = [](const CaSX& x, const CaSX& xdot) {
     return (1.0 / CaSX::pow(x, 2)) * (1 - CaSX::heaviside(xdot)) * CaSX::pow(xdot, 2);
   };
+  FabPlannerConfig config;
+  if (is_static_env) {
+    config.geometry_plane_constraint = f1;
+    config.finsler_plane_constraint = f2;
+  } else {
+    config.collision_geometry = f1;
+    config.collision_finsler = f2;
+  }
   return config;
 }
 
@@ -250,7 +265,6 @@ std::string ParticleFixed::Name() const { return "ParticleFixed"; }
 void ParticleFixed::TransitionLocked(mjModel* model, mjData* data) {
   model_ = model;
   data_ = data;
-  obstacles_fixed_ = true;
   QueryObstacleStatesX();
   last_goal_reached_ = QueryGoalReached();
   if (this->last_goal_reached_) {
@@ -271,4 +285,4 @@ void ParticleFixed::FixedResidualFn::Residual(const mjModel* model, const mjData
                                               double* residual) const {
   ResidualImpl(model, data, particle_fixed_task->QueryGoalPos(), residual);
 }
-} // namespace mjpc
+}  // namespace mjpc

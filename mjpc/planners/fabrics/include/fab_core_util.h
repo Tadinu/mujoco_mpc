@@ -4,6 +4,7 @@
 #include <any>
 #include <casadi/casadi.hpp>
 #include <regex>
+#include <variant>
 #include <vector>
 
 // abseil
@@ -69,18 +70,47 @@ static void print_named_mapdb(const FabNamedMap<TArgs...>& vars) {
 #endif
 }
 
+template <typename TArg, typename TMap = std::map<std::string, TArg>>
+static void print_named_map2(const TMap& map, const char* label = nullptr) {
+  if (label) print(label);
+  for (const auto& [name, val] : map) {
+    print(name, ":", val);
+  }
+}
+
+template <typename TArg, typename TMap = std::map<std::string, TArg>>
+static void print_named_map2db(const TMap& map, const char* label = nullptr) {
+#if FAB_DEBUG
+  print_named_map2(map, label);
+#endif
+}
+
+template <typename T, typename... Types>
+struct is_any_type : std::disjunction<std::is_same<T, Types>...> {};
+
+template <typename T, typename... Types>
+constexpr bool is_any() {
+  return (std::is_same_v<T, Types> || ...);
+}
+
+template <typename T>
+constexpr bool is_convertible_to_casx() {
+  return is_any<T, int, double, std::vector<int>, std::vector<double>, std::vector<std::vector<double>>,
+                CaSX>();
+}
+
 template <typename TMap>
 static std::vector<std::string> get_map_keys(const TMap& variants) {
 #if 1
   std::vector<std::string> names;
   std::transform(variants.begin(), variants.end(), std::back_inserter(names),
                  [](auto& variant) { return variant.first; });
+  return names;
 #else
   // c++20
   auto kv = std::views::keys(variants);
   return {kv.begin(), kv.end()};
 #endif
-  return names;
 }
 
 template <typename TValue, typename TMap>
@@ -169,6 +199,15 @@ static T get_variant_value(const TVariant& variant) {
   return T();
 }
 
+template <typename T, typename TVariant>
+static bool get_variant_value2(const TVariant& variant, T& out) {
+  if (const auto* value_ptr = std::get_if<T>(&variant)) {
+    out = *value_ptr;
+    return true;
+  }
+  return false;
+}
+
 template <typename... TArgs>
 static std::any get_variant_value_any(const FabVariant<TArgs...>& var) {
   std::any res;
@@ -183,13 +222,58 @@ static std::any get_variant_value_any(const FabVariant<TArgs...>& var) {
 }
 
 template <typename T>
-static T get_any_value(const std::any& any_var) {
-  T any_val;
+static bool get_any_value(const std::any& any_var, T& out_val) {
   try {
-    any_val = std::any_cast<T>(any_val);
+    out_val = std::any_cast<T>(any_var);
+    return true;
   } catch (const std::bad_any_cast& e) {
+    return false;
   }
-  return any_val;
+}
+
+template <typename... TArgs>
+static FabNamedAnyMap get_named_any_map(const FabNamedMap<TArgs...>& vars) {
+  FabNamedAnyMap res;
+  for (const auto& [name, val] : vars) {
+    res.insert_or_assign(name, get_variant_value_any<TArgs...>(val));
+  }
+  return res;
+}
+
+template <typename... TArgs>
+static CaSXDict get_casx_dict(const FabNamedMap<TArgs...>& vars) {
+  CaSXDict res;
+  for (const auto& item_var : vars) {
+    (
+        [&]() {
+          const auto& name = item_var.first;
+          const auto& var = item_var.second;
+          TArgs val;
+          if (get_variant_value2<TArgs>(var, val)) {
+            res.insert_or_assign(name, CaSX(val));
+          }
+        }(),
+        ...);
+  }
+  return res;
+}
+
+template <typename... TArgs>
+static bool variant_to_casx(const FabVariant<TArgs...>& var, CaSX& out) {
+  bool res = false;
+  (
+      [&]() {
+        // std::cout << typeid(TArgs).name() << std::endl;
+        if constexpr (is_convertible_to_casx<TArgs>()) {
+          TArgs val;
+          if (get_variant_value2<TArgs>(var, val)) {
+            out = CaSX(val);
+            res = true;
+          }
+        }
+      }(),
+      ...);
+  return res;
 }
 
 template <typename T>

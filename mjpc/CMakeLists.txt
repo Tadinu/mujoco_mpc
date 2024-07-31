@@ -129,6 +129,13 @@ set(LIB_MJPC_HEADERS
         planners/fabrics/include/fab_config.h
         planners/fabrics/include/fab_robot.h
         planners/fabrics/include/fab_speed_control.h
+        urdf_parser/include/common.h
+        urdf_parser/include/geometry.h
+        urdf_parser/include/joint.h
+        urdf_parser/include/link.h
+        urdf_parser/include/model.h
+        urdf_parser/include/txml.h
+        urdf_parser/include/exception.h
         estimators/estimator.h
         estimators/unscented.h
         estimators/kalman.h

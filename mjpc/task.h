@@ -24,8 +24,8 @@
 #include <vector>
 
 #include "mjpc/norm.h"
-#include "mjpc/planners/fabrics/include/fab_forward_kinematics.h"
 #include "mjpc/planners/fabrics/include/fab_config.h"
+#include "mjpc/planners/fabrics/include/fab_forward_kinematics.h"
 #include "mjpc/planners/rmp/include/core/rmp_state.h"
 
 namespace mjpc {
@@ -38,7 +38,7 @@ inline constexpr int kMaxCostTerms = 128;
 class Task;
 class Planner;
 
-#define MJPC_LOCK_TASK_DATA_ACCESS std::lock_guard<std::mutex> lock(task_data_mutex_);
+#define MJPC_LOCK_TASK_DATA_ACCESS std::lock_guard<std::mutex> lock0(task_data_mutex_);
 
 // abstract class for a residual function
 class AbstractResidualFn {
@@ -86,7 +86,9 @@ public:
   virtual ~Task() = default;
 
   // Fabrics config
-  virtual FabPlannerConfig get_fabrics_config() const { return FabPlannerConfig(); }
+  bool is_fabrics_supported() const { return Name().starts_with("Particle"); }
+
+  virtual FabPlannerConfig GetFabricsConfig(bool is_static_env) const { return FabPlannerConfig(); }
 
   // delegates to ResidualLocked, while holding a lock
   std::unique_ptr<AbstractResidualFn> Residual() const;
@@ -124,8 +126,7 @@ public:
   // holding a lock
   double CostValue(const double* residual) const;
 
-  virtual void ModifyScene(const mjModel* model, const mjData* data, mjvScene* scene) const {
-  }
+  virtual void ModifyScene(const mjModel* model, const mjData* data, mjvScene* scene) const {}
 
   virtual std::string Name() const = 0;
   virtual std::string XmlPath() const = 0;
@@ -145,15 +146,9 @@ public:
   virtual const mjtNum* GetStartVel() { return nullptr; }
   virtual const mjtNum* GetGoalPos() { return nullptr; }
 
+  virtual std::vector<double> QueryJointPos(int dof) const { return {}; }
 
-  virtual std::vector<double> QueryJointPos(int dof) const {
-    return {};
-  }
-
-  virtual std::vector<double> QueryJointVel(int dof) const {
-    return {};
-  }
-
+  virtual std::vector<double> QueryJointVel(int dof) const { return {}; }
 
   void SetPlanner(Planner* planner) { planner_ = planner; }
   Planner* Planner() { return planner_; }
@@ -220,16 +215,9 @@ public:
   // mutex which should be held on changes to data queried from mjdata
   mutable std::mutex task_data_mutex_;
 
+  virtual bool QueryGoalReached() { return false; }
 
-  virtual bool QueryGoalReached() {
-    return false;
-  }
-
-  virtual void QueryObstacleStatesX() {
-  }
-
-  bool obstacles_fixed_ = false;
-  bool AreObstaclesFixed() const { return obstacles_fixed_; }
+  virtual void QueryObstacleStatesX() {}
 
   std::vector<StateX> GetObstacleStatesX() const {
     std::vector<StateX> obstacle_statesX;
@@ -239,6 +227,9 @@ public:
     }
     return obstacle_statesX;
   }
+
+  virtual bool IsGoalFixed() const { return true; }
+  virtual bool AreObstaclesFixed() const { return true; }
 
 protected:
   // returns a pointer to the ResidualFn instance that's used for physics
@@ -253,12 +244,10 @@ protected:
   // measuring contact forces), which will call the sensor callback, which calls
   // ResidualLocked. In order to avoid such resource contention, mutex_ might be
   // temporarily unlocked, but it must be locked again before returning.
-  virtual void TransitionLocked(mjModel* model, mjData* data) {
-  }
+  virtual void TransitionLocked(mjModel* model, mjData* data) {}
 
   // implementation of Task::Reset() which can assume a lock is held
-  virtual void ResetLocked(const mjModel* model) {
-  }
+  virtual void ResetLocked(const mjModel* model) {}
 
   // mutex which should be held on changes to InternalResidual.
   mutable std::mutex mutex_;
@@ -267,6 +256,6 @@ private:
   // initial residual parameters from model
   void SetFeatureParameters(const mjModel* model);
 };
-} // namespace mjpc
+}  // namespace mjpc
 
 #endif  // MJPC_TASK_H_

@@ -23,7 +23,7 @@ struct FabPlannerConfig {
     return 0.5 * 0.2 * CaSX::dot(xdot, xdot);
   };
   std::function<CaSX(const CaSX& x, const CaSX& xdot)> collision_geometry = [](const CaSX& x,
-    const CaSX& xdot) {
+                                                                               const CaSX& xdot) {
     return -0.5 / CaSX::pow(x, 5) * (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2);
   };
 
@@ -39,7 +39,7 @@ struct FabPlannerConfig {
   };
 
   std::function<CaSX(const CaSX& x, const CaSX& xdot)> self_collision_geometry = [](const CaSX& x,
-    const CaSX& xdot) {
+                                                                                    const CaSX& xdot) {
     return -0.5 / x * (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2);
   };
 
@@ -47,24 +47,32 @@ struct FabPlannerConfig {
       [](const CaSX& x, const CaSX& xdot) { return 0.1 / x * CaSX::pow(xdot, 2); };
 
   std::function<CaSX(const CaSX& x, const CaSX& xdot)> geometry_plane_constraint = [](const CaSX& x,
-    const CaSX& xdot) {
+                                                                                      const CaSX& xdot) {
     return -0.5 / CaSX::pow(x, 5) * (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2);
   };
 
   std::function<CaSX(const CaSX& x, const CaSX& xdot)> finsler_plane_constraint =
       [](const CaSX& x, const CaSX& xdot) { return 0.1 / x * CaSX::pow(xdot, 2); };
 
-  std::function<CaSX(const CaSX& x)> attractor_potential = [](const CaSX& x) {
-    return 5.0 * (CaSX::norm_2(x) + (1 / (10 * CaSX::log(1 + CaSX::exp(-2 * 10 * CaSX::norm_2(x))))));
+  // Directionally stretched metric
+  std::function<CaSX(const CaSX& x, const double)> attractor_potential = [](const CaSX& x,
+                                                                            const double weight) {
+    // alpha: scaling factor for the softmax
+    static constexpr float alpha = 10.f;
+    const CaSX x_norm = CaSX::norm_2(x);
+    return weight * (x_norm + (1 / alpha) * CaSX::log(1 + CaSX::exp(-2 * alpha * x_norm)));
   };
 
   std::function<CaSX(const CaSX& x)> attractor_metric = [](const CaSX& x) {
-    return (2.0 - 0.3) * CaSX::exp(-1 * CaSX::pow(0.75 * CaSX::norm_2(x), 2) + 0.3) *
+    static constexpr float alpha = 20.0;
+    static constexpr float beta = 0.3;
+    return (alpha - beta) * CaSX::exp(-1 * CaSX::pow(0.75 * CaSX::norm_2(x), alpha) + beta) *
            CaSX::eye(x.size().first);
   };
 
   std::function<CaSX(const CaSX& x, const CaSX& a_ex, const CaSX& a_le)> damper_beta = [](const CaSX& x,
-    const CaSX& a_ex, const CaSX& a_le) {
+                                                                                          const CaSX& a_ex,
+                                                                                          const CaSX& a_le) {
     return 0.5 * (CaSX::tanh(-0.5 * (CaSX::norm_2(x) - 0.02)) + 1) * 6.5 + 0.01 + CaSX::fmax(0, a_ex - a_le);
   };
 
@@ -74,16 +82,16 @@ struct FabPlannerConfig {
 
   std::function<CaSX(const CaSX& x, const CaSX& a_ex, const CaSX& a_le, const CaSX& alpha_b,
                      const CaSX& radius_shift, const CaSX& beta_close, const CaSX& beta_distant)>
-  damper_beta_ = [](const CaSX& x, const CaSX& a_ex, const CaSX& a_le, const CaSX& alpha_b,
-                    const CaSX& radius_shift, const CaSX& beta_close, const CaSX& beta_distant) {
-    return 0.5 * (CaSX::tanh(-alpha_b * (CaSX::norm_2(x) - radius_shift)) + 1) * beta_close +
-           beta_distant + CaSX::fmax(0, a_ex - a_le);
-  };
+      damper_beta_ = [](const CaSX& x, const CaSX& a_ex, const CaSX& a_le, const CaSX& alpha_b,
+                        const CaSX& radius_shift, const CaSX& beta_close, const CaSX& beta_distant) {
+        return 0.5 * (CaSX::tanh(-alpha_b * (CaSX::norm_2(x) - radius_shift)) + 1) * beta_close +
+               beta_distant + CaSX::fmax(0, a_ex - a_le);
+      };
 
   std::function<CaSX(const CaSX& alpha_eta, const CaSX& ex_lag, const CaSX& ex_factor)> damper_eta_ =
       [](const CaSX& alpha_eta, const CaSX& ex_lag, const CaSX& ex_factor) {
-    return 0.5 * (CaSX::tanh(-alpha_eta * ex_lag * (1 - ex_factor) - 0.5) + 1);
-  };
+        return 0.5 * (CaSX::tanh(-alpha_eta * ex_lag * (1 - ex_factor) - 0.5) + 1);
+      };
 };
 
 struct FabJointLimitArray {
@@ -99,14 +107,13 @@ public:
   FabProblemConfig() = default;
 
   explicit FabProblemConfig(FabNamedMap<TArgs...> configs)
-    : configs_(std::move(configs)),
-      goal_composition_(
-          FabGoalComposition("goal", fab_core::get_variant_value<FabGoalConfig>(configs_["goal"]))) {
+      : configs_(std::move(configs)),
+        goal_composition_(
+            FabGoalComposition("goal", fab_core::get_variant_value<FabGoalConfig>(configs_["goal"]))) {
     const auto& joint_limits_data = configs_["joint_limits"];
     joint_limits_ = FabJointLimitArray{
         .lower_limits = fab_core::tokenize<double>(joint_limits_data["lower_limits"], ' '),
-        .upper_limits = fab_core::tokenize<double>(joint_limits_data["upper_limits"], ' ')
-    };
+        .upper_limits = fab_core::tokenize<double>(joint_limits_data["upper_limits"], ' ')};
     construct_robot_representation();
     const auto env_config =
         fab_core::get_variant_value<std::map<std::string, std::string>>(configs_["environment"]);
@@ -120,7 +127,7 @@ public:
   void construct_robot_representation() {
     std::map<std::string, FabGeometricPrimitivePtr> collision_links;
     auto robot_config = fab_core::get_variant_value<
-      std::map<std::string, std::map<std::string, std::map<std::string, std::string>>>>(
+        std::map<std::string, std::map<std::string, std::map<std::string, std::string>>>>(
         configs_["robot_representation"]);
     for (const auto& [link_name, link_data] : robot_config["collision_links"]) {
       const std::string collision_link_type = fab_core::get_map_keys(link_data)[0];
@@ -156,5 +163,5 @@ protected:
 };
 
 using FabPlannerProblemConfig =
-FabProblemConfig<FabGoalConfig, std::string, std::vector<std::string>, std::map<std::string, std::string>,
-                 std::map<std::string, std::vector<std::string>>>;
+    FabProblemConfig<FabGoalConfig, std::string, std::vector<std::string>, std::map<std::string, std::string>,
+                     std::map<std::string, std::vector<std::string>>>;

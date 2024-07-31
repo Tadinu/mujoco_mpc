@@ -1,12 +1,16 @@
 #pragma once
 
-#include <casadi/casadi.hpp>
-#include <casadi/core/casadi_types.hpp>
 #include <stdexcept>
 #include <vector>
 
+// casadi
+#include <casadi/casadi.hpp>
+#include <casadi/core/casadi_types.hpp>
+
+// fabrics
 #include "mjpc/planners/fabrics/include/fab_common.h"
 #include "mjpc/planners/fabrics/include/fab_core_util.h"
+#include "mjpc/urdf_parser/include/common.h"
 
 namespace fab_math {
 static CaSX CASX_TRANSF_IDENTITY = CaSX::eye(4);

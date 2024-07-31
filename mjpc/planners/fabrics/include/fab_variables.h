@@ -21,7 +21,7 @@ public:
 
   void print_self() const {
     const auto self_size = size();
-    const auto vars_size = vars().size();
+    const auto vars_size = all_vars().size();
     FAB_PRINT("TOTAL SIZE", self_size, "VARS SIZE", vars_size);
     assert(self_size == vars_size);
     FAB_PRINT("STATE VARS --");
@@ -57,7 +57,7 @@ public:
     return state_var(state_variable_names[1]);
   }
 
-  CaSXDict vars() const {
+  CaSXDict all_vars() const {
     CaSXDict all;
     append_variants<CaSX>(all, state_variables_, true);
     append_variants<CaSX>(all, parameters_, true);
@@ -73,8 +73,8 @@ public:
 
   CaSXDict state_variables() const { return state_variables_; }
 
-  void add_state_variable(std::string name, CaSX value) {
-    state_variables_.insert_or_assign(std::move(name), std::move(value));
+  void add_state_variable(std::string name, const CaSX& value) {
+    state_variables_.insert_or_assign(std::move(name), value);
   }
 
   CaSXDict parameters() const { return parameters_; }
@@ -88,34 +88,29 @@ public:
                                             : -1;
   }
 
-  void add_parameter(std::string name, CaSX value) {
-    parameters_.insert_or_assign(std::move(name), std::move(value));
+  void add_parameter(std::string name, const CaSX& value) {
+    parameters_.insert_or_assign(std::move(name), value);
   }
 
-  void add_parameters(CaSXDict params) {
-    for (auto param : std::move(params)) {
-      parameters_.insert_or_assign(std::move(param.first), std::move(param.second));
-    }
-  }
+  void add_parameters(const CaSXDict& params) { append_variants<CaSX>(parameters_, params, true); }
 
   FabDoubleScalarMap parameter_values() const { return parameter_values_; }
 
-  void add_parameter_values(FabDoubleScalarMap param_values) {
-    for (auto param_value : std::move(param_values)) {
-      parameter_values_.insert_or_assign(std::move(param_value.first), std::move(param_value.second));
-    }
+  void add_parameter_values(const FabDoubleScalarMap& param_values) {
+    append_variants<FabVariant<double, std::vector<double>>>(parameter_values_, param_values, true);
   }
 
   template <typename T, typename TNamedMap = std::map<std::string, T>>
-  static void append_variants(TNamedMap& variants1, const TNamedMap& variants2, bool overwrite = false) {
-    for (const auto& other_var : variants2) {
-      const auto& other_key = other_var.first;
-      const auto& other_val = other_var.second;
+  static void append_variants(TNamedMap& variants1, const TNamedMap& variants2, bool overwrite) {
+    for (const auto& [other_key, other_val] : variants2) {
       if (overwrite) {
         variants1.insert_or_assign(other_key, other_val);
       } else if constexpr (std::is_same_v<T, CaSX>) {
         if (variants1.contains(other_key)) {
           if (!CaSX::is_equal(variants1[other_key], other_val)) {
+            if (other_key == "radius_body_base_link") {
+              FAB_PRINTDB(other_key, variants1[other_key], other_val);
+            }
             std::string new_key = other_key;
             int counter = 0;
             do {
@@ -130,15 +125,11 @@ public:
     }
   }
 
-  FabVariables operator+(const FabVariables& other) const {
-    FabVariables v = *this;
-    v += other;
-    return v;
-  }
+  FabVariables operator+(const FabVariables& other) const { return FabVariables(*this) += other; }
 
   FabVariables& operator+=(const FabVariables& other) {
-    append_variants<CaSX>(state_variables_, other.state_variables());
-    append_variants<CaSX>(parameters_, other.parameters());
+    append_variants<CaSX>(state_variables_, other.state_variables(), false);
+    append_variants<CaSX>(parameters_, other.parameters(), false);
     append_variants<std::variant<double>>(parameter_values_, other.parameter_values(), true);
     return *this;
   }
@@ -173,6 +164,7 @@ protected:
   CaSXDict parameters_;
   FabDoubleScalarMap parameter_values_;
 };
+using FabVariablesPtr = std::shared_ptr<FabVariables>;
 
 using FabTrajectory = FabVariables::FabTrajectory;
 using FabTrajectories = FabVariables::FabTrajectories;

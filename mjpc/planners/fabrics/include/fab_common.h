@@ -3,6 +3,7 @@
 // https://arxiv.org/abs/2205.08454
 // https://github.com/tud-amr/fabrics
 
+#include <any>
 #include <casadi/casadi.hpp>
 #include <shared_mutex>
 #include <variant>
@@ -29,6 +30,7 @@ using FabNamedVariantPair = std::pair<std::string, FabVariant<TVariant...>>;
 template <typename... TVariant>
 using FabNamedMap = std::map<std::string, FabVariant<TVariant...>>;
 using FabDoubleScalarMap = FabNamedMap<double, std::vector<double>>;
+using FabNamedAnyMap = std::map<std::string, std::any>;
 
 template <typename... TVariant>
 using FabVariantVector = std::vector<FabVariant<TVariant...>>;
@@ -36,11 +38,15 @@ using FabVariantVector = std::vector<FabVariant<TVariant...>>;
 // Highest accuracy without harming matrix inverse 1e-7
 static constexpr auto FAB_EPS = 1e-6;
 
-#define FAB_DEBUG (1)
+#define FAB_DEBUG (0)
 #define FAB_USE_ACTUATOR_VELOCITY (1)
 #define FAB_USE_ACTUATOR_MOTOR (!FAB_USE_ACTUATOR_VELOCITY)
-#define FAB_ACTUATOR_VELOCITY_KV (5)
+#define FAB_ACTUATOR_VELOCITY_KV (1)
 #define FAB_DRAW_TRAJECTORY (1)
+#define FAB_OBSTACLE_SIZE_SCALE (1)
+
+// NOTE: Dynamic goal is not yet working
+#define FAB_DYNAMIC_GOAL_SUPPORTED (0)
 
 using FabSharedMutexLock = std::shared_lock<std::shared_mutex>;
 

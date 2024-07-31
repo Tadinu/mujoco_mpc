@@ -93,6 +93,7 @@ struct FabSubGoal {
     return dis(gen);
   }
 };
+using FabSubGoalPtr = std::shared_ptr<FabSubGoal>;
 
 struct FabStaticSubGoal : public FabSubGoal {
   FabStaticSubGoal() = default;
@@ -139,7 +140,7 @@ using FabSubGoalConfigItem =
 using FabGoalConfig = std::map<std::string, std::map<std::string, FabSubGoalConfigItem>>;
 
 class FabGoalComposition {
- public:
+public:
   template <typename T, typename = std::enable_if<std::is_base_of_v<T, FabSubGoal>>>
   static std::shared_ptr<T> create_sub_goal(FabSubGoalConfig goal_config) {
     return std::make_shared<T>(std::move(goal_config));
@@ -197,7 +198,7 @@ class FabGoalComposition {
 
   bool is_valid() const { return !sub_goals_.empty(); }
 
- protected:
+protected:
   std::string name_;
   int primary_goal_index_ = -1;
   FabSubGoalPtrArray sub_goals_;

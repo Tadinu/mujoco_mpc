@@ -33,19 +33,23 @@
 namespace mjpc {
 class Particle : public Task {
 public:
-  std::random_device rd; // To obtain a seed for the random number engine
-  std::mt19937 gen = std::mt19937(rd()); // Standard mersenne_twister_engine seeded with rd()
+  Particle() : residual_(this) {}
+  std::random_device rd;                  // To obtain a seed for the random number engine
+  std::mt19937 gen = std::mt19937(rd());  // Standard mersenne_twister_engine seeded with rd()
   std::uniform_real_distribution<> dis = std::uniform_real_distribution<>(-0.2, 0.2);
   double rand_val() { return dis(gen); }
 
   std::string Name() const override;
   std::string XmlPath() const override;
 
+  bool IsGoalFixed() const override { return !FAB_DYNAMIC_GOAL_SUPPORTED; }
+  bool AreObstaclesFixed() const override { return false; }
+
   // NOTES on mutex:
   // Access to model & data: already locked by [sim.mtx]
   // Access to task local data: lock on [task_data_mutex_]
-  virtual int GetTargetObjectId() const override { return mj_name2id(model_, mjOBJ_BODY, "rigidmass"); }
-  virtual int GetTargetObjectGeomId() const override { return mj_name2id(model_, mjOBJ_GEOM, "rigidmass"); }
+  int GetTargetObjectId() const override { return mj_name2id(model_, mjOBJ_BODY, "rigidmass"); }
+  int GetTargetObjectGeomId() const override { return mj_name2id(model_, mjOBJ_GEOM, "rigidmass"); }
 
   const mjtNum* QueryParticlePos() const {
     if (model_) {
@@ -99,7 +103,6 @@ public:
     return &start_vel_[0];
   }
 
-
   std::vector<double> QueryJointPos(int dof) const override {
     if (model_ && data_ && (model_->nq <= dof)) {
       std::vector<double> qpos(dof);
@@ -109,15 +112,14 @@ public:
     return {};
   }
 
-
   std::vector<double> QueryJointVel(int dof) const override {
     if (model_ && data_ && (model_->nv <= dof)) {
       std::vector<double> qvel(dof);
       memcpy(qvel.data(), &data_->qvel[0], model_->nv * sizeof(mjtNum));
+      return qvel;
     }
     return {};
   }
-
 
   void SetGoalPos(const double* pos) { SetBodyMocapPos("goal", pos); }
 
@@ -138,8 +140,7 @@ public:
   class ResidualFn : public mjpc::BaseResidualFn {
   public:
     explicit ResidualFn(const Particle* task)
-      : mjpc::BaseResidualFn(task), particle_task(dynamic_cast<const Particle*>(task_)) {
-    }
+        : mjpc::BaseResidualFn(task), particle_task(dynamic_cast<const Particle*>(task_)) {}
 
     // -------- Residuals for particle task -------
     //   Number of residuals: 3
@@ -150,9 +151,6 @@ public:
     void Residual(const mjModel* model, const mjData* data, double* residual) const override;
     const Particle* particle_task = nullptr;
   };
-
-  Particle() : residual_(this) {
-  }
 
   void TransitionLocked(mjModel* model, mjData* data) override;
 
@@ -183,7 +181,7 @@ protected:
 
   BaseResidualFn* InternalResidual() override { return &residual_; }
 
-  FabPlannerConfig get_fabrics_config() const override;
+  FabPlannerConfig GetFabricsConfig(bool is_static_env) const override;
 
 private:
   ResidualFn residual_;
@@ -192,14 +190,17 @@ private:
 // The same task, but the goal mocap body doesn't move.
 class ParticleFixed : public Particle {
 public:
+  ParticleFixed() : residual_(this) {}
   std::string Name() const override;
   std::string XmlPath() const override;
+
+  bool IsGoalFixed() const override { return true; }
+  bool AreObstaclesFixed() const override { return true; }
 
   class FixedResidualFn : public mjpc::BaseResidualFn {
   public:
     explicit FixedResidualFn(const ParticleFixed* task)
-      : mjpc::BaseResidualFn(task), particle_fixed_task(dynamic_cast<const ParticleFixed*>(task_)) {
-    }
+        : mjpc::BaseResidualFn(task), particle_fixed_task(dynamic_cast<const ParticleFixed*>(task_)) {}
 
     // -------- Residuals for particle task -------
     //   Number of residuals: 3
@@ -210,9 +211,6 @@ public:
     void Residual(const mjModel* model, const mjData* data, double* residual) const override;
     const ParticleFixed* particle_fixed_task = nullptr;
   };
-
-  ParticleFixed() : residual_(this) {
-  }
 
   void TransitionLocked(mjModel* model, mjData* data) override;
 
@@ -226,6 +224,6 @@ protected:
 private:
   FixedResidualFn residual_;
 };
-} // namespace mjpc
+}  // namespace mjpc
 
 #endif  // MJPC_TASKS_PARTICLE_PARTICLE_H_

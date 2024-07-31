@@ -13,16 +13,16 @@
 enum class FabRobotBaseType : uint8_t { DIFF_DRIVE, HOLONOMIC };
 
 class FabForwardKinematics {
- public:
+public:
   virtual CaSX casadi(const CaSX& q, const FabVariant<int, std::string>& child_link,
                       const FabVariant<int, std::string>& parent_link = {},
                       const CaSX& link_transf = fab_math::CASX_TRANSF_IDENTITY, bool position_only = false) {
-    return CaSX();
+    return {};
   }
 
   virtual int n() { return n_; }
 
- protected:
+protected:
   int n_ = 0;
   CaSX mount_transformation_ = fab_math::CASX_TRANSF_IDENTITY;
 };
@@ -30,7 +30,7 @@ class FabForwardKinematics {
 using FabForwardKinematicsPtr = std::shared_ptr<FabForwardKinematics>;
 
 class FabURDFForwardKinematics : public FabForwardKinematics {
- public:
+public:
   FabURDFForwardKinematics() = default;
 
   FabURDFForwardKinematics(std::string urdf_file, std::string base_link_name,
@@ -160,7 +160,7 @@ class FabURDFForwardKinematics : public FabForwardKinematics {
     return fk;
   }
 
- protected:
+protected:
   urdf::UrdfModel robot_model_;
   std::string urdf_file_;
   CaSX q_ca_;
