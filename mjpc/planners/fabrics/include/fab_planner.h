@@ -621,6 +621,8 @@ public:
       FAB_PRINTDB("alpha_geometry:", eval["alpha_geometry"]);
       FAB_PRINTDB("beta", eval["beta"]);
 
+      // FAB_PRINT(action);
+      // FAB_PRINT(CaSX::norm_2(action));
       const double action_magnitude = double(CaSX::norm_2(action).scalar());
       if (action_magnitude < casadi::eps) {
         FAB_PRINT("Fabrics: Avoiding SMALL action with magnitude", action_magnitude);
@@ -782,7 +784,7 @@ public:
         {"q", std::move(q)},
         {"qdot", std::move(qdot)},
         {"x_goal_0", std::vector{goal_pos[0], goal_pos[1]}},  // EXCLUDING goal_pos[2]
-        {"weight_goal_0", std::vector{5.0}},                  // irrelevant atm
+        {"weight_goal_0", std::vector{5.0}},
         {"radius_body_base_link", std::vector{0.01}},
     };
 
@@ -792,7 +794,7 @@ public:
     const auto fobstacle_prop_name = [&fixed_obstacles](const char* prefix, const int i) {
       return (fixed_obstacles ? prefix : (std::string(prefix) + "dynamic_")) + std::to_string(i);
     };
-    for (auto i = 0; i < mjpc::Task::OBSTACLES_NUM; ++i) {
+    for (auto i = 0; i < obstacle_statesX.size(); ++i) {
       const auto& obstacle_i = obstacle_statesX[i];
       args.insert_or_assign(fobstacle_prop_name("radius_obst_", i),
                             FAB_OBSTACLE_SIZE_SCALE * obstacle_i.size_[0]);
@@ -809,10 +811,9 @@ public:
     }
 
     // Compute action
-    CaSX action = compute_action(args);
     {
       const FabSharedMutexLock lock(policy_mutex_);
-      action_ = action;
+      action_ = compute_action(args);
     }
   }
 
@@ -836,7 +837,9 @@ public:
       for (auto i = 0; i < dof; ++i) {
 #if FAB_USE_ACTUATOR_VELOCITY
         action[i] = FAB_ACTUATOR_VELOCITY_KV * double(fab_core::get_casx(action_, i).scalar());
-        FAB_PRINTDB(action[0], action[1]);
+        if (dof >= 3) {
+          FAB_PRINTDB(action[0], action[1], action[2]);
+        }
 #elif FAB_USE_ACTUATOR_MOTOR
         static const auto pointmass_id = task_->GetTargetObjectId();
         static const auto pointmass = model_->body_mass[pointmass_id];

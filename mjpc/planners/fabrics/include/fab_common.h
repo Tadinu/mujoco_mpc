@@ -43,7 +43,7 @@ static constexpr auto FAB_EPS = 1e-6;
 #define FAB_USE_ACTUATOR_MOTOR (!FAB_USE_ACTUATOR_VELOCITY)
 #define FAB_ACTUATOR_VELOCITY_KV (1)
 #define FAB_DRAW_TRAJECTORY (1)
-#define FAB_OBSTACLE_SIZE_SCALE (1)
+#define FAB_OBSTACLE_SIZE_SCALE (1.0)
 
 // NOTE: Dynamic goal is not yet working
 #define FAB_DYNAMIC_GOAL_SUPPORTED (0)

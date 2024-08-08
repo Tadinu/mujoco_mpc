@@ -111,28 +111,28 @@ void BaseResidualFn::Update() {
   num_norm_parameter_ = task_->num_norm_parameter;
   norm_ = task_->norm;
   weight_ = task_->weight;
-  norm_parameter_ = task_->norm_parameter;
+  // norm_parameter_ = task_->norm_parameter;
   risk_ = task_->risk;
   parameters_ = task_->parameters;
 }
 
 std::unique_ptr<mjpc::AbstractResidualFn> Task::Residual() const {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::shared_lock<std::shared_mutex> lock(mutex_);
   return ResidualLocked();
 }
 
 void Task::Residual(const mjModel* model, const mjData* data, double* residual) const {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::shared_lock<std::shared_mutex> lock(mutex_);
   InternalResidual()->Residual(model, data, residual);
 }
 
 void Task::UpdateResidual() {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::shared_lock<std::shared_mutex> lock(mutex_);
   InternalResidual()->Update();
 }
 
 void Task::Transition(mjModel* model, mjData* data) {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::shared_lock<std::shared_mutex> lock(mutex_);
   model_ = model;
   data_ = data;
   TransitionLocked(model, data);
@@ -140,7 +140,7 @@ void Task::Transition(mjModel* model, mjData* data) {
 }
 
 void Task::Reset(const mjModel* model) {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::shared_lock<std::shared_mutex> lock(mutex_);
 
   // ----- defaults ----- //
 
@@ -238,17 +238,17 @@ void Task::Reset(const mjModel* model) {
 }
 
 void Task::CostTerms(double* terms, const double* residual) const {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::shared_lock<std::shared_mutex> lock(mutex_);
   return InternalResidual()->CostTerms(terms, residual, /*weighted=*/true);
 }
 
 void Task::UnweightedCostTerms(double* terms, const double* residual) const {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::shared_lock<std::shared_mutex> lock(mutex_);
   return InternalResidual()->CostTerms(terms, residual, /*weighted=*/false);
 }
 
 double Task::CostValue(const double* residual) const {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::shared_lock<std::shared_mutex> lock(mutex_);
   return InternalResidual()->CostValue(residual);
 }
 

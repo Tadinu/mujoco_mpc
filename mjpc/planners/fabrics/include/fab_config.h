@@ -64,7 +64,7 @@ struct FabPlannerConfig {
   };
 
   std::function<CaSX(const CaSX& x)> attractor_metric = [](const CaSX& x) {
-    static constexpr float alpha = 20.0;
+    static constexpr float alpha = 1000.0;
     static constexpr float beta = 0.3;
     return (alpha - beta) * CaSX::exp(-1 * CaSX::pow(0.75 * CaSX::norm_2(x), alpha) + beta) *
            CaSX::eye(x.size().first);

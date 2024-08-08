@@ -38,7 +38,7 @@ inline constexpr int kMaxCostTerms = 128;
 class Task;
 class Planner;
 
-#define MJPC_LOCK_TASK_DATA_ACCESS std::lock_guard<std::mutex> lock0(task_data_mutex_);
+#define MJPC_LOCK_TASK_DATA_ACCESS std::shared_lock<std::shared_mutex> lock0(task_data_mutex_);
 
 // abstract class for a residual function
 class AbstractResidualFn {
@@ -213,7 +213,7 @@ public:
   std::vector<StateX> obstacle_statesX_;
 
   // mutex which should be held on changes to data queried from mjdata
-  mutable std::mutex task_data_mutex_;
+  mutable std::shared_mutex task_data_mutex_;
 
   virtual bool QueryGoalReached() { return false; }
 
@@ -225,7 +225,7 @@ public:
       MJPC_LOCK_TASK_DATA_ACCESS;
       obstacle_statesX = obstacle_statesX_;
     }
-    return obstacle_statesX;
+    return obstacle_statesX_;
   }
 
   virtual bool IsGoalFixed() const { return true; }
@@ -250,7 +250,7 @@ protected:
   virtual void ResetLocked(const mjModel* model) {}
 
   // mutex which should be held on changes to InternalResidual.
-  mutable std::mutex mutex_;
+  mutable std::shared_mutex mutex_;
 
 private:
   // initial residual parameters from model

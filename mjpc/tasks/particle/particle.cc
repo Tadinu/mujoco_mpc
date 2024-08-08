@@ -28,7 +28,9 @@
 #include "mjpc/planners/rmp/include/util/rmp_util.h"
 
 namespace mjpc {
-std::string Particle::XmlPath() const { return GetModelPath("particle/task_timevarying.xml"); }
+std::string Particle::XmlPath() const {
+  return GetModelPath(IS_3D ? "particle/task3d_timevarying.xml" : "particle/task_timevarying.xml");
+}
 std::string Particle::Name() const { return "Particle"; }
 
 bool Particle::CheckBlocking(const double start[], const double end[]) {
@@ -134,10 +136,10 @@ void ResidualImpl(const mjModel* model, const mjData* data, const double goal[2]
 
   // ----- residual (1) ----- //
   double* velocity = SensorByName(model, data, "velocity");
-  mju_copy(residual + 2, velocity, model->nv);
+  mju_copy(residual + (Particle::IS_3D ? 3 : 2), velocity, model->nv);
 
   // ----- residual (2) ----- //
-  mju_copy(residual + 4, data->ctrl, model->nu);
+  mju_copy(residual + (Particle::IS_3D ? 6 : 4), data->ctrl, model->nu);
 }
 }  // namespace
 
@@ -259,7 +261,7 @@ FabPlannerConfig Particle::GetFabricsConfig(bool is_static_env) const {
 // ===========================================================================================================
 // PARTICLE FIXED --
 //
-std::string ParticleFixed::XmlPath() const { return GetModelPath("particle/task_timevarying.xml"); }
+std::string ParticleFixed::XmlPath() const { return Particle::XmlPath(); }
 std::string ParticleFixed::Name() const { return "ParticleFixed"; }
 
 void ParticleFixed::TransitionLocked(mjModel* model, mjData* data) {
@@ -274,6 +276,9 @@ void ParticleFixed::TransitionLocked(mjModel* model, mjData* data) {
     // Stop the particle
     data->ctrl[0] = 0.f;
     data->ctrl[1] = 0.f;
+    if (IS_3D) {
+      data->ctrl[2] = 0.f;
+    }
     // Randomize goal and obstacles for the next run
     double new_goal_pos[2] = {rand_val(), rand_val()};
     SetGoalPos(new_goal_pos);

@@ -33,6 +33,7 @@
 namespace mjpc {
 class Particle : public Task {
 public:
+  static constexpr bool IS_3D = true;
   Particle() : residual_(this) {}
   std::random_device rd;                  // To obtain a seed for the random number engine
   std::mt19937 gen = std::mt19937(rd());  // Standard mersenne_twister_engine seeded with rd()
