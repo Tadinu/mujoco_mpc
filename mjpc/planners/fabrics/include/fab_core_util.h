@@ -61,6 +61,7 @@ static void print_named_map(const FabNamedMap<TArgs...>& vars) {
   for (const auto& [name, var] : vars) {
     print_variant(var, name);
   }
+  print("----------------");
 }
 
 template <typename... TArgs>
@@ -76,12 +77,13 @@ static void print_named_map2(const TMap& map, const char* label = nullptr) {
   for (const auto& [name, val] : map) {
     print(name, ":", val);
   }
+  print("----------------");
 }
 
 template <typename TArg, typename TMap = std::map<std::string, TArg>>
 static void print_named_map2db(const TMap& map, const char* label = nullptr) {
 #if FAB_DEBUG
-  print_named_map2(map, label);
+  print_named_map2<TArg>(map, label);
 #endif
 }
 
@@ -351,11 +353,7 @@ static bool check_compatibility(const TGeometricComponent1& a, const TGeometricC
 
 static CaSX get_casx(const CaSX& a, const std::vector<int>& filtering_indices, bool indx1 = false) {
   CaSX elem;
-  if (filtering_indices.size() == 1) {
-    a.get(elem, indx1, filtering_indices[0], filtering_indices[0]);
-  } else {
-    a.get(elem, indx1, filtering_indices);
-  }
+  a.get(elem, indx1, filtering_indices);
   return elem;
 }
 

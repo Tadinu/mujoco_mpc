@@ -94,6 +94,7 @@ struct FabSubGoal {
   }
 };
 using FabSubGoalPtr = std::shared_ptr<FabSubGoal>;
+using FabSubGoalPtrArray = std::vector<FabSubGoalPtr>;
 
 struct FabStaticSubGoal : public FabSubGoal {
   FabStaticSubGoal() = default;
@@ -118,19 +119,19 @@ struct FabStaticSubGoal : public FabSubGoal {
     }
   }
 };
+using FabStaticSubGoalPtr = std::shared_ptr<FabStaticSubGoal>;
 
 struct FabDynamicSubGoal : public FabSubGoal {
   FabDynamicSubGoal() = default;
   explicit FabDynamicSubGoal(FabSubGoalConfig config) : FabSubGoal(std::move(config)) {}
 };
+using FabDynamicSubGoalPtr = std::shared_ptr<FabDynamicSubGoal>;
 
 struct FabStaticJointSpaceSubGoal : public FabStaticSubGoal {
   FabStaticJointSpaceSubGoal() = default;
   explicit FabStaticJointSpaceSubGoal(FabSubGoalConfig config) : FabStaticSubGoal(std::move(config)) {}
 };
-
-using FabSubGoalPtr = std::shared_ptr<FabSubGoal>;
-using FabSubGoalPtrArray = std::vector<FabSubGoalPtr>;
+using FabStaticJointSpaceSubGoalPtr = std::shared_ptr<FabStaticJointSpaceSubGoal>;
 
 // ===========================================================================================================
 // GOAL COMPOSITON --

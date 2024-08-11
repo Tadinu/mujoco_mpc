@@ -12,32 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <absl/flags/flag.h>
+#include <absl/flags/parse.h>
+#include <absl/strings/match.h>
+#include <mujoco/mujoco.h>
+
 #include <iostream>
 #include <string>
 #include <vector>
-#include <absl/flags/parse.h>
 
-#include <absl/flags/flag.h>
-#include <absl/strings/match.h>
-#include <mujoco/mujoco.h>
 #include "mjpc/app.h"
 #include "mjpc/tasks/tasks.h"
 
-#if 1
-ABSL_FLAG(std::string, task_name, "Particle",
-          "Which model to load on startup.");
-#else
-ABSL_FLAG(std::string, task_name, "Quadruped Flat",
-          "Which model to load on startup.");
-#endif
+// Particle, Quadruped Flat
+ABSL_FLAG(std::string, task_name, "PickAndPlace", "Which model to load on startup.");
 
 // machinery for replacing command line error by a macOS dialog box
 // when running under Rosetta
 #if defined(__APPLE__) && defined(__AVX__)
 extern void DisplayErrorDialogBox(const char* title, const char* msg);
 static const char* rosetta_error_msg = nullptr;
-__attribute__((used, visibility("default")))
-extern "C" void _mj_rosettaError(const char* msg) {
+__attribute__((used, visibility("default"))) extern "C" void _mj_rosettaError(const char* msg) {
   rosetta_error_msg = msg;
 }
 #endif
@@ -63,8 +58,7 @@ int main(int argc, char** argv) {
     }
   }
   if (task_id == -1) {
-    std::cerr << "Invalid --task flag: '" << task_name
-              << "'. Valid values:\n";
+    std::cerr << "Invalid --task flag: '" << task_name << "'. Valid values:\n";
     for (int i = 0; i < tasks.size(); i++) {
       std::cerr << "  " << tasks[i]->Name() << "\n";
     }
