@@ -13,6 +13,7 @@
 #include "mjpc/planners/fabrics/include/fab_core_util.h"
 #include "mjpc/planners/fabrics/include/fab_diff_map.h"
 #include "mjpc/planners/fabrics/include/fab_geometry.h"
+#include "mjpc/planners/fabrics/include/fab_math_util.h"
 #include "mjpc/planners/fabrics/include/fab_variables.h"
 
 using FabSpecArgs = FabGeometryArgs;
@@ -64,15 +65,15 @@ public:
     // [J_ref_, J_ref_inv_]
     if (is_dynamic()) {
       const auto size = x_ref().size().first;
-      J_ref_ = CaSX::eye(size);
-      J_ref_inv_ = CaSX::eye(size);
+      J_ref_ = fab_math::CASX_IDENTITY(size);
+      J_ref_inv_ = fab_math::CASX_IDENTITY(size);
     } else if (kwargs.contains("J_ref")) {
       J_ref_ = *fab_core::get_arg_value<decltype(J_ref_)>(kwargs, "J_ref");
       FAB_PRINT("Casadi pseudo inverse is used in Lagrangian");
       const auto size = x_ref().size().first;
       const auto J_ref_transpose = J_ref_.T();
-      J_ref_inv_ = CaSX::mtimes(J_ref_transpose,
-                                CaSX::inv(CaSX::mtimes(J_ref_, J_ref_transpose) + CaSX::eye(size) * FAB_EPS));
+      J_ref_inv_ = CaSX::mtimes(
+          J_ref_transpose, CaSX::inv(CaSX::mtimes(J_ref_, J_ref_transpose) + fab_math::CASX_IDENTITY(size) * FAB_EPS));
     }
 
 #if 0
@@ -85,7 +86,7 @@ public:
 
   CaSX Minv() const {
     FAB_PRINT("Casadi pseudo inverse is used in spec");
-    return CaSX::pinv(M_ + CaSX::eye(x().size().first) * FAB_EPS);
+    return CaSX::pinv(M_ + fab_math::CASX_IDENTITY(x().size().first) * FAB_EPS);
   }
 
   CaSX h() const override { return has_h() ? h_ : CaSX::mtimes(Minv(), f_); }
@@ -101,7 +102,6 @@ public:
 
     // [all+vars]
     auto all_vars = std::make_shared<FabVariables>(*vars_ + *b.vars());
-    all_vars->print_self();
 
     // [all_ref_names, J_ref]
     std::vector<std::string> all_ref_names;
@@ -167,11 +167,9 @@ protected:
     FAB_PRINTDB("dm.phi", dm.phi(), dm.phi().size());
 
     const auto M_pulled_subst_x = CaSX::substitute(M_pulled, x, dm.phi());
-    FAB_PRINT("M_pulled_subst_x", M_pulled_subst_x, M_pulled_subst_x.size());
-#if 1
+#if 0
     const auto dm_phidot = dm.phidot();
     FAB_PRINTDB("===========");
-    FAB_PRINTDB("DM J");
     FAB_PRINTDB("DM VARS");
     dm.vars()->print_self();
     FAB_PRINTDB("xdot", xdot, xdot.size());
@@ -186,7 +184,6 @@ protected:
                   "nnz:", fab_core::get_casx(dm_phidot, i).nnz());
     }
 #endif
-
     const auto M_pulled_subst_x_xdot = CaSX::substitute(M_pulled_subst_x, xdot, dm.phidot());
 
     const auto f_pulled_subst_x = CaSX::substitute(f_pulled, x, dm.phi());

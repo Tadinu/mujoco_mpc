@@ -47,13 +47,10 @@ public:
                                         std::move(endtip_names));
     vars_ = robot_->vars();
     geometry_ = robot_->weighted_geometry();
-    geometry_->vars()->print_self();
     forced_geometry_ = nullptr;
     target_velocity_ = CaSX::zeros(dof);
     cafunc_ = nullptr;
   }
-
-  int get_dynamic_obstacles_dim() const { return task_ ? (task_->AreObstaclesFixed() ? 3 : 2) : 0; }
 
   void add_geometry(const FabDifferentialMap& forward_map, FabLagrangianPtr lagrangian,
                     FabGeometryPtr geometry) {
@@ -82,8 +79,6 @@ public:
 
   void add_leaf(const FabLeaf* leaf, bool is_prime_leaf = false) {
     assert(leaf);
-
-    leaf->print_self();
 
     if (const auto* attractor = dynamic_cast<const FabGenericAttractorLeaf*>(leaf)) {
       add_forcing_geometry(attractor->map(), attractor->lagrangian(), attractor->geometry(), is_prime_leaf);
@@ -419,12 +414,12 @@ public:
   void set_components(const std::vector<std::string>& collision_link_names,
                       const FabSelfCollisionPairs& self_collision_pairs,
                       const std::vector<std::string>& collision_links_esdf, const FabGoalComposition& goal,
-                      const std::vector<FabJointLimit>& limits, int number_obstacles = 1,
-                      int number_dynamic_obstacles = 0, int number_obstacles_cuboid = 0,
-                      int number_plane_constraints = 1, int dynamic_obstacle_dimension = 3) {
+                      const std::vector<FabJointLimit>& limits, int static_obstacles_num = 1,
+                      int dynamic_obstacles_num = 0, int cuboid_obstacles_num = 0,
+                      int plane_constraints_num = 1, int dynamic_obstacle_dimension = 3) {
     // Obstacles
     std::vector<CaSXDict> reference_param_list;
-    for (auto i = 0; i < number_dynamic_obstacles; ++i) {
+    for (auto i = 0; i < dynamic_obstacles_num; ++i) {
       CaSXDict reference_params = {
           {std::string("x_obst_dynamic_") + std::to_string(i),
            CaSX::sym(std::string("x_obst_dynamic_") + std::to_string(i), dynamic_obstacle_dimension)},
@@ -443,22 +438,22 @@ public:
                   "is sparse and so skipped");
         continue;
       }
-      FAB_PRINT(link_name, ":ADD OBSTACLE GEOM: FK", fk, fk.size());
-      for (auto i = 0; i < number_obstacles; ++i) {
+
+      for (auto i = 0; i < static_obstacles_num; ++i) {
         const auto obstacle_name = std::string("obst_") + std::to_string(i);
         add_spherical_obstacle_geometry(obstacle_name, link_name, fk);
       }
-      for (auto i = 0; i < number_dynamic_obstacles; ++i) {
+      for (auto i = 0; i < dynamic_obstacles_num; ++i) {
         const auto obstacle_name = std::string("obst_dynamic_") + std::to_string(i);
         add_dynamic_spherical_obstacle_geometry(obstacle_name, link_name, fk, reference_param_list[i],
                                                 dynamic_obstacle_dimension);
       }
-      for (auto i = 0; i < number_plane_constraints; ++i) {
+      for (auto i = 0; i < plane_constraints_num; ++i) {
         const auto constraint_name = std::string("constraint_") + std::to_string(i);
         add_plane_constraint(constraint_name, link_name, fk);
       }
 
-      for (auto i = 0; i < number_obstacles_cuboid; ++i) {
+      for (auto i = 0; i < cuboid_obstacles_num; ++i) {
         const auto obstacle_name = std::string("obst_cuboid_") + std::to_string(i);
         add_cuboid_obstacle_geometry(obstacle_name, link_name, fk);
       }
@@ -486,7 +481,6 @@ public:
     // Execution energy
     if (goal.is_valid()) {
       set_goal_component(goal);
-      vars_->print_self();
       set_execution_energy(std::make_shared<FabExecutionLagrangian>(vars_));
       set_speed_control();
     } else {
@@ -494,7 +488,7 @@ public:
     }
   }
 
-  CaSX get_differential_map(const int sub_goal_index, const FabSubGoalPtr& sub_goal) {
+  CaSX get_differential_map(const FabSubGoalPtr& sub_goal) {
     const auto subgoal_type = sub_goal->type();
     const auto subgoal_indices = sub_goal->indices();
     if (FabSubGoalType::STATIC_JOINT_SPACE == subgoal_type) {
@@ -507,16 +501,19 @@ public:
       } catch (const FabError& e) {
         fk_parent = CaSX::zeros(3);
       }
+      FAB_PRINTDB("fk_child", sub_goal->child_link_name(), fab_core::get_casx(fk_child, subgoal_indices),
+                  subgoal_indices);
+      FAB_PRINTDB("fk_parent", sub_goal->parent_link_name(), fab_core::get_casx(fk_parent, subgoal_indices),
+                  subgoal_indices);
       return fab_core::get_casx(fk_child, subgoal_indices) - fab_core::get_casx(fk_parent, subgoal_indices);
     }
-    throw FabError(std::to_string(int(subgoal_type)) + " :Invalid sub-goal type");
   }
 
   void set_goal_component(const FabGoalComposition& goal) {
     const auto sub_goals = goal.sub_goals();
     for (auto i = 0; i < sub_goals.size(); ++i) {
       const auto& sub_goal = sub_goals[i];
-      const auto fk_sub_goal = get_differential_map(i, sub_goal);
+      const auto fk_sub_goal = get_differential_map(sub_goal);
       if (fab_core::is_casx_sparse(fk_sub_goal)) {
         throw FabError(fk_sub_goal.get_str() + "must not be sparse");
       }
@@ -608,10 +605,11 @@ public:
    * The variables passed are the joint states, and the goal position.
    * The action is nullified if its magnitude is very large or very small.
    */
-  CaSX compute_action(const FabCasadiArgMap& kwargs) {
+  CaSX compute_action(const FabCasadiArgMap& kwargs) const {
     if (!cafunc_) {
       return {};
     }
+    // const FabSharedMutexLock lock(policy_mutex_);
     auto eval = cafunc_->evaluate(kwargs);
     CaSX action = eval["action"];
     if (!action.is_zero()) {
@@ -640,6 +638,12 @@ public:
   mjData* data_ = nullptr;
   mjpc::Task* task_ = nullptr;
 
+  urdf::UrdfModel RobotURDFModel() const override {
+    const auto urdf_fk = robot_ ? robot_->fk() : nullptr;
+    return urdf_fk ? dynamic_pointer_cast<FabURDFForwardKinematics>(urdf_fk)->urdf_model()
+                   : urdf::UrdfModel();
+  }
+
   // initialize data and settings
   void Initialize(mjModel* model, const mjpc::Task& task) override {
     task_ = const_cast<mjpc::Task*>(&task);
@@ -649,7 +653,7 @@ public:
     // dimensions
     dim_state_ = model->nq + model->nv + model->na;     // state dimension
     dim_state_derivative_ = 2 * model->nv + model->na;  // state derivative dimension
-    dim_action_ = task.ActionDim();                     // action dimension
+    dim_action_ = task.GetActionDim();                  // action dimension
     dim_sensor_ = model->nsensordata;                   // number of sensor values
     dim_max_ = std::max({dim_state_, dim_state_derivative_, dim_action_, model->nuser_sensor});
 
@@ -662,49 +666,24 @@ public:
     // Init task fabrics
     if (task.IsFabricsSupported()) {
       // Robot, resetting [vars_, geometry_, target_velocity_] here-in!
-      init_robot(dim_action_, task.URDFPath(), task.BaseBodyName(), task.EndtipNames());
+      init_robot(dim_action_, task.URDFPath(), task.GetBaseBodyName(), task.GetEndtipNames());
 
       // Config
       config_ = task.GetFabricsConfig(task.IsGoalFixed() && task.AreObstaclesFixed());
 
       // Goal
       FabGoalComposition goal;
-      const auto indices = task.GoalIndices();
-      const auto* goal_pos = task_->GetGoalPos();
-      const std::vector<double> desired_pos = {goal_pos[0], goal_pos[1]};
-      // assert(indices.size() == dim_action - 1);
-      // assert(desired_pos.size() == dim_action - 1);
-      FabSubGoalPtr sub_goal_0 = nullptr;
-      if (task_->IsGoalFixed()) {
-        sub_goal_0 =
-            std::make_shared<FabStaticSubGoal>(FabSubGoalConfig{.name = "subgoal0",
-                                                                .type = FabSubGoalType::STATIC,
-                                                                .is_primary_goal = true,
-                                                                .epsilon = 0.1,
-                                                                .indices = indices,
-                                                                .weight = 5.0,
-                                                                .parent_link_name = task_->BaseBodyName(),
-                                                                .child_link_name = task_->EndtipNames()[0],
-                                                                .desired_position = desired_pos});
-      } else {
-        sub_goal_0 =
-            std::make_shared<FabDynamicSubGoal>(FabSubGoalConfig{.name = "subgoal0",
-                                                                 .type = FabSubGoalType::DYNAMIC,
-                                                                 .is_primary_goal = true,
-                                                                 .epsilon = 0.1,
-                                                                 .indices = indices,
-                                                                 .weight = 5.0,
-                                                                 .parent_link_name = task_->BaseBodyName(),
-                                                                 .child_link_name = task_->EndtipNames()[0],
-                                                                 .desired_position = desired_pos});
+      for (const auto& subgoal : task.GetSubGoals()) {
+        goal.add_sub_goal(subgoal);
       }
-      goal.add_sub_goal(sub_goal_0);
 
       // Add geometry + energy components + [goal]
-      set_components(task_->CollisionLinkNames(), {}, {}, goal, {},
-                     task_->AreObstaclesFixed() ? task_->obstacles_num : 0,
-                     task_->AreObstaclesFixed() ? 0 : task_->obstacles_num, 0 /*number_obstacles_cuboid*/,
-                     1 /*number_plane_constraints*/, get_dynamic_obstacles_dim());
+      set_components(task_->GetCollisionLinkNames(), {}, {}, goal,
+                     task_->GetJointLimits() /* TODO: Fetch from RobotURDFModel()->joint_map*/,
+                     task_->AreObstaclesFixed() ? task_->GetStaticObstaclesNum() : 0,
+                     task_->AreObstaclesFixed() ? 0 : task_->GetDynamicObstaclesNum(),
+                     0 /*cuboid_obstacles_num*/, task_->GetPlaneConstraintsNum(),
+                     task_->GetDynamicObstaclesDim());
 
       // Concretize, calculating [xddot] + composing [cafunc_] based on it
       concretize(FAB_USE_ACTUATOR_VELOCITY ? FabControlMode::VEL : FabControlMode::ACC, 0.01);
@@ -774,28 +753,37 @@ public:
     std::vector<double> qdot = task_->QueryJointVel(robot_dof);
     FAB_PRINTDB("QPOS", q);
     FAB_PRINTDB("QVEL", qdot);
+    FabCasadiArgMap args = {{"q", std::move(q)}, {"qdot", std::move(qdot)}};
 
-    const auto* goal_pos = task_->GetGoalPos();
-    FAB_PRINTDB("GOAL", goal_pos[0], goal_pos[1]);
-    FabCasadiArgMap args = {
-        {"constraint_0", std::vector<double>{0, 0, 1, 0.0}},
-        {"q", std::move(q)},
-        {"qdot", std::move(qdot)},
-        {"x_goal_0", std::vector{goal_pos[0], goal_pos[1]}},  // EXCLUDING goal_pos[2]
-        {"weight_goal_0", std::vector{5.0}},                  // irrelevant atm
-        {"radius_body_base_link", std::vector{0.01}},
-    };
-
-    // Obstacles' size & pos
-    const auto obstacle_statesX = task_->GetObstacleStatesX();
-    if (obstacle_statesX.size() != task_->obstacles_num) {
-      return;
+    // [Plane constraints]
+    for (auto i = 0; i < task_->GetPlaneConstraintsNum(); ++i) {
+      args.insert_or_assign(std::string("constraint_") + std::to_string(i),
+                            std::vector<double>{0, 0, 1, 0.0});
     }
+
+    // [X-space goals] & [Weights of goals]
+    const auto sub_goals = task_->GetSubGoals();
+    for (auto i = 0; i < sub_goals.size(); ++i) {
+      const auto& sub_goal = sub_goals[i];
+      const auto i_str = std::to_string(i);
+      args.insert_or_assign(std::string("x_goal_") + i_str, sub_goal->cfg_.desired_position);
+      args.insert_or_assign(std::string("weight_goal_") + i_str, sub_goal->cfg_.weight);
+    }
+
+    // [Radius collision bodies]
+    for (const auto& collision_link_prop : task_->GetCollisionLinkProps()) {
+      args.insert_or_assign(std::string("radius_body_") + collision_link_prop.first,
+                            std::vector{collision_link_prop.second});
+    }
+
+    // [Obstacles' size & pos]
+    const auto obstacle_statesX = task_->GetObstacleStatesX();
+    const auto obstacles_num = obstacle_statesX.size();
     const bool fixed_obstacles = task_->AreObstaclesFixed();
     const auto fobstacle_prop_name = [&fixed_obstacles](const char* prefix, const int i) {
       return (fixed_obstacles ? prefix : (std::string(prefix) + "dynamic_")) + std::to_string(i);
     };
-    for (auto i = 0; i < task_->obstacles_num; ++i) {
+    for (auto i = 0; i < obstacles_num; ++i) {
       const auto& obstacle_i = obstacle_statesX[i];
       args.insert_or_assign(fobstacle_prop_name("radius_obst_", i),
                             FAB_OBSTACLE_SIZE_SCALE * obstacle_i.size_[0]);
@@ -833,12 +821,19 @@ public:
       }
 
       const mjtNum* cur_pos = task_->GetStartPos();
-      trajectory_->trace.push_back(cur_pos[0]);
-      trajectory_->trace.push_back(cur_pos[1]);
-      trajectory_->trace.push_back(cur_pos[2]);
+      if (cur_pos) {
+        trajectory_->trace.push_back(cur_pos[0]);
+        trajectory_->trace.push_back(cur_pos[1]);
+        trajectory_->trace.push_back(cur_pos[2]);
+      }
+      FAB_PRINT(action_);
       for (auto i = 0; i < dof; ++i) {
 #if FAB_USE_ACTUATOR_VELOCITY
-        const CaSX action_i = fab_core::get_casx(action_, i);
+        const auto action_i = action_(i);
+        action[i] = action_i.is_regular() ? task_->actuator_kv * double(action_i.scalar()) : 0;
+        if (action[i] > 0) {
+          FAB_PRINT("Action", i, action[i]);
+        }
 #elif FAB_USE_ACTUATOR_MOTOR
         static const auto pointmass_id = task_->GetTargetObjectId();
         static const auto pointmass = model_->body_mass[pointmass_id];

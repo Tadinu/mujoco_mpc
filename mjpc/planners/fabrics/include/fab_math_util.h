@@ -13,7 +13,10 @@
 #include "mjpc/urdf_parser/include/common.h"
 
 namespace fab_math {
-static CaSX CASX_TRANSF_IDENTITY = CaSX::eye(4);
+static CaSX CASX_IDENTITY(const int size) {
+  return CaSX::eye(size); /*with structural zeros*/  //+ CaSX::zeros(size, size); /*with scalar zeros*/
+}
+static CaSX CASX_TRANSF_IDENTITY = CASX_IDENTITY(4);
 static CaSX outer_product(const CaSX& a, const CaSX& b) {
   const auto m = a.size().first;
   const auto A = CaSX(CaSX::repmat(a.T(), m)).T();
@@ -336,9 +339,8 @@ static CaSX rotation_rpy(const urdf::Vector3& rpy) {
 // Homogeneous transformation matrix with roll pitch yaw
 static CaSX transform(const urdf::Vector3& xyz, const urdf::Vector3& rpy) {
   CaSX T = CaSX::zeros(4, 4);
-  fab_core::set_casx2(T, {std::numeric_limits<casadi_int>::min(), 3},
-                      {std::numeric_limits<casadi_int>::min(), 3}, rotation_rpy(rpy));
-  fab_core::set_casx2(T, {std::numeric_limits<casadi_int>::min(), 3}, 3, CaSX(xyz.to_vector()));
+  fab_core::set_casx2(T, {CASADI_INT_MIN, 3}, {CASADI_INT_MIN, 3}, rotation_rpy(rpy));
+  fab_core::set_casx2(T, {CASADI_INT_MIN, 3}, 3, CaSX(xyz.to_vector()));
   fab_core::set_casx2(T, 3, 3, 1.0);
   return T;
 }

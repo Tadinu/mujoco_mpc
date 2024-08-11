@@ -23,6 +23,7 @@
 #include <sstream>
 #include <string>
 
+#include "mjpc/planners/fabrics/include/fab_goal.h"
 #include "mjpc/task.h"
 
 // Dynamical Movement Primitives: Learning Attractor Models for Motor Behaviors
@@ -33,7 +34,11 @@
 namespace mjpc {
 class Particle : public Task {
 public:
-  Particle() : residual_(this) { obstacles_num = 10; }
+  Particle() : residual_(this) {
+    static_obstacles_num = 0;
+    dynamic_obstacles_num = 10;
+    actuator_kv = 1.f;
+  }
   std::random_device rd;                  // To obtain a seed for the random number engine
   std::mt19937 gen = std::mt19937(rd());  // Standard mersenne_twister_engine seeded with rd()
   std::uniform_real_distribution<> dis = std::uniform_real_distribution<>(-0.2, 0.2);
@@ -42,14 +47,56 @@ public:
   std::string Name() const override;
   std::string XmlPath() const override;
   std::string URDFPath() const override;
-  std::string BaseBodyName() const override { return "world"; }
-  std::vector<std::string> EndtipNames() const override { return {"base_link"}; }
-  std::vector<std::string> CollisionLinkNames() const override { return {"base_link"}; }
-  int ActionDim() const override { return IsGoalFixed() ? 3 : 2; }
-  std::vector<int> GoalIndices() const override { return {0, 1}; }
+  std::string GetBaseBodyName() const override {
+    static std::string name = "world";
+    return name;
+  }
+  std::vector<std::string> GetEndtipNames() const override {
+    static std::vector<std::string> names = {"base_link"};
+    return names;
+  }
+  std::vector<std::string> GetCollisionLinkNames() const override {
+    static std::vector<std::string> names = {"base_link"};
+    return names;
+  }
+  std::vector<std::pair<std::string, double /*size radius*/>> GetCollisionLinkProps() const override {
+    static std::vector<std::pair<std::string, double /*size radius*/>> props = {
+        {GetCollisionLinkNames()[0], 0.01}};
+    return props;
+  }
+  int GetActionDim() const override { return IsGoalFixed() ? 3 : 2; }
+  std::vector<FabSubGoalPtr> GetSubGoals() const override {
+    static const std::vector<int> indices = {0, 1};
+    static auto subgoals =
+        IsGoalFixed() ? std::vector<FabSubGoalPtr>{std::make_shared<FabStaticSubGoal>(
+                            FabSubGoalConfig{.name = "subgoal0",
+                                             .type = FabSubGoalType::STATIC,
+                                             .is_primary_goal = true,
+                                             .epsilon = 0.1,
+                                             .indices = indices,
+                                             .weight = 5.0,
+                                             .parent_link_name = GetBaseBodyName(),
+                                             .child_link_name = GetEndtipNames()[0]})}
+                      : std::vector<FabSubGoalPtr>{std::make_shared<FabDynamicSubGoal>(FabSubGoalConfig{
+                            .name = "subgoal0",
+                            .type = FabSubGoalType::DYNAMIC,
+                            .is_primary_goal = true,
+                            .epsilon = 0.1,
+                            .indices = indices,
+                            .weight = 5.0,
+                            .parent_link_name = GetBaseBodyName(),
+                            .child_link_name = GetEndtipNames()[0],
+                        })};
+
+    const auto* goal_pos = GetGoalPos();
+    subgoals[0]->cfg_.desired_position = {goal_pos[0], goal_pos[1]};  // EXCLUDING goal[2]
+    return subgoals;
+  }
 
   bool IsGoalFixed() const override { return !FAB_DYNAMIC_GOAL_SUPPORTED; }
   bool AreObstaclesFixed() const override { return false; }
+  int GetDynamicObstaclesDim() const override { return AreObstaclesFixed() ? 3 : 2; }
+  int GetPlaneConstraintsNum() const override { return 1; }
 
   // NOTES on mutex:
   // Access to model & data: already locked by [sim.mtx]
@@ -89,9 +136,8 @@ public:
   const mjtNum* GetStartPos() override { return QueryParticlePos(); }
   const mjtNum* GetStartVel() override { return QueryParticleVel(); }
 
-  void SetGoalPos(const double* pos) { SetBodyMocapPos("goal", pos); }
-  const mjtNum* GetGoalPos() override { return QueryGoalPos(); }
-  const mjtNum* QueryGoalPos() const { return QueryBodyMocapPos("goal"); }
+  void SetGoalPos(const double* pos) const { SetBodyMocapPos("goal", pos); }
+  const mjtNum* GetGoalPos() const override { return QueryBodyMocapPos("goal"); }
 
   static constexpr float PARTICLE_GOAL_REACH_THRESHOLD = 0.01;
   bool QueryGoalReached() override;
@@ -118,7 +164,7 @@ public:
   void ModifyScene(const mjModel* model, const mjData* data, mjvScene* scene) const override;
 
   virtual void MoveObstacles() {
-    for (auto i = 1; i < (obstacles_num + 1); ++i) {
+    for (auto i = 1; i < (GetTotalObstaclesNum() + 1); ++i) {
       double obstacle_curve_pos[2] = {0.05 * log(i + 1) * mju_sin(0.2 * i * data_->time),
                                       0.05 * log(i + 1) * mju_cos(0.2 * i * data_->time)};
       std::ostringstream obstacle_name;
@@ -128,7 +174,7 @@ public:
   }
 
   virtual void RandomizeObstacles() {
-    for (auto i = 1; i < (obstacles_num + 1); ++i) {
+    for (auto i = 1; i < (GetTotalObstaclesNum() + 1); ++i) {
       std::ostringstream obstacle_name;
       obstacle_name << "obstacle_" << (i - 1);
       SetBodyMocapPos(obstacle_name.str().c_str(), (double[]){rand_val(), rand_val()});
@@ -137,7 +183,7 @@ public:
 
 protected:
   std::unique_ptr<mjpc::AbstractResidualFn> ResidualLocked() const override {
-    return std::make_unique<ResidualFn>(this);
+    return std::make_unique<ResidualFn>(residual_);
   }
 
   BaseResidualFn* InternalResidual() override { return &residual_; }
@@ -152,7 +198,10 @@ private:
 // The same task, but the goal mocap body doesn't move.
 class ParticleFixed : public Particle {
 public:
-  ParticleFixed() : residual_(this) {}
+  ParticleFixed() : residual_(this) {
+    static_obstacles_num = 10;
+    dynamic_obstacles_num = 0;
+  }
   std::string Name() const override;
   std::string XmlPath() const override;
 
@@ -178,7 +227,7 @@ public:
 
 protected:
   std::unique_ptr<mjpc::AbstractResidualFn> ResidualLocked() const override {
-    return std::make_unique<FixedResidualFn>(this);
+    return std::make_unique<FixedResidualFn>(residual_);
   }
 
   BaseResidualFn* InternalResidual() override { return &residual_; }
