@@ -60,14 +60,14 @@ struct FabPlannerConfig {
     // alpha: scaling factor for the softmax
     static constexpr float alpha = 10.f;
     const CaSX x_norm = CaSX::norm_2(x);
-    return weight * (x_norm + (1 / alpha) * CaSX::log(1 + CaSX::exp(-2 * alpha * x_norm)));
+    return 5.0 * (x_norm + (1 / alpha) * CaSX::log(1 + CaSX::exp(-2 * alpha * x_norm)));
   };
 
   std::function<CaSX(const CaSX& x)> attractor_metric = [](const CaSX& x) {
-    static constexpr float alpha = 20.0;
+    static constexpr float alpha = 70.0;
     static constexpr float beta = 0.3;
-    return (alpha - beta) * CaSX::exp(-1 * CaSX::pow(0.75 * CaSX::norm_2(x), alpha) + beta) *
-           CaSX::eye(x.size().first);
+    return (alpha - beta) * CaSX::exp(-1 * CaSX::pow(0.75 * CaSX::norm_2(x), 2) + beta) *
+           fab_math::CASX_IDENTITY(x.size().first);
   };
 
   std::function<CaSX(const CaSX& x, const CaSX& a_ex, const CaSX& a_le)> damper_beta = [](const CaSX& x,

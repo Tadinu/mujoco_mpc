@@ -53,7 +53,7 @@ public:
       FAB_PRINT("Casadi pseudo inverse is used in Lagrangian");
       const auto J_ref_transpose = J_ref_.T();
       J_ref_inv_ = CaSX::mtimes(J_ref_transpose, CaSX::inv(CaSX::mtimes(J_ref_, J_ref_transpose) +
-                                                           CaSX::eye(x_ref().size().first) * FAB_EPS));
+                                                           fab_math::CASX_IDENTITY(x_ref().size().first) * FAB_EPS));
     }
 
     // [S_, H_]
@@ -84,7 +84,6 @@ public:
 
     // [all+vars]
     auto all_vars = std::make_shared<FabVariables>(*vars_ + *b.vars());
-    all_vars->print_self();
 
     // [all_ref_names, J_ref]
     std::vector<std::string> all_ref_names;
@@ -127,7 +126,6 @@ public:
 
   void apply_euler_lagrange() {
     const bool is_scalar = l_.is_scalar();
-    FAB_PRINTDB(is_scalar, "FabLagrangian::apply_euler_lagrange", l_, l_.size());
     const auto dL_dx = is_scalar ? CaSX::gradient(l_, x()) : CaSX::jacobian(l_, x());
     const auto dL_dxdot = is_scalar ? CaSX::gradient(l_, xdot()) : CaSX::jacobian(l_, xdot());
     const auto d2L_dxdxdot = CaSX::jacobian(dL_dx, xdot());

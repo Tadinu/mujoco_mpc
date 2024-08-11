@@ -25,7 +25,7 @@
 
 #include "mjpc/norm.h"
 #include "mjpc/planners/fabrics/include/fab_config.h"
-#include "mjpc/planners/fabrics/include/fab_forward_kinematics.h"
+#include "mjpc/planners/fabrics/include/fab_goal.h"
 #include "mjpc/planners/rmp/include/core/rmp_state.h"
 
 namespace mjpc {
@@ -58,7 +58,7 @@ public:
 class BaseResidualFn : public AbstractResidualFn {
 public:
   explicit BaseResidualFn(const Task* task);
-  virtual ~BaseResidualFn() = default;
+  ~BaseResidualFn() override = default;
 
   void CostTerms(double* terms, const double* residual, bool weighted) const override;
   double CostValue(const double* residual) const override;
@@ -88,7 +88,9 @@ public:
   // Fabrics config
   virtual bool IsFabricsSupported() const { return false; }
 
-  virtual FabPlannerConfig GetFabricsConfig(bool is_static_env) const { return {}; }
+  virtual FabPlannerConfigPtr GetFabricsConfig(bool is_static_env) const {
+    return std::make_shared<FabPlannerConfig>();
+  }
 
   // delegates to ResidualLocked, while holding a lock
   std::unique_ptr<AbstractResidualFn> Residual() const;
@@ -131,14 +133,16 @@ public:
   virtual std::string Name() const = 0;
   virtual std::string XmlPath() const = 0;
   virtual std::string URDFPath() const { return {}; }
-  virtual std::string BaseBodyName() const { return {}; }
-  virtual std::vector<std::string> EndtipNames() const { return {}; }
-  virtual std::vector<std::string> CollisionLinkNames() const { return {}; }
+  virtual std::string GetBaseBodyName() const { return {}; }
+  virtual std::vector<std::string> GetEndtipNames() const { return {}; }
+  virtual std::vector<std::string> GetCollisionLinkNames() const { return {}; }
+  virtual std::vector<std::pair<std::string, double /*size radius*/>> GetCollisionLinkProps() const {
+    return {};
+  }
+  virtual std::vector<FabJointLimit> GetJointLimits() const { return {}; }
+  virtual std::vector<FabSubGoalPtr> GetSubGoals() const { return {}; }
 
-  virtual int ActionDim() const { return 0; }
-  virtual std::vector<int> GoalIndices() const { return {}; }
-
-  int obstacles_num = 0;
+  virtual int GetActionDim() const { return 0; }
   virtual int GetTargetObjectId() const { return -1; }
   virtual int GetTargetObjectGeomId() const { return -1; }
   virtual bool CheckBlocking(const double start[], const double end[]) { return false; }
@@ -151,23 +155,23 @@ public:
 
   virtual const mjtNum* GetStartPos() { return nullptr; }
   virtual const mjtNum* GetStartVel() { return nullptr; }
-  virtual const mjtNum* GetGoalPos() { return nullptr; }
+  virtual const mjtNum* GetGoalPos() const { return nullptr; }
 
   // NOTE: model_->nq,nv are actuated joints/controls configured in MJ model
-  // dof: possibly full dof of the robot
+  // dof: full dof of the robot
   std::vector<double> QueryJointPos(int dof) const {
-    if (model_ && data_ && (model_->nq <= dof)) {
-      std::vector<double> qpos(dof);
-      memcpy(qpos.data(), &data_->qpos[0], model_->nq * sizeof(mjtNum));
+    if (model_ && data_) {
+      std::vector<double> qpos(dof, 0);
+      memcpy(qpos.data(), &data_->qpos[0], std::min(model_->nq, dof) * sizeof(double));
       return qpos;
     }
     return {};
   }
 
   std::vector<double> QueryJointVel(int dof) const {
-    if (model_ && data_ && (model_->nv <= dof)) {
-      std::vector<double> qvel(dof);
-      memcpy(qvel.data(), &data_->qvel[0], model_->nv * sizeof(mjtNum));
+    if (model_ && data_) {
+      std::vector<double> qvel(dof, 0);
+      memcpy(qvel.data(), &data_->qvel[0], std::min(model_->nv, dof) * sizeof(double));
       return qvel;
     }
     return {};
@@ -231,15 +235,23 @@ public:
   std::vector<mjtNum> ray_ends;
   bool last_goal_reached_ = false;
 
-  // RMP
+  // RMP/Fabrics
   using StateX = rmp::State<3>;
   std::vector<StateX> obstacle_statesX_;
 
   // mutex which should be held on changes to data queried from mjdata
   mutable std::mutex task_data_mutex_;
 
+  // - Actuator
+  float actuator_kv = 1.f;
+
+  // - Goal
+  virtual bool IsGoalFixed() const { return true; }
   virtual bool QueryGoalReached() { return false; }
 
+  // - Obstacles
+  virtual bool AreObstaclesFixed() const { return true; }
+  virtual int GetDynamicObstaclesDim() const { return 3; }
   virtual void QueryObstacleStatesX() {}
 
   std::vector<StateX> GetObstacleStatesX() const {
@@ -251,8 +263,14 @@ public:
     return obstacle_statesX;
   }
 
-  virtual bool IsGoalFixed() const { return true; }
-  virtual bool AreObstaclesFixed() const { return true; }
+  int static_obstacles_num = 0;
+  int dynamic_obstacles_num = 0;
+  virtual int GetStaticObstaclesNum() const { return static_obstacles_num; }
+  virtual int GetDynamicObstaclesNum() const { return dynamic_obstacles_num; }
+  int GetTotalObstaclesNum() const { return GetStaticObstaclesNum() + GetDynamicObstaclesNum(); }
+
+  // - Constraints
+  virtual int GetPlaneConstraintsNum() const { return 0; }
 
 protected:
   // returns a pointer to the ResidualFn instance that's used for physics
@@ -267,7 +285,7 @@ protected:
   // measuring contact forces), which will call the sensor callback, which calls
   // ResidualLocked. In order to avoid such resource contention, mutex_ might be
   // temporarily unlocked, but it must be locked again before returning.
-  virtual void TransitionLocked(mjModel* model, mjData* data) {}
+  virtual void TransitionLocked(mjModel* model, mjData* data);
 
   // implementation of Task::Reset() which can assume a lock is held
   virtual void ResetLocked(const mjModel* model) {}

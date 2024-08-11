@@ -14,22 +14,27 @@
 
 #include "mjpc/tasks/manipulation/manipulation.h"
 
-#include <string>
-
 #include <absl/random/random.h>
 #include <mujoco/mjmodel.h>
 #include <mujoco/mujoco.h>
+
+#include <string>
+
+#include "mjpc/planners/planner.h"
 #include "mjpc/tasks/manipulation/common.h"
 #include "mjpc/utilities.h"
 
 namespace mjpc {
-std::string manipulation::Bring::XmlPath() const {
-  return GetModelPath("manipulation/task_panda_bring.xml");
-}
+// task_panda_bring.xml
+// task_panda_robotiq_bring.xml
+std::string manipulation::Bring::XmlPath() const { return GetModelPath("manipulation/task_panda_bring.xml"); }
 std::string manipulation::Bring::Name() const { return "PickAndPlace"; }
 
-void manipulation::Bring::ResidualFn::Residual(const mjModel* model,
-                                               const mjData* data,
+std::string manipulation::Bring::URDFPath() const {
+  return mjpc::GetModelPath("manipulation/panda_with_finger.urdf");
+}
+
+void manipulation::Bring::ResidualFn::Residual(const mjModel* model, const mjData* data,
                                                double* residual) const {
   int counter = 0;
 
@@ -42,10 +47,9 @@ void manipulation::Bring::ResidualFn::Residual(const mjModel* model,
   counter += 3;
 
   // bring
-  for (int i=0; i < 8; i++) {
+  for (int i = 0; i < 8; i++) {
     double* object = SensorByName(model, data, std::to_string(i).c_str());
-    double* target = SensorByName(model, data,
-                                        (std::to_string(i) + "t").c_str());
+    double* target = SensorByName(model, data, (std::to_string(i) + "t").c_str());
     residual[counter++] = mju_dist3(object, target);
   }
 
@@ -56,12 +60,12 @@ void manipulation::Bring::ResidualFn::Residual(const mjModel* model,
   // away
   residual[counter++] = mju_min(0, hand[2] - 0.6);
 
-
   // sensor dim sanity check
   CheckSensorDim(model, counter);
 }
 
 void manipulation::Bring::TransitionLocked(mjModel* model, mjData* data) {
+  Task::TransitionLocked(model, data);
   double residuals[100];
   double terms[10];
   residual_.Residual(model, data, residuals);
@@ -83,13 +87,13 @@ void manipulation::Bring::TransitionLocked(mjModel* model, mjData* data) {
     absl::BitGen gen_;
 
     // initialise target:
-    data->qpos[7+0] = 0.45;
-    data->qpos[7+1] = 0;
-    data->qpos[7+2] = 0.15;
-    data->qpos[7+3] = absl::Uniform<double>(gen_, -1, 1);
-    data->qpos[7+4] = absl::Uniform<double>(gen_, -1, 1);
-    data->qpos[7+5] = absl::Uniform<double>(gen_, -1, 1);
-    data->qpos[7+6] = absl::Uniform<double>(gen_, -1, 1);
+    data->qpos[7 + 0] = 0.45;
+    data->qpos[7 + 1] = 0;
+    data->qpos[7 + 2] = 0.15;
+    data->qpos[7 + 3] = absl::Uniform<double>(gen_, -1, 1);
+    data->qpos[7 + 4] = absl::Uniform<double>(gen_, -1, 1);
+    data->qpos[7 + 5] = absl::Uniform<double>(gen_, -1, 1);
+    data->qpos[7 + 6] = absl::Uniform<double>(gen_, -1, 1);
     mju_normalize4(data->qpos + 13);
 
     // return stage: bring
@@ -99,5 +103,21 @@ void manipulation::Bring::TransitionLocked(mjModel* model, mjData* data) {
 
 void manipulation::Bring::ResetLocked(const mjModel* model) {
   residual_.model_vals_ = ModelValues::FromModel(model);
+}
+
+FabPlannerConfig manipulation::Bring::GetFabricsConfig(bool is_static_env) const {
+  FabPlannerConfig config;
+  config.collision_geometry = [](const CaSX& x, const CaSX& xdot) {
+    return (-4.5 / x) * (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2);
+  };
+  config.geometry_plane_constraint = [](const CaSX& x, const CaSX& xdot) {
+    return (-10.0 / x) * (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2);
+  };
+#if 0
+  config.finsler_plane_constraint = [](const CaSX& x, const CaSX& xdot) {
+    return 1. / x * CaSX::pow(xdot, 2);
+  };
+#endif
+  return config;
 }
 }  // namespace mjpc
