@@ -22,6 +22,7 @@
 #include <mutex>
 
 #include "mjpc/norm.h"
+#include "mjpc/planners/planner.h"
 #include "mjpc/utilities.h"
 
 namespace mjpc {
@@ -104,16 +105,18 @@ double BaseResidualFn::CostValue(const double* residual) const {
 }
 
 void BaseResidualFn::Update() {
-  num_residual_ = task_->num_residual;
-  num_term_ = task_->num_term;
-  num_trace_ = task_->num_trace;
-  dim_norm_residual_ = task_->dim_norm_residual;
-  num_norm_parameter_ = task_->num_norm_parameter;
-  norm_ = task_->norm;
-  weight_ = task_->weight;
-  norm_parameter_ = task_->norm_parameter;
-  risk_ = task_->risk;
-  parameters_ = task_->parameters;
+  if (task_) {
+    num_residual_ = task_->num_residual;
+    num_term_ = task_->num_term;
+    num_trace_ = task_->num_trace;
+    dim_norm_residual_ = task_->dim_norm_residual;
+    num_norm_parameter_ = task_->num_norm_parameter;
+    norm_ = task_->norm;
+    weight_ = task_->weight;
+    norm_parameter_ = task_->norm_parameter;
+    risk_ = task_->risk;
+    parameters_ = task_->parameters;
+  }
 }
 
 std::unique_ptr<mjpc::AbstractResidualFn> Task::Residual() const {
@@ -137,6 +140,16 @@ void Task::Transition(mjModel* model, mjData* data) {
   data_ = data;
   TransitionLocked(model, data);
   InternalResidual()->Update();
+}
+
+void Task::TransitionLocked(mjModel* model, mjData* data) {
+  model_ = model;
+  data_ = data;
+  QueryObstacleStatesX();
+  last_goal_reached_ = QueryGoalReached();
+  if (last_goal_reached_) {
+    planner_->ClearTrace();
+  }
 }
 
 void Task::Reset(const mjModel* model) {
@@ -231,8 +244,8 @@ void Task::Reset(const mjModel* model) {
   }
 
   // Reset ray_starts, ray_ends
-  ray_starts.resize(3 * obstacles_num, 0);
-  ray_ends.resize(3 * obstacles_num, 0);
+  ray_starts.resize(3 * GetTotalObstaclesNum(), 0);
+  ray_ends.resize(3 * GetTotalObstaclesNum(), 0);
 
   // set residual parameters
   this->SetFeatureParameters(model);

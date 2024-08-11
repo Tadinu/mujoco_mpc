@@ -59,6 +59,7 @@ set(LIB_MJPC_HEADERS
         tasks/op3/stand.h
         tasks/panda/panda.h
         tasks/particle/particle.h
+        tasks/planar_robot/planar_robot.h
         tasks/rubik/solve.h
         tasks/shadow_reorient/hand.h
         tasks/quadrotor/quadrotor.h
@@ -170,6 +171,7 @@ add_library(
         tasks/op3/stand.cc
         tasks/panda/panda.cc
         tasks/particle/particle.cc
+        tasks/planar_robot/planar_robot.cc
         tasks/rubik/solve.cc
         tasks/shadow_reorient/hand.cc
         tasks/quadrotor/quadrotor.cc

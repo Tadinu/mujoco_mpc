@@ -39,10 +39,13 @@
 #include "mjpc/tasks/shadow_reorient/hand.h"
 #include "mjpc/tasks/swimmer/swimmer.h"
 #include "mjpc/tasks/walker/walker.h"
+#include "planar_robot/planar_robot.h"
 
 namespace mjpc {
 std::vector<std::shared_ptr<Task>> GetTasks() {
   return {
+      std::make_shared<manipulation::Bring>(),
+      std::make_shared<PlanarRobot>(),
       std::make_shared<Particle>(),
       std::make_shared<ParticleFixed>(),
       std::make_shared<Acrobot>(),
@@ -55,7 +58,6 @@ std::vector<std::shared_ptr<Task>> GetTasks() {
       std::make_shared<humanoid::Stand>(),
       std::make_shared<humanoid::Tracking>(),
       std::make_shared<humanoid::Walk>(),
-      std::make_shared<manipulation::Bring>(),
       // DEEPMIND INTERNAL TASKS
       std::make_shared<OP3>(),
       std::make_shared<Panda>(),
@@ -68,4 +70,4 @@ std::vector<std::shared_ptr<Task>> GetTasks() {
       std::make_shared<Walker>(),
   };
 }
-} // namespace mjpc
+}  // namespace mjpc

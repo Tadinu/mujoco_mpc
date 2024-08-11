@@ -63,8 +63,6 @@ public:
 
   FabWeightedSpec& operator+=(const FabWeightedSpec& b) {
     assert(fab_core::check_compatibility(*this, b));
-    vars_->print_self();
-    b.vars_->print_self();
     auto spec = std::make_shared<FabSpectralSemiSprays>(FabSpectralSemiSprays::operator+(b));
     auto all_le = std::make_shared<FabLagrangian>(*le_ + *b.le_);
     *this = FabWeightedSpec(

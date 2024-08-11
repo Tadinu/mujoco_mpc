@@ -62,8 +62,6 @@ public:
 
 private:
   void set_forward_map(const std::string& obstacle_name, const std::string& collision_link_name) {
-    FAB_PRINT("set_forward_map XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXxx");
-    parent_vars_->print_self();
     const auto radius_obstacle_name = std::string("radius_") + obstacle_name;
     const CaSX radius_obstacle_var = get_parent_var_param(radius_obstacle_name, 1);
 
@@ -75,8 +73,6 @@ private:
 
     // Forward map
     diffmap_ = std::make_shared<FabDifferentialMap>(forward_kinematics_, parent_vars_);
-    FAB_PRINT("DynamicObstacleLeaf set_forward_map =====================");
-    print_self();
 
     // Geometry map
     geom_map_ =

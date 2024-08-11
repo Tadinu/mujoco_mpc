@@ -52,12 +52,15 @@ public:
     // 2- Create [expression_values_] <- [expressions_]
     expression_names_ = fab_core::get_map_keys(expressions_);
     expression_values_ = fab_core::get_map_values<CaSX>(expressions_);
-    FAB_PRINTDB("EXPRESSIONS", expression_names_.size(), expression_values_.size());
+    FAB_PRINTDB("EXPRESSIONS", expression_names_.size(), expression_values_.size(),
+                fab_core::join(expression_names_));
 #endif
 
     // 3- Create [function_]
     FAB_PRINTDB("CREATE FUNCTION", input_values_.size(), expression_values_.size());
-    FAB_PRINTDB("INPUT VALUES", fab_core::join(input_values_), ",");
+    FAB_PRINTDB("INPUT VALUES", fab_core::join(input_values_));
+    FAB_PRINTDB("EXPRESSION NAMES", fab_core::join(expression_names_));
+    print_self();
     function_ = CaFunction(name_, input_values_, expression_values_, input_names_, expression_names_
                            /*, {{"allow_free", true}}*/);
   }
@@ -65,9 +68,12 @@ public:
   CaFunction function() const { return function_; }
 
   void print_self() const {
-    FAB_PRINT(name_);
-    FAB_PRINT(input_values_);
-    FAB_PRINT(expression_values_);
+    FAB_PRINT("Func name:", name_);
+    FAB_PRINT("Input names: ", input_names_);
+    FAB_PRINT("Input values: ", input_values_);
+    FAB_PRINT("Expression names: ", expression_names_);
+    // FAB_PRINT("Expression values: ", expression_values_);
+    fab_core::print_named_map2<CaSX>(arguments_, "Args");
   }
 
   CaSXDict evaluate(const FabCasadiArgMap& kwargs) {
@@ -119,20 +125,24 @@ public:
       }
     }
     fab_core::print_named_map2db<CaSX>(arguments_, "ARGUMENTS");
-    FAB_PRINTDB("----------------");
 
     // Evaluate, invoking [function_(inputs)]
     // Example:
-    // auto v1_dm = casadi::DM({1,2,3,4,5});
-    // auto v2_dm = casadi::DM({5,4,3,2,1});
-    // const auto &result = f_(std::vector<casadi::DM>{{v1_dm}, {v2_dm}});
+    // auto v1_dm = CaDM({1,2,3,4,5});
+    // auto v2_dm = CaDM({5,4,3,2,1});
+    // const auto &result = f_(std::vector<CaDM>{{v1_dm}, {v2_dm}});
+    if (function_.is_null() || !function_.get()) {
+      return {};
+    }
+    // FAB_PRINTDB("CASADI FUNCTION GENERATED TO:", function_.generate(function_.name()));
+    FAB_PRINTDB("CASADI FUNCTION INPUTS NUM:", function_.name_in().size());
+    FAB_PRINTDB("CASADI FUNCTION OUTPUTS NUM:", function_.name_out().size());
     CaSXDict outputs = function_(arguments_);
     FAB_PRINTDB("OUTPUTS", outputs);
     for (auto& [name, val] : outputs) {
       const auto val_size = val.size();
       if ((val_size == decltype(val_size){1, 1}) || (val_size.second == 1)) {
-        val = fab_core::get_casx2(
-            val, {std::numeric_limits<casadi_int>::min(), std::numeric_limits<casadi_int>::max()}, 0);
+        val = fab_core::get_casx2(val, {CASADI_INT_MIN, CASADI_INT_MAX}, 0);
       }
     }
     return outputs;

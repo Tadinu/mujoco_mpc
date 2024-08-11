@@ -21,6 +21,8 @@ using CaElement = casadi::SXElem;
 using CaDouble = casadi::Matrix<double>;
 using CaSlice = casadi::Slice;
 using CaFunction = casadi::Function;
+static constexpr auto CASADI_INT_MIN = std::numeric_limits<casadi_int>::min();
+static constexpr auto CASADI_INT_MAX = std::numeric_limits<casadi_int>::max();
 
 template <typename... TVariant>
 using FabVariant = std::variant<std::monostate, TVariant...>;
@@ -41,7 +43,6 @@ static constexpr auto FAB_EPS = 1e-6;
 #define FAB_DEBUG (0)
 #define FAB_USE_ACTUATOR_VELOCITY (1)
 #define FAB_USE_ACTUATOR_MOTOR (!FAB_USE_ACTUATOR_VELOCITY)
-#define FAB_ACTUATOR_VELOCITY_KV (1)
 #define FAB_DRAW_TRAJECTORY (1)
 #define FAB_OBSTACLE_SIZE_SCALE (1)
 
