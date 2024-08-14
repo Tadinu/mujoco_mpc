@@ -13,7 +13,8 @@
 #include "mjpc/urdf_parser/include/common.h"
 
 namespace fab_math {
-static CaSX CASX_IDENTITY(const int size) {
+template <typename TScalar>
+static CaSX CASX_IDENTITY(const TScalar size) {
   return CaSX::eye(size); /*with structural zeros*/  //+ CaSX::zeros(size, size); /*with scalar zeros*/
 }
 static CaSX CASX_TRANSF_IDENTITY = CASX_IDENTITY(4);

@@ -113,11 +113,6 @@ FabPlannerConfig manipulation::Bring::GetFabricsConfig(bool is_static_env) const
   config.geometry_plane_constraint = [](const CaSX& x, const CaSX& xdot) {
     return (-10.0 / x) * (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2);
   };
-#if 0
-  config.finsler_plane_constraint = [](const CaSX& x, const CaSX& xdot) {
-    return 1. / x * CaSX::pow(xdot, 2);
-  };
-#endif
   return config;
 }
 }  // namespace mjpc

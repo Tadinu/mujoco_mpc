@@ -29,9 +29,7 @@ struct FabSubGoalConfig {
 
   size_t dimension() const { return indices.size(); }
   std::vector<double> default_values(const double default_val) const {
-    std::vector<double> defaults;
-    defaults.resize(dimension(), default_val);
-    return defaults;
+    return std::vector<double>(dimension(), default_val);
   }
 
   void clear() { desired_position = desired_vel = desired_acc = default_values(0.); }

@@ -34,7 +34,7 @@ public:
     static std::vector<std::string> names = {"link2"};
     return names;
   }
-  std::vector<std::pair<std::string, double /*size radius*/>> GetCollisionLinkProps() const override {
+  FabLinkCollisionProps GetCollisionLinkProps() const override {
     const auto& link_names = GetCollisionLinkNames();
     static FabLinkCollisionProps props = {{link_names[0], {0.2}}};
     return props;
