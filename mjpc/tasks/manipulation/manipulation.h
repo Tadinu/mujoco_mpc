@@ -19,6 +19,7 @@
 
 #include "mjpc/task.h"
 #include "mjpc/tasks/manipulation/common.h"
+#include "mjpc/utilities.h"
 
 namespace mjpc::manipulation {
 class Bring : public Task {
@@ -39,10 +40,10 @@ public:
     static std::vector<std::string> names = {"panda_hand", "panda_link3", "panda_link4"};
     return names;
   }
-  std::vector<std::pair<std::string, double /*size radius*/>> GetCollisionLinkProps() const override {
+  FabLinkCollisionProps GetCollisionLinkProps() const override {
     const auto& link_names = GetCollisionLinkNames();
-    static std::vector<std::pair<std::string, double /*size radius*/>> props = {
-        {link_names[0], 0.02}, {link_names[1], 0.02}, {link_names[2], 0.02}};
+    static FabLinkCollisionProps props = {
+        {link_names[0], {0.02}}, {link_names[1], {0.02}}, {link_names[2], {0.02}}};
     return props;
   }
   int GetDynamicObstaclesNum() const override { return static_cast<int>(GetCollisionLinkNames().size()); }
@@ -51,7 +52,7 @@ public:
   int GetActionDim() const override { return 7; }
   std::vector<FabSubGoalPtr> GetSubGoals() const override {
     // Static subgoals with static [desired_position]
-    static std::vector<FabSubGoalPtr> sub_goals = {
+    static std::vector<FabSubGoalPtr> subgoals = {
         std::make_shared<FabStaticSubGoal>(FabSubGoalConfig{.name = "subgoal0",
                                                             .type = FabSubGoalType::STATIC,
                                                             .is_primary_goal = true,
@@ -83,7 +84,11 @@ public:
                              .parent_link_name = "panda_link0",
                              .child_link_name = "panda_hand",
                              .desired_position = {M_PI_4}})};
-    return sub_goals;
+
+    const auto* goal_pos = GetGoalPos();
+    mju_copy(subgoals[0]->cfg_.desired_position.data(), goal_pos, 3);
+    mju_copy(subgoals[1]->cfg_.desired_position.data(), goal_pos, 3);
+    return subgoals;
   }
 
   bool IsGoalFixed() const override { return true; }
@@ -129,9 +134,30 @@ public:
 
   const mjtNum* GetStartPos() override { return QueryTargetPos(); }
   const mjtNum* GetStartVel() override { return QueryTargetVel(); }
+  const mjtNum* GetGoalPos() const override { return QueryTargetPos(); }
 
   bool QueryGoalReached() override { return false; }
   void QueryObstacleStatesX() override {}
+
+  std::vector<double> QueryJointPos(int dof) const override {
+    if (model_ && data_) {
+      std::vector<double> qpos(dof, 0);
+      memcpy(qpos.data(), data_->qpos + model_->jnt_qposadr[mj_name2id(model_, mjOBJ_JOINT, "joint1")],
+             std::min(model_->nq, dof) * sizeof(double));
+      return qpos;
+    }
+    return {};
+  }
+
+  std::vector<double> QueryJointVel(int dof) const override {
+    if (model_ && data_) {
+      std::vector<double> qvel(dof, 0);
+      memcpy(qvel.data(), data_->qvel + model_->jnt_dofadr[mj_name2id(model_, mjOBJ_JOINT, "joint1")],
+             std::min(model_->nv, dof) * sizeof(double));
+      return qvel;
+    }
+    return {};
+  }
 
   class ResidualFn : public mjpc::BaseResidualFn {
   public:
@@ -147,6 +173,18 @@ public:
 
   void TransitionLocked(mjModel* model, mjData* data) override;
   void ResetLocked(const mjModel* model) override;
+
+  void ModifyScene(const mjModel* model, const mjData* data, mjvScene* scene) const override {
+    // Draw goal
+    static constexpr float GREEN[] = {0.0, 1.0, 0.0, 1.0};
+    mjpc::AddGeom(scene, mjGEOM_SPHERE, (mjtNum[]){0.05}, GetGoalPos(), /*mat=*/nullptr, GREEN);
+
+    // Draw pinch
+    static constexpr float BLUE[] = {0.0, 0.0, 1.0, 1.0};
+    double pinch_pos[3];
+    mju_copy(pinch_pos, &data_->site_xpos[3 * mj_name2id(model, mjOBJ_SITE, "pinch")], 3);
+    mjpc::AddGeom(scene, mjGEOM_SPHERE, (mjtNum[]){0.02}, pinch_pos, /*mat=*/nullptr, BLUE);
+  }
 
 protected:
   std::unique_ptr<mjpc::AbstractResidualFn> ResidualLocked() const override {

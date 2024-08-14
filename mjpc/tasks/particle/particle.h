@@ -1,4 +1,5 @@
 // Copyright 2022 DeepMind Technologies Limited
+// Copyright 2022 DeepMind Technologies Limited
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -59,9 +60,8 @@ public:
     static std::vector<std::string> names = {"base_link"};
     return names;
   }
-  std::vector<std::pair<std::string, double /*size radius*/>> GetCollisionLinkProps() const override {
-    static std::vector<std::pair<std::string, double /*size radius*/>> props = {
-        {GetCollisionLinkNames()[0], 0.01}};
+  FabLinkCollisionProps GetCollisionLinkProps() const override {
+    static FabLinkCollisionProps props = {{GetCollisionLinkNames()[0], {0.01}}};
     return props;
   }
   int GetActionDim() const override { return IsGoalFixed() ? 3 : 2; }

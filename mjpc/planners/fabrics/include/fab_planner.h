@@ -8,6 +8,7 @@
 #include <memory>
 #include <shared_mutex>
 #include <stdexcept>
+#include <thread>
 
 #include "mjpc/planners/fabrics/include/fab_common.h"
 #include "mjpc/planners/fabrics/include/fab_config.h"
@@ -50,6 +51,7 @@ public:
     forced_geometry_ = nullptr;
     target_velocity_ = CaSX::zeros(dof);
     cafunc_ = nullptr;
+    action_.resize(robot_->dof(), 0.);
   }
 
   void add_geometry(const FabDifferentialMap& forward_map, FabLagrangianPtr lagrangian,
@@ -773,7 +775,7 @@ public:
     // [Radius collision bodies]
     for (const auto& collision_link_prop : task_->GetCollisionLinkProps()) {
       args.insert_or_assign(std::string("radius_body_") + collision_link_prop.first,
-                            std::vector{collision_link_prop.second});
+                            collision_link_prop.second);
     }
 
     // [Obstacles' size & pos]
@@ -801,9 +803,13 @@ public:
 
     // Compute action
     CaSX action = compute_action(args);
-    if (!action.is_empty()) {
+    if (action.is_regular() && !action.is_empty()) {
       const FabSharedMutexLock lock(policy_mutex_);
-      action_ = action;
+      for (auto i = 0; i < action_.size(); ++i) {
+        action_[i] = double(action(i).scalar());
+      }
+    } else {
+      std::fill(action_.begin(), action_.end(), 0.);
     }
   }
 
@@ -814,36 +820,25 @@ public:
   // set action from policy
   void ActionFromPolicy(double* action, const double* state, double time, bool use_previous) override {
     const FabSharedMutexLock lock(policy_mutex_);
-    if (robot_) {
-      const auto dof = robot_->dof();
-      if (dof != action_.size1()) {
-        return;
-      }
 
-      const mjtNum* cur_pos = task_->GetStartPos();
-      if (cur_pos) {
-        trajectory_->trace.push_back(cur_pos[0]);
-        trajectory_->trace.push_back(cur_pos[1]);
-        trajectory_->trace.push_back(cur_pos[2]);
-      }
-      FAB_PRINT(action_);
-      for (auto i = 0; i < dof; ++i) {
-#if FAB_USE_ACTUATOR_VELOCITY
-        const auto action_i = action_(i);
-        action[i] = action_i.is_regular() ? task_->actuator_kv * double(action_i.scalar()) : 0;
-        if (action[i] > 0) {
-          FAB_PRINT("Action", i, action[i]);
-        }
-#elif FAB_USE_ACTUATOR_MOTOR
-        static const auto pointmass_id = task_->GetTargetObjectId();
-        static const auto pointmass = model_->body_mass[pointmass_id];
-        static const auto& linear_inertia = pointmass;
-        action[i] = action_i.is_regular() ? linear_inertia * double(action_i.scalar()) : 0;
-#endif
-      }
-      // Clamp controls
-      mjpc::Clamp(action, model_->actuator_ctrlrange, model_->nu);
+    const mjtNum* cur_pos = task_->GetStartPos();
+    if (cur_pos) {
+      trajectory_->trace.push_back(cur_pos[0]);
+      trajectory_->trace.push_back(cur_pos[1]);
+      trajectory_->trace.push_back(cur_pos[2]);
     }
+    FAB_PRINTDB(action_);
+    mju_copy(action, action_.data(), int(action_.size()));
+#if FAB_USE_ACTUATOR_VELOCITY
+    mju_scl(action, action, task_->actuator_kv, int(action_.size()));
+#elif FAB_USE_ACTUATOR_MOTOR
+    static const auto pointmass_id = task_->GetTargetObjectId();
+    static const auto pointmass = model_->body_mass[pointmass_id];
+    static const auto& linear_inertia = pointmass;
+    mju_scl(action, action, linear_inertia, action_.size());
+#endif
+    // Clamp controls
+    mjpc::Clamp(action, model_->actuator_ctrlrange, model_->nu);
   }
 
 protected:
@@ -874,5 +869,7 @@ protected:
   int dim_sensor_ = 0;            // output (i.e., all sensors)
   int dim_max_ = 0;               // maximum dimension
   mutable std::shared_mutex policy_mutex_;
-  CaSX action_;
+  // [action_] is shared among policy motion planning threads.
+  // NOTE: Using type as vector of primitive, CaSX is unclear why not well synch-protected yet.
+  std::vector<double> action_;
 };
