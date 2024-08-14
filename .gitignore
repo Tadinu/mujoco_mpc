@@ -1,5 +1,6 @@
 # assets
 mjpc/tasks/manipulation/assets
+mjpc/tasks/manipulation/meshes
 # Don't commit binaries
 *.a
 *.asm

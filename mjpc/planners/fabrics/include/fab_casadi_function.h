@@ -78,7 +78,7 @@ public:
 
   CaSXDict evaluate(const FabCasadiArgMap& kwargs) {
     // Process arguments
-    FAB_PRINTDB("KWARGS", kwargs.size());
+    FAB_PRINTDB("PRE-PROCESSED KWARGS", kwargs.size());
     fab_core::print_named_mapdb(kwargs);
     FAB_PRINTDB("----------------");
     // arguments_.clear();
@@ -106,7 +106,7 @@ public:
       } else if (fill_arg(arg_name, arg_value, {"radius_obst_dynamic", "radius_obsts_dynamic"})) {
       } else if (fill_arg(arg_name, arg_value, {"x_obst_cuboid", "x_obsts_cuboid"})) {
       } else if (fill_arg(arg_name, arg_value, {"size_obst_cuboid", "size_obsts_cuboid"})) {
-      } else if (arg_name.starts_with("radius_body") || arg_name.starts_with("links")) {
+      } else if (arg_name.starts_with("radius_body") && arg_name.starts_with("links")) {
         std::vector<std::string> body_size_input_keys;
         std::copy_if(input_names_.begin(), input_names_.end(), std::back_inserter(body_size_input_keys),
                      [](auto& input_key) { return input_key.starts_with("radius_body"); });
@@ -124,7 +124,7 @@ public:
         fill_arg(arg_name, arg_value, {});
       }
     }
-    fab_core::print_named_map2db<CaSX>(arguments_, "ARGUMENTS");
+    fab_core::print_named_map2db<CaSX>(arguments_, "POST-PROCESSED KWARGS");
 
     // Evaluate, invoking [function_(inputs)]
     // Example:
