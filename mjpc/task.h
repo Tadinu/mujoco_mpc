@@ -136,9 +136,7 @@ public:
   virtual std::string GetBaseBodyName() const { return {}; }
   virtual std::vector<std::string> GetEndtipNames() const { return {}; }
   virtual std::vector<std::string> GetCollisionLinkNames() const { return {}; }
-  virtual std::vector<std::pair<std::string, double /*size radius*/>> GetCollisionLinkProps() const {
-    return {};
-  }
+  virtual FabLinkCollisionProps GetCollisionLinkProps() const { return {}; }
   virtual std::vector<FabJointLimit> GetJointLimits() const { return {}; }
   virtual std::vector<FabSubGoalPtr> GetSubGoals() const { return {}; }
 
@@ -159,7 +157,7 @@ public:
 
   // NOTE: model_->nq,nv are actuated joints/controls configured in MJ model
   // dof: full dof of the robot
-  std::vector<double> QueryJointPos(int dof) const {
+  virtual std::vector<double> QueryJointPos(int dof) const {
     if (model_ && data_) {
       std::vector<double> qpos(dof, 0);
       memcpy(qpos.data(), &data_->qpos[0], std::min(model_->nq, dof) * sizeof(double));
@@ -168,7 +166,7 @@ public:
     return {};
   }
 
-  std::vector<double> QueryJointVel(int dof) const {
+  virtual std::vector<double> QueryJointVel(int dof) const {
     if (model_ && data_) {
       std::vector<double> qvel(dof, 0);
       memcpy(qvel.data(), &data_->qvel[0], std::min(model_->nv, dof) * sizeof(double));
