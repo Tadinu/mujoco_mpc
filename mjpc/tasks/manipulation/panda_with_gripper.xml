@@ -1,7 +1,8 @@
-<mujoco model="panda">
-  <compiler angle="radian" meshdir="assets" autolimits="true"/>
+<mujoco model="panda_with_gripper">
 
-  <option gravity="0 0 0" integrator="implicitfast"/>
+  <compiler angle="radian" meshdir="./meshes" autolimits="true"/>
+
+  <option gravity="0 0 0" integrator="implicitfast" timestep="0.01"/>
 
   <default>
     <default class="panda">
@@ -251,16 +252,24 @@
     </body>
   </worldbody>
 
-  <tendon>
-    <fixed name="split">
-      <joint joint="finger_joint1" coef="0.5"/>
-      <joint joint="finger_joint2" coef="0.5"/>
-    </fixed>
-  </tendon>
-
   <equality>
     <joint joint1="finger_joint1" joint2="finger_joint2" solimp="0.95 0.99 0.001" solref="0.005 1"/>
   </equality>
+
+  <statistic center="0.3 0 0.4" extent="1"/>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+    <global azimuth="120" elevation="-20"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+  </asset>
 
   <actuator>
     <velocity name="actuator1" joint="joint1" ctrlrange="-2.0 2.0" ctrllimited="true" kv="100"/>
@@ -271,12 +280,6 @@
     <velocity name="actuator6" joint="joint6" ctrlrange="-2.0 2.0" ctrllimited="true" kv="50"/>
     <velocity name="actuator7" joint="joint7" ctrlrange="-2.0 2.0" ctrllimited="true" kv="50"/>
     <velocity class="panda" name="actuator8" joint="finger_joint1" kv="10"/>
-    <!--<position name="fingers" ctrllimited="true" forcelimited="true" ctrlrange="0 1" forcerange="-5 5" kp="40" tendon="split"/> -->
   </actuator>
 
-  <!--
-  <keyframe>
-    <key name="home" qpos="0 0 0 -1.57079 0 1.57079 -0.7853 0.04 0.04" ctrl="0 0 0 -1.57079 0 1.57079 -0.7853 255"/>
-  </keyframe>
-  -->
 </mujoco>
