@@ -15,6 +15,9 @@
 #ifndef MJPC_AGENT_H_
 #define MJPC_AGENT_H_
 
+#include <absl/functional/any_invocable.h>
+#include <mujoco/mujoco.h>
+
 #include <atomic>
 #include <deque>
 #include <memory>
@@ -23,8 +26,6 @@
 #include <string_view>
 #include <vector>
 
-#include <absl/functional/any_invocable.h>
-#include <mujoco/mujoco.h>
 #include "mjpc/estimators/include.h"
 #include "mjpc/planners/include.h"
 #include "mjpc/states/state.h"
@@ -43,12 +44,11 @@ struct AgentPlots {
 };
 
 class Agent {
- public:
+public:
   friend class AgentTest;
 
   // constructor
-  Agent()
-      : planners_(mjpc::LoadPlanners()), estimators_(mjpc::LoadEstimators()) {}
+  Agent() : planners_(mjpc::LoadPlanners()), estimators_(mjpc::LoadEstimators()) {}
   explicit Agent(const mjModel* model, std::shared_ptr<Task> task);
 
   // destructor
@@ -73,8 +73,7 @@ class Agent {
   // call planner to update nominal policy
   void Plan(std::atomic<bool>& exitrequest, std::atomic<int>& uiloadrequest);
 
-  using StepJob =
-      absl::AnyInvocable<void(Agent*, const mjModel*, mjData*)>;
+  using StepJob = absl::AnyInvocable<void(Agent*, const mjModel*, mjData*)>;
 
   // runs a callback before the next physics step, on the physics thread
   void RunBeforeStep(StepJob job);
@@ -90,16 +89,13 @@ class Agent {
   void GUI(mjUI& ui);
 
   // task-based GUI event
-  void TaskEvent(mjuiItem* it, mjData* data, std::atomic<int>& uiloadrequest,
-                 int& run);
+  void TaskEvent(mjuiItem* it, mjData* data, std::atomic<int>& uiloadrequest, int& run);
 
   // agent-based GUI event
-  void AgentEvent(mjuiItem* it, mjData* data, std::atomic<int>& uiloadrequest,
-                  int& run);
+  void AgentEvent(mjuiItem* it, mjData* data, std::atomic<int>& uiloadrequest, int& run);
 
   // estimator-based GUI event
-  void EstimatorEvent(mjuiItem* it, mjData* data,
-                      std::atomic<int>& uiloadrequest, int& run);
+  void EstimatorEvent(mjuiItem* it, mjData* data, std::atomic<int>& uiloadrequest, int& run);
 
   // initialize plots
   void PlotInitialize();
@@ -140,12 +136,8 @@ class Agent {
   Task* ActiveTask() const { return tasks_[active_task_id_].get(); }
   // a residual function that can be used from trajectory rollouts. must only
   // be used from trajectory rollout threads (no locking).
-  const mjpc::AbstractResidualFn* PlanningResidual() const {
-    return residual_fn_.get();
-  }
-  bool IsPlanningModel(const mjModel* model) const {
-    return model == model_;
-  }
+  const mjpc::AbstractResidualFn* PlanningResidual() const { return residual_fn_.get(); }
+  bool IsPlanningModel(const mjModel* model) const { return model == model_; }
   int PlanSteps() const { return steps_; }
   int GetActionDim() const { return model_->nu; }
   mjModel* GetModel() { return model_; }
@@ -167,8 +159,8 @@ class Agent {
   std::string GetModeName() const;
 
   // threads
-  int planner_threads() const { return planner_threads_;}
-  int estimator_threads() const { return estimator_threads_;}
+  int planner_threads() const { return planner_threads_; }
+  int estimator_threads() const { return estimator_threads_; }
 
   // status flags, logically should be bool, but mjUI needs int pointers
   int plan_enabled;
@@ -176,6 +168,7 @@ class Agent {
   int visualize_enabled;
   int allocate_enabled;
   int plot_enabled;
+  int tune_enabled;
   int gui_task_id = 0;
 
   // state
@@ -187,7 +180,7 @@ class Agent {
   bool reset_estimator = true;
   bool estimator_enabled = false;
 
- private:
+private:
   // model
   mjModel* model_ = nullptr;
 

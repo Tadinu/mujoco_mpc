@@ -1,10 +1,10 @@
 #pragma once
 
 #include <memory>
-#include <random>
 
 #include "mjpc/planners/fabrics/include/fab_common.h"
 #include "mjpc/planners/fabrics/include/fab_core_util.h"
+#include "mjpc/planners/fabrics/include/fab_math_util.h"
 
 enum class FabSubGoalType : uint8_t { STATIC, STATIC_JOINT_SPACE, DYNAMIC /* Analytic, Spline, etc.*/ };
 
@@ -38,6 +38,7 @@ struct FabSubGoalConfig {
 struct FabSubGoal {
   FabSubGoal() = default;
   explicit FabSubGoal(FabSubGoalConfig config) : cfg_(std::move(config)) {}
+  virtual ~FabSubGoal() = default;
   FabSubGoalConfig cfg_;
 
   std::string name() const { return cfg_.name; }
@@ -81,15 +82,6 @@ struct FabSubGoal {
     verify();
     reset();
   }
-
-  // PRN
-  std::random_device rd;
-  // Standard mersenne_twister_engine seeded with rd()
-  std::mt19937 gen = std::mt19937(rd());
-  double rand_val(const double lower, const double upper) {
-    std::uniform_real_distribution<> dis = std::uniform_real_distribution<>(lower, upper);
-    return dis(gen);
-  }
 };
 using FabSubGoalPtr = std::shared_ptr<FabSubGoal>;
 using FabSubGoalPtrArray = std::vector<FabSubGoalPtr>;
@@ -103,7 +95,7 @@ struct FabStaticSubGoal : public FabSubGoal {
     const auto limit_highs = limit_high_pos();
     const auto low_limit_size = limit_lows.size();
     for (auto i = 0; i < low_limit_size; ++i) {
-      cfg_.desired_position[i] = rand_val(limit_lows[i], limit_highs[i]);
+      cfg_.desired_position[i] = FabRandom::rand<double>(limit_lows[i], limit_highs[i]);
     }
   }
 

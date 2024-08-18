@@ -1,16 +1,38 @@
 #pragma once
 
-#include <stdexcept>
+#include <random>
+#include <type_traits>
 #include <vector>
 
 // casadi
 #include <casadi/casadi.hpp>
-#include <casadi/core/casadi_types.hpp>
 
 // fabrics
 #include "mjpc/planners/fabrics/include/fab_common.h"
 #include "mjpc/planners/fabrics/include/fab_core_util.h"
 #include "mjpc/urdf_parser/include/common.h"
+
+struct FabRandom {
+  static int seed;
+  // PRN
+  static std::random_device rd;
+
+  // Standard mersenne_twister_engine seeded with rd()
+  static std::mt19937_64 gen;
+
+  template <typename T>
+  static T rand(const T min, const T max) {
+    if constexpr (std::is_integral_v<T>) {
+      return std::uniform_int_distribution<T>(min, max)(gen);
+    } else if constexpr (std::is_floating_point_v<T>) {
+      return std::uniform_real_distribution<T>(min, max)(gen);
+    } else {
+      return {};
+    }
+  }
+
+  static double rand() { return rand<double>(0.f, 1.f); }
+};
 
 namespace fab_math {
 template <typename TScalar>
