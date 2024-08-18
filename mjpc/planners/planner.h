@@ -79,6 +79,7 @@ public:
   void ResizeMjData(const mjModel* model, int num_threads);
 
   virtual urdf::UrdfModel RobotURDFModel() const { return {}; }
+  bool tuning_active_ = false;
 };
 
 // additional optional interface for planners that can produce several policy

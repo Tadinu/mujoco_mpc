@@ -130,6 +130,7 @@ set(LIB_MJPC_HEADERS
         planners/fabrics/include/fab_config.h
         planners/fabrics/include/fab_robot.h
         planners/fabrics/include/fab_speed_control.h
+        planners/fabrics/include/fab_param_tuner.h
         urdf_parser/include/common.h
         urdf_parser/include/geometry.h
         urdf_parser/include/joint.h
@@ -137,6 +138,8 @@ set(LIB_MJPC_HEADERS
         urdf_parser/include/model.h
         urdf_parser/include/txml.h
         urdf_parser/include/exception.h
+        json/json.hpp
+        optuna/optuna.h
         estimators/estimator.h
         estimators/unscented.h
         estimators/kalman.h
@@ -200,6 +203,8 @@ add_library(
         planners/rmp/src/rmp_raycasting_policy.cc
         planners/fabrics/src/fab_geometry_primitives.cpp
         planners/fabrics/src/fab_core_util.cpp
+        planners/fabrics/src/fab_math_util.cpp
+        planners/fabrics/src/fab_planner.cpp
         urdf_parser/common.cpp
         urdf_parser/geometry.cpp
         urdf_parser/joint.cpp
@@ -335,3 +340,12 @@ if (MJPC_INSTALL_PUBLIC)
             PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/mjpc" COMPONENT dev
     )
 endif ()
+
+# Install binaries
+add_custom_target(
+    copy_optuna_exe ALL
+    COMMAND ${CMAKE_COMMAND} -E copy
+    ${CMAKE_CURRENT_SOURCE_DIR}/optuna/optuna
+    ${CMAKE_CURRENT_BINARY_DIR}/../bin/optuna
+)
+add_dependencies(libmjpc copy_optuna_exe)

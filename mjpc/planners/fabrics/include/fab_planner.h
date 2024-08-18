@@ -33,13 +33,17 @@
 
 enum class FabControlMode : uint8_t { VEL, ACC };
 
+class FabParamTuner;
+
 class FabPlanner : public mjpc::Planner {
 public:
-  FabPlanner() = default;
-  ~FabPlanner() override = default;
+  FabPlanner();
+  ~FabPlanner() override;
 
   FabVariablesPtr vars() const { return vars_; }
-  FabPlannerConfig config() { return config_; }
+  FabPlannerConfig config() const { return config_; }
+  FabRobotPtr robot() const { return robot_; }
+  mjpc::Task* task() const { return task_; }
 
   void init_robot(int dof, std::string urdf_path, std::string base_link_name,
                   std::vector<std::string> endtip_names) {
@@ -51,7 +55,6 @@ public:
     forced_geometry_ = nullptr;
     target_velocity_ = CaSX::zeros(dof);
     cafunc_ = nullptr;
-    action_.resize(robot_->dof(), 0.);
   }
 
   void add_geometry(const FabDifferentialMap& forward_map, FabLagrangianPtr lagrangian,
@@ -173,10 +176,14 @@ public:
     const auto& dm_psi = forced_forward_map_;
     assert(execution_lagrangian_);
     const auto& ex_lag = execution_lagrangian_;
-    const auto a_ex = CaSX::sym("a_ex_damper", 1);
-    const auto a_le = CaSX::sym("a_le_damper", 1);
-    damper_ = FabDamper(x_psi, config_.damper_beta(x_psi, a_ex, a_le), a_ex, a_le,
-                        config_.damper_eta(CaSX::vertcat(CaSX::symvar(ex_lag->l()))), dm_psi, ex_lag->l());
+    const auto a_ex = CaSX::sym("a_ex_damper");
+    const auto a_le = CaSX::sym("a_le_damper");
+
+    damper_ = tuning_active_ ? FabDamper(x_psi, config_.damper_beta_sym(x_psi), a_ex, a_le,
+                                         config_.damper_eta_sym(), dm_psi, ex_lag->l())
+                             : FabDamper(x_psi, config_.damper_beta(x_psi, a_ex, a_le), a_ex, a_le,
+                                         config_.damper_eta(CaSX::vertcat(CaSX::symvar(ex_lag->l()))), dm_psi,
+                                         ex_lag->l());
   }
 
   CaSX get_forward_kinematics(const std::string& link_name, bool position_only = true) {
@@ -647,50 +654,7 @@ public:
   }
 
   // initialize data and settings
-  void Initialize(mjModel* model, const mjpc::Task& task) override {
-    task_ = const_cast<mjpc::Task*>(&task);
-    model_ = model;
-    data_ = task_->data_;
-
-    // dimensions
-    dim_state_ = model->nq + model->nv + model->na;     // state dimension
-    dim_state_derivative_ = 2 * model->nv + model->na;  // state derivative dimension
-    dim_action_ = task.GetActionDim();                  // action dimension
-    dim_sensor_ = model->nsensordata;                   // number of sensor values
-    dim_max_ = std::max({dim_state_, dim_state_derivative_, dim_action_, model->nuser_sensor});
-
-    if (trajectory_) {
-      trajectory_->Reset(0);
-    } else {
-      trajectory_ = std::make_shared<mjpc::Trajectory>();
-    }
-
-    // Init task fabrics
-    if (task.IsFabricsSupported()) {
-      // Robot, resetting [vars_, geometry_, target_velocity_] here-in!
-      init_robot(dim_action_, task.URDFPath(), task.GetBaseBodyName(), task.GetEndtipNames());
-
-      // Config
-      config_ = task.GetFabricsConfig(task.IsGoalFixed() && task.AreObstaclesFixed());
-
-      // Goal
-      FabGoalComposition goal;
-      for (const auto& subgoal : task.GetSubGoals()) {
-        goal.add_sub_goal(subgoal);
-      }
-
-      // Add geometry + energy components + [goal]
-      set_components(task_->GetCollisionLinkNames(), {}, {}, goal,
-                     task_->GetJointLimits() /* TODO: Fetch from RobotURDFModel()->joint_map*/,
-                     task_->AreObstaclesFixed() ? task_->GetStaticObstaclesNum() : 0,
-                     task_->AreObstaclesFixed() ? 0 : task_->GetDynamicObstaclesNum(),
-                     0 /*cuboid_obstacles_num*/, task_->GetPlaneConstraintsNum(),
-                     task_->GetDynamicObstaclesDim());
-
-      // Concretize, calculating [xddot] + composing [cafunc_] based on it
-      concretize(FAB_USE_ACTUATOR_VELOCITY ? FabControlMode::VEL : FabControlMode::ACC, 0.01);
-    }
-  }
+  void Initialize(mjModel* model, const mjpc::Task& task) override;
 
   void Allocate() override {
     trajectory_->Initialize(dim_state_, dim_action_, task_->num_residual, task_->num_trace, 1);
@@ -741,13 +705,7 @@ public:
   int NumParameters() override { return 0; }
 
   // optimize nominal policy
-  void OptimizePolicy(int horizon, mjpc::ThreadPool& pool) override {
-    // get nominal trajectory
-    this->NominalTrajectory(horizon, pool);
-
-    // plan
-    plan();
-  }
+  void OptimizePolicy(int horizon, mjpc::ThreadPool& pool) override;
 
   void plan() {
     const auto robot_dof = robot_->dof();
@@ -773,9 +731,8 @@ public:
     }
 
     // [Radius collision bodies]
-    for (const auto& collision_link_prop : task_->GetCollisionLinkProps()) {
-      args.insert_or_assign(std::string("radius_body_") + collision_link_prop.first,
-                            collision_link_prop.second);
+    for (const auto& [link_name, link_size] : task_->GetCollisionLinkProps()) {
+      args.insert_or_assign(std::string("radius_body_") + link_name, link_size);
     }
 
     // [Obstacles' size & pos]
@@ -802,25 +759,34 @@ public:
     }
 
     // Compute action
-    CaSX action = compute_action(args);
+    set_action(compute_action(args));
+  }
+
+  void set_action(const CaSX& action) {
+    const FabSharedMutexLock lock(policy_mutex_);
     if (action.is_regular() && !action.is_empty()) {
-      const FabSharedMutexLock lock(policy_mutex_);
+      action_.resize(robot_->dof(), 0.);
       for (auto i = 0; i < action_.size(); ++i) {
         action_[i] = double(action(i).scalar());
       }
     } else {
-      std::fill(action_.begin(), action_.end(), 0.);
+      action_.clear();
     }
   }
 
   // compute trajectory using nominal policy
-
   void NominalTrajectory(int horizon, mjpc::ThreadPool& pool) override {}
 
   // set action from policy
   void ActionFromPolicy(double* action, const double* state, double time, bool use_previous) override {
     const FabSharedMutexLock lock(policy_mutex_);
 
+    // WAIT ACTION TO BE COMPUTED
+    if (action_.empty()) {
+      return;
+    }
+
+    // APPLY ACTION: COPY [action_] -> [action]
     const mjtNum* cur_pos = task_->GetStartPos();
     if (cur_pos) {
       trajectory_->trace.push_back(cur_pos[0]);
@@ -837,14 +803,18 @@ public:
     static const auto& linear_inertia = pointmass;
     mju_scl(action, action, linear_inertia, action_.size());
 #endif
-    // Clamp controls
+
+    // Clear [action_]
+    action_.clear();
+
+    // Clamp controls on outputted [action]
     mjpc::Clamp(action, model_->actuator_ctrlrange, model_->nu);
   }
 
 protected:
   // NOTE: Each planner can only plan motion of a single robot atm
   FabRobotPtr robot_ = nullptr;
-  FabControlMode control_mode_;
+  FabControlMode control_mode_ = FabControlMode::VEL;
   CaSX target_velocity_;
   FabPlannerConfig config_;
   FabPlannerProblemConfig problem_config_;
@@ -861,6 +831,9 @@ protected:
   FabCasadiFunctionPtr cafunc_ = nullptr;
   int8_t ref_sign_ = 1;
 
+  // [FabParamTuner] is forward-declared above, so cannot be initialized here (even to nullptr)
+  std::unique_ptr<FabParamTuner> param_tuner_;
+
   // mjpc
   std::shared_ptr<mjpc::Trajectory> trajectory_ = nullptr;
   int dim_state_ = 0;             // state
@@ -873,3 +846,5 @@ protected:
   // NOTE: Using type as vector of primitive, CaSX is unclear why not well synch-protected yet.
   std::vector<double> action_;
 };
+
+using FabPlannerPtr = std::shared_ptr<FabPlanner>;

@@ -2,6 +2,7 @@
 
 #include <casadi/casadi.hpp>
 #include <functional>
+#include <random>
 #include <string>
 
 #include "mjpc/planners/fabrics/include/fab_common.h"
@@ -80,18 +81,17 @@ struct FabPlannerConfig {
     return 0.5 * (CaSX::tanh(-0.9 * 0.5 * CaSX::dot(xdot, xdot) - 0.5) + 1);
   };
 
-  std::function<CaSX(const CaSX& x, const CaSX& a_ex, const CaSX& a_le, const CaSX& alpha_b,
-                     const CaSX& radius_shift, const CaSX& beta_close, const CaSX& beta_distant)>
-      damper_beta_ = [](const CaSX& x, const CaSX& a_ex, const CaSX& a_le, const CaSX& alpha_b,
-                        const CaSX& radius_shift, const CaSX& beta_close, const CaSX& beta_distant) {
-        return 0.5 * (CaSX::tanh(-alpha_b * (CaSX::norm_2(x) - radius_shift)) + 1) * beta_close +
-               beta_distant + CaSX::fmax(0, a_ex - a_le);
-      };
+  std::function<CaSX(const CaSX& x)> damper_beta_sym = [](const CaSX& x) {
+    return 0.5 * (CaSX::tanh(-CaSX::sym("alpha_b") * (CaSX::norm_2(x) - CaSX::sym("radius_shift"))) + 1) *
+               CaSX::sym("beta_close") +
+           CaSX::sym("beta_distant") + CaSX::fmax(0, CaSX::sym("a_ex") - CaSX::sym("a_le"));
+  };
 
-  std::function<CaSX(const CaSX& alpha_eta, const CaSX& ex_lag, const CaSX& ex_factor)> damper_eta_ =
-      [](const CaSX& alpha_eta, const CaSX& ex_lag, const CaSX& ex_factor) {
-        return 0.5 * (CaSX::tanh(-alpha_eta * ex_lag * (1 - ex_factor) - 0.5) + 1);
-      };
+  std::function<CaSX()> damper_eta_sym = []() {
+    return 0.5 *
+           (CaSX::tanh(-CaSX::sym("alpha_eta") * CaSX::sym("ex_lag") * (1 - CaSX::sym("ex_factor")) - 0.5) +
+            1);
+  };
 };
 
 struct FabJointLimitArray {

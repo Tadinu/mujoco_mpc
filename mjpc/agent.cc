@@ -135,6 +135,7 @@ void Agent::Initialize(const mjModel* model) {
   visualize_enabled = false;
   allocate_enabled = true;
   plot_enabled = true;
+  tune_enabled = false;
 
   // cost
   cost_ = 0.0;
@@ -290,6 +291,8 @@ void Agent::PlanIteration(ThreadPool* pool) {
     // rollout threads
     residual_fn_ = task->Residual();
 
+    // planner tuning active
+    planner.tuning_active_ = tune_enabled;
     if (plan_enabled) {
       // planner policy
       planner.OptimizePolicy(steps_, *pool);
@@ -638,6 +641,7 @@ void Agent::GUI(mjUI& ui) {
                         {mjITEM_CHECKINT, "Action", 2, &action_enabled, ""},
                         {mjITEM_CHECKINT, "Plots", 2, &plot_enabled, ""},
                         {mjITEM_CHECKINT, "Traces", 2, &visualize_enabled, ""},
+                        {mjITEM_CHECKINT, "Tune", 2, &tune_enabled, ""},
                         {mjITEM_SEPARATOR, "Agent Settings", 1},
                         {mjITEM_SLIDERNUM, "Horizon", 2, &horizon_, "0 1"},
                         {mjITEM_SLIDERNUM, "Timestep", 2, &timestep_, "0 1"},
@@ -687,6 +691,7 @@ void Agent::TaskEvent(mjuiItem* it, mjData* data, std::atomic<int>& uiloadreques
       plan_enabled = false;
       action_enabled = false;
       visualize_enabled = false;
+      tune_enabled = false;
       ActiveTask()->visualize = 0;
       ActiveTask()->reset = 0;
       allocate_enabled = true;

@@ -42,6 +42,7 @@
 #include "mjpc/utilities.h"
 
 ABSL_FLAG(bool, planner_enabled, false, "If true, the planner will run on startup");
+ABSL_FLAG(bool, tuner_enabled, false, "If true, the parameter tuner will run on startup");
 ABSL_FLAG(float, sim_percent_realtime, 100,
           "The realtime percentage at which the simulation will be launched.");
 ABSL_FLAG(bool, estimator_enabled, false, "If true, estimator loop will run on startup");
@@ -223,6 +224,7 @@ void PhysicsLoop(mj::Simulate& sim) {
         sim.agent->Initialize(mnew);
         sim.agent->plot_enabled = absl::GetFlag(FLAGS_show_plot);
         sim.agent->plan_enabled = absl::GetFlag(FLAGS_planner_enabled);
+        sim.agent->tune_enabled = absl::GetFlag(FLAGS_tuner_enabled);
         sim.agent->Allocate();
 
         // set home keyframe
