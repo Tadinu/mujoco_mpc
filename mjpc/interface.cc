@@ -35,6 +35,7 @@ AgentRunner::AgentRunner(const mjModel* model, std::shared_ptr<Task> task)
   agent_.action_enabled = true;
   agent_.visualize_enabled = false;
   agent_.plot_enabled = false;
+  agent_.tune_enabled = false;
   exit_request_.store(false);
   agent_plan_pool_.Schedule(
       [this]() { agent_.Plan(exit_request_, ui_load_request_); });
