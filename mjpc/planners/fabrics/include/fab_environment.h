@@ -4,11 +4,13 @@
 #include "mjpc/planners/fabrics/include/fab_geometry_primitives.h"
 
 class FabEnvironment {
- public:
+public:
   FabEnvironment() = default;
 
   FabEnvironment(int spheres_num, int cuboids_num, int planes_num)
-      : spheres_num_(spheres_num), cuboids_num_(cuboids_num), planes_num_(planes_num) {}
+      : spheres_num_(spheres_num), cuboids_num_(cuboids_num), planes_num_(planes_num) {
+    generate_obstacles();
+  }
 
   void generate_obstacles() {
     size_t count = obstacles_.size();
@@ -40,7 +42,7 @@ class FabEnvironment {
   int cuboids_num() const { return cuboids_num_; }
   int planes_num() const { return planes_num_; }
 
- protected:
+protected:
   std::vector<FabGeometricPrimitivePtr> obstacles_;
   int spheres_num_ = 0;
   int cuboids_num_ = 0;

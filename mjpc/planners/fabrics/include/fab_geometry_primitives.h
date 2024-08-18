@@ -19,10 +19,10 @@ class FabCuboid;
 class FabPlane;
 
 class FabGeometricPrimitive {
- public:
+public:
 #pragma region FabDistanceUndefinedError
   class FabDistanceUndefinedError : public std::runtime_error {
-   public:
+  public:
     explicit FabDistanceUndefinedError(const std::string& error_msg) : std::runtime_error(error_msg) {}
 
     explicit FabDistanceUndefinedError(const char* error_msg) : std::runtime_error(error_msg) {}
@@ -50,38 +50,36 @@ class FabGeometricPrimitive {
   };
 #pragma endregion FabDistanceUndefinedError
 
- public:
+public:
   FabGeometricPrimitive() = default;
 
   explicit FabGeometricPrimitive(std::string name) : name_(std::move(name)) {}
 
   std::string to_string() const { return std::string(typeid(this).name()) + ": " + name_; }
 
-  CaSX position() const {
-    CaSX position;
-    origin_.get(position, false, CaSlice(0, 3), CaSlice(3));
-    return position;
-  }
+  CaSX position() const { return fab_core::get_casx2(origin_, {0, 3}, 3); }
 
   void set_position(const CaSX& position, bool free = false) {
-    origin_.set(position, false, CaSlice(0, 3), CaSlice(3));
+    fab_core::set_casx2(origin_, {0, 3}, 3, position);
     if (free) {
-      CaSX position_0;
-      position.get(position_0, false, CaSlice(0, 0));
-      const std::string position_0_name = position_0.name();
-      sym_parameters_[position_0_name.substr(position_0_name.size() - 2, 2)] = position;
+      const CaSX position_0 = fab_core::get_casx2(origin_, 0, 0);
+      if (position_0.is_symbolic()) {
+        const std::string position_0_name = position_0.name();
+        sym_parameters_[position_0_name.substr(position_0_name.size() - 2, 2)] = position;
+      }
     }
   }
 
   CaSX origin() const { return origin_; }
 
-  void set_origin(CaSX origin, const bool free = false) {
-    origin_ = std::move(origin);
+  void set_origin(const CaSX& origin, const bool free = false) {
+    origin_ = origin;
     if (free) {
-      CaSX origin_0;
-      origin_.get(origin_0, false, CaSlice(0, 0));
-      const std::string origin_0_name = origin_0.name();
-      sym_parameters_[origin_0_name.substr(origin_0_name.size() - 2, 2)] = origin_;
+      const CaSX origin_0 = fab_core::get_casx2(origin, 0, 0);
+      if (origin_0.is_symbolic()) {
+        const std::string origin_0_name = origin_0.name();
+        sym_parameters_[origin_0_name.substr(origin_0_name.size() - 2, 2)] = origin;
+      }
     }
   }
 
@@ -102,16 +100,15 @@ class FabGeometricPrimitive {
 
   virtual CaSX distance(const FabGeometricPrimitive* primitive) = 0;
 
- protected:
+protected:
   std::string name_;
-  CaSX position_;
   CaSX origin_ = fab_math::CASX_TRANSF_IDENTITY;
   FabNamedMap<double, std::vector<double>> parameters_;
   CaSXDict sym_parameters_;
 };
 
 class FabCapsule : public FabGeometricPrimitive {
- public:
+public:
   FabCapsule() = default;
 
   FabCapsule(std::string name, double radius, double length)
@@ -153,7 +150,7 @@ class FabCapsule : public FabGeometricPrimitive {
 
   CaSX distance(const FabGeometricPrimitive* primitive) override;
 
- protected:
+protected:
   double radius_ = 0.;
   double length_ = 0.;
   CaSX sym_radius_;
@@ -161,7 +158,7 @@ class FabCapsule : public FabGeometricPrimitive {
 };
 
 class FabSphere : public FabGeometricPrimitive {
- public:
+public:
   FabSphere() = default;
 
   FabSphere(std::string name, double radius) : FabGeometricPrimitive(std::move(name)), radius_(radius) {
@@ -181,13 +178,13 @@ class FabSphere : public FabGeometricPrimitive {
 
   CaSX distance(const FabGeometricPrimitive* primitive) override;
 
- protected:
+protected:
   double radius_ = 0.;
   CaSX sym_radius_;
 };
 
 class FabCuboid : public FabGeometricPrimitive {
- public:
+public:
   FabCuboid() = default;
 
   FabCuboid(std::string name, std::vector<double> size)
@@ -211,13 +208,13 @@ class FabCuboid : public FabGeometricPrimitive {
     throw FabDistanceUndefinedError::customized(this, primitive);
   }
 
- protected:
+protected:
   std::vector<double> size_ = {0., 0., 0.};
   CaSX sym_size_;
 };
 
 class FabPlane : public FabGeometricPrimitive {
- public:
+public:
   FabPlane() = default;
 
   FabPlane(std::string name, std::vector<double> plane_equation = {0, 0, 0, 1})
@@ -238,7 +235,7 @@ class FabPlane : public FabGeometricPrimitive {
     throw FabDistanceUndefinedError::customized(this, primitive);
   }
 
- protected:
+protected:
   std::vector<double> plane_equation_ = {0., 0., 0., 1.};
   CaSX sym_plane_equation_;
 };
