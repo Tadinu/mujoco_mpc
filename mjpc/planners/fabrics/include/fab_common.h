@@ -49,10 +49,12 @@ static constexpr auto FAB_EPS = 1e-6;
 // NOTE: Dynamic goal is not yet working
 #define FAB_DYNAMIC_GOAL_SUPPORTED (0)
 
+#define FAB_RANDOM_DETERMINISTIC (0)
+
 using FabSharedMutexLock = std::shared_lock<std::shared_mutex>;
 using FabMutexLock = std::lock_guard<std::mutex>;
 
-using FabLinkCollisionProps = std::vector<std::pair<std::string, std::vector<double> /*size radius*/>>;
+using FabLinkCollisionProps = std::map<std::string, std::vector<double> /*size or radius*/>;
 
 struct FabError : public std::runtime_error {
   explicit FabError(const std::string& error_msg) : std::runtime_error(error_msg), message_(error_msg) {}

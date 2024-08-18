@@ -136,6 +136,7 @@ public:
   virtual std::string GetBaseBodyName() const { return {}; }
   virtual std::vector<std::string> GetEndtipNames() const { return {}; }
   virtual std::vector<std::string> GetCollisionLinkNames() const { return {}; }
+  virtual std::map<std::string, std::string> GetSelfCollisionLinkPairs() const { return {}; }
   virtual FabLinkCollisionProps GetCollisionLinkProps() const { return {}; }
   virtual std::vector<FabJointLimit> GetJointLimits() const { return {}; }
   virtual std::vector<FabSubGoalPtr> GetSubGoals() const { return {}; }

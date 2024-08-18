@@ -79,6 +79,7 @@ class AgentTest : public ::testing::Test {
     EXPECT_FALSE(agent->visualize_enabled);
     EXPECT_TRUE(agent->allocate_enabled);
     EXPECT_TRUE(agent->plot_enabled);
+    EXPECT_FALSE(agent->tune_enabled);
 
     // allocate
     agent->Allocate();
