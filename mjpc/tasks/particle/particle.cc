@@ -236,18 +236,21 @@ void Particle::ModifyScene(const mjModel* model, const mjData* data, mjvScene* s
 #endif
 }
 
-FabPlannerConfig Particle::GetFabricsConfig(bool is_static_env) const {
-  static const auto f1 = [](const CaSX& x, const CaSX& xdot) { return (-2.0 / x) * CaSX::pow(xdot, 2); };
-  static const auto f2 = [](const CaSX& x, const CaSX& xdot) {
-    return (1.0 / CaSX::pow(x, 2)) * (1 - CaSX::heaviside(xdot)) * CaSX::pow(xdot, 2);
+FabPlannerConfigPtr Particle::GetFabricsConfig(bool is_static_env) const {
+  static const FabConfigFunc f1 = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+    return FabConfigExprMeta{(-2.0 / x) * CaSX::pow(xdot, 2)};
   };
-  FabPlannerConfig config;
+  static const FabConfigFunc f2 = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+    return FabConfigExprMeta{(1.0 / CaSX::pow(x, 2)) * (1 - CaSX::heaviside(xdot)) * CaSX::pow(xdot, 2)};
+  };
+  // NOTE: Either create a new config instance here, or using a static one but requiring more custom setups
+  auto config = std::make_shared<FabPlannerConfig>();
   if (is_static_env) {
-    config.geometry_plane_constraint = f1;
-    config.finsler_plane_constraint = f2;
+    config->geometry_plane_constraint = f1;
+    config->finsler_plane_constraint = f2;
   } else {
-    config.collision_geometry = f1;
-    config.collision_finsler = f2;
+    config->collision_geometry = f1;
+    config->collision_finsler = f2;
   }
   return config;
 }

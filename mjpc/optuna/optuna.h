@@ -179,12 +179,15 @@ public:
     auto command = base_command("tell");
     command += " --trial-number " + std::to_string(trial.number);
     command += " --values " + std::to_string(value);
+    FAB_PRINT("OPTUNA", command);
     run_command(command);
   }
 
   FrozenTrial best_trial() const {
     auto command = base_command("best-trial") + " -f json";
-    return FrozenTrial(json::parse(run_command(command)));
+    json best_trial_json = json::parse(run_command(command));
+    FAB_PRINT("BEST_TRIAL JSON", best_trial_json);
+    return FrozenTrial(best_trial_json);
   }
 
   std::vector<FrozenTrial> trials() const {

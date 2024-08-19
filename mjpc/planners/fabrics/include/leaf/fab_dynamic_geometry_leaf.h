@@ -30,16 +30,16 @@ public:
       : FabDynamicLeaf(std::move(parent_vars), std::move(leaf_name), dim, dim_ref, forward_kinematics,
                        reference_params) {}
 
-  void set_geometry(const std::function<CaSX(const CaSX& x, const CaSX& xdot)>& geometry) {
-    // TODO
-    // new_parameters, h_geometry = parse_symbolic_input(geometry, x, xdot, name=self._leaf_name)
-    // self._parent_variables.add_parameters(new_parameters)
-    geom_ = std::make_shared<FabGeometry>(FabGeometryArgs{{"h", geometry(x_, xdot_)}, {"var", leaf_vars_}});
+  void set_geometry(const FabConfigFunc& geometry) {
+    const auto [h_geometry, var_names] = geometry(x_, xdot_, leaf_name_);
+    parent_vars_->add_parameters(fab_core::parse_symbolic_casx(h_geometry, var_names));
+    geom_ = std::make_shared<FabGeometry>(FabGeometryArgs{{"h", h_geometry}, {"var", leaf_vars_}});
   }
 
-  void set_finsler_structure(const std::function<CaSX(const CaSX& x, const CaSX& xdot)>& finsler_structure) {
-    lag_ =
-        std::make_shared<FabLagrangian>(finsler_structure(x_, xdot_), FabLagrangianArgs{{"var", leaf_vars_}});
+  void set_finsler_structure(const FabConfigFunc& finsler_structure) {
+    const auto [lag_geometry, var_names] = finsler_structure(x_, xdot_, leaf_name_);
+    parent_vars_->add_parameters(fab_core::parse_symbolic_casx(lag_geometry, var_names));
+    lag_ = std::make_shared<FabLagrangian>(lag_geometry, FabLagrangianArgs{{"var", leaf_vars_}});
   }
 
   virtual FabDifferentialMapPtr geometry_map() const { return nullptr; }

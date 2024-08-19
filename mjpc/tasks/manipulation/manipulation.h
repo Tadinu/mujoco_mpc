@@ -46,6 +46,9 @@ public:
         {link_names[0], {0.02}}, {link_names[1], {0.02}}, {link_names[2], {0.02}}};
     return props;
   }
+  FabSelfCollisionNamePairs GetSelfCollisionNamePairs() const override {
+    return {{"panda_hand", {"panda_link2", "panda_link4"}}};
+  }
   int GetDynamicObstaclesNum() const override { return static_cast<int>(GetCollisionLinkNames().size()); }
   int GetPlaneConstraintsNum() const override { return 0; }
 
@@ -92,7 +95,6 @@ public:
   }
 
   bool IsGoalFixed() const override { return true; }
-  bool AreObstaclesFixed() const override { return false; }
   int GetDynamicObstaclesDim() const override { return 3; }
   std::vector<FabJointLimit> GetJointLimits() const override {
     return {{-2.8973, 2.8973},   // panda_joint1
@@ -192,7 +194,7 @@ protected:
   }
   ResidualFn* InternalResidual() override { return &residual_; }
   bool IsFabricsSupported() const override { return true; }
-  FabPlannerConfig GetFabricsConfig(bool is_static_env) const override;
+  FabPlannerConfigPtr GetFabricsConfig(bool is_static_env) const override;
 
 private:
   ResidualFn residual_;
