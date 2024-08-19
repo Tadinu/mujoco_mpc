@@ -27,15 +27,17 @@ public:
     set_forward_map(attractor_name);
   }
 
-  void set_potential(const std::function<CaSX(const CaSX& x, const double weight)>& potential,
-                     const double weight) override {
-    const CaSX psi = weight_var_ * potential(x_rel_, weight);
+  void set_potential(const FabConfigFunc& potential) override {
+    const CaSX psi = weight_var_ * potential(x_rel_, xdot_rel_, {}).eval;
     CaSX h_psi = CaSX::gradient(psi, x_rel_);
     geom_ = std::make_shared<FabGeometry>(FabGeometryArgs{{"h", std::move(h_psi)}, {"var", relative_vars_}});
   }
 
-  void set_metric(const std::function<CaSX(const CaSX& x)>& metric) override {
-    const auto lagrangian_psi = CaSX::dot(xdot_rel_, CaSX::mtimes(metric(x_rel_), xdot_rel_));
+  void set_metric(const FabConfigFunc& metric) override {
+    const auto [attractor_metric, var_names] = metric(x_rel_, xdot_rel_, leaf_name_);
+    // TODO: Check if needed to add params to [parent_vars_]
+    parent_vars_->add_parameters(fab_core::parse_symbolic_casx(attractor_metric, var_names));
+    const auto lagrangian_psi = CaSX::dot(xdot_rel_, CaSX::mtimes(attractor_metric, xdot_rel_));
     lag_ = std::make_shared<FabLagrangian>(lagrangian_psi, FabLagrangianArgs{{"var", relative_vars_}});
   }
 

@@ -4,10 +4,10 @@
 
 #include "mjpc/optuna/optuna.h"
 #include "mjpc/planners/fabrics/include/fab_config.h"
-#include "mjpc/planners/fabrics/include/fab_environment.h"
 #include "mjpc/planners/fabrics/include/fab_math_util.h"
 #include "mjpc/planners/fabrics/include/fab_planner.h"
 #include "mjpc/planners/fabrics/include/fab_robot.h"
+#include "mjpc/task.h"
 
 using FabParamWeightDict = std::map<const char*, double>;
 using FabSearchSpaceData = std::map<const char*, FabParamWeightDict>;
@@ -27,7 +27,15 @@ public:
 
   void set_planner(FabPlanner* planner) {
     planner_ = planner;
-    env_ = FabEnvironment(planner->task()->GetTotalObstaclesNum(), 0, 1);
+    robot_ = planner->robot();
+    task_ = planner->task();
+#if 0
+    // NOTE: Env info (obstacles, etc.) is fetched directly through [task_]
+    env_ = FabEnvironment(task_->GetTotalObstaclesNum(), 0, 1);
+#endif
+    create_collision_metric();
+    initial_distance_to_obstacles_ =
+        evaluate_distance_to_closest_obstacle(task_->QueryJointPos(robot_->dof()));
   }
 
   static FabParamWeightDict get_manual_parameters() {
@@ -64,57 +72,6 @@ public:
         {"radius_shift_damper", 0.050},  //[0.01, 0.1]
         {"ex_factor", 30.0}              //[1, 30]
     };
-  }
-
-  FabPlannerConfig get_symbolic_planner_config() const {
-    static FabPlannerConfig config;
-    config.collision_geometry = [](const CaSX& x, const CaSX& xdot) {
-      return -CaSX::sym("k_geo") / CaSX::pow(x, CaSX::sym("exp_geo")) * CaSX::pow(xdot, 2);
-    };
-
-    config.collision_finsler = [](const CaSX& x, const CaSX& xdot) {
-      return CaSX::sym("k_fin") / CaSX::pow(x, CaSX::sym("exp_fin")) * (-0.5 * (CaSX::sign(xdot) - 1)) *
-             CaSX::pow(xdot, 2);
-    };
-    config.limit_geometry = [](const CaSX& x, const CaSX& xdot) {
-      return -CaSX::sym("k_limit_geo") / CaSX::pow(x, CaSX::sym("exp_limit_geo")) * CaSX::pow(xdot, 2);
-    };
-
-    config.limit_finsler = [](const CaSX& x, const CaSX& xdot) {
-      return CaSX::sym("k_limit_fin") / CaSX::pow(x, CaSX::sym("exp_limit_fin")) *
-             (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2);
-    };
-
-    config.self_collision_geometry = [](const CaSX& x, const CaSX& xdot) {
-      return -CaSX::sym("k_self_geo") / CaSX::pow(x, CaSX::sym("exp_self_geo")) * CaSX::pow(xdot, 2);
-    };
-
-    config.self_collision_finsler = [](const CaSX& x, const CaSX& xdot) {
-      return CaSX::sym("k_self_fin") / CaSX::pow(x, CaSX::sym("exp_self_fin")) *
-             (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2);
-    };
-
-    config.base_energy = [](const CaSX& xdot) {
-      return 0.5 * CaSX::sym("base_inertia") * CaSX::dot(xdot, xdot);
-    };
-
-    config.damper_beta_sym = [](const CaSX& x) {
-      return 0.5 * (CaSX::tanh(-CaSX::sym("alpha_b") * (CaSX::norm_2(x) - CaSX::sym("radius_shift"))) + 1) *
-                 CaSX::sym("beta_close") +
-             CaSX::sym("beta_distant") + CaSX::fmax(0, CaSX::sym("a_ex") - CaSX::sym("a_le"));
-    };
-    config.damper_beta = [](const CaSX& x, const CaSX& a_ex = {}, const CaSX& a_le = {}) {
-      return config.damper_beta_sym(x);
-    };
-
-    config.damper_eta_sym = []() {
-      return 0.5 *
-             (CaSX::tanh(-CaSX::sym("alpha_eta") * CaSX::sym("ex_lag") * (1 - CaSX::sym("ex_factor")) - 0.5) +
-              1);
-    };
-    config.damper_eta = [](const CaSX& xdot) { return config.damper_eta_sym(); };
-
-    return config;
   }
 
   static const std::string DEFAULT_STUDY_DB_PATH;
@@ -189,28 +146,75 @@ public:
     return parameters;
   }
 
+  void set_goal_arguments() {
+    // [X-space goals] & [Weights of goals]
+    const auto sub_goals = task_->GetSubGoals();
+    for (auto i = 0; i < sub_goals.size(); ++i) {
+      const auto& sub_goal = sub_goals[i];
+      const auto i_str = std::to_string(i);
+      arguments_.insert_or_assign("x_goal_" + i_str, sub_goal->cfg_.desired_position);
+      arguments_.insert_or_assign("weight_goal_" + i_str, sub_goal->cfg_.weight);
+    }
+
+#if 0
+    // [Plane constraints]
+    for (auto i = 0; i < task_->GetPlaneConstraintsNum(); ++i) {
+      arguments_.insert_or_assign("constraint_" + std::to_string(i), std::vector<double>{0, 0, 1, 0.0});
+    }
+#endif
+  }
+
   void set_collision_arguments() {
-    const auto collision_link_props = planner_->task_->GetCollisionLinkProps();
-    for (const auto& link_name : collision_link_names_) {
+    const auto collision_link_props = task_->GetCollisionLinkProps();
+    for (const auto& link_name : task_->GetCollisionLinkNames()) {
       arguments_["radius_body_" + link_name] = collision_link_props.at(link_name);
     }
   }
 
-  void set_parameters(const std::vector<FabGeometricPrimitivePtr>& obstacles,
-                      const FabParamWeightDict& params) {
-    for (const auto& link_name : collision_link_names_) {
-      for (auto i = 0; i < planner_->task()->GetTotalObstaclesNum(); ++i) {
-        const auto i_str = std::to_string(i);
+  void set_other_arguments(const FabParamWeightDict& params) {
+    const auto obstacle_statesX = task_->GetObstacleStatesX();
+    const bool fixed_obstacles = task_->AreObstaclesFixed();
+
+    const auto fobstacle_prop_name = [&fixed_obstacles](const char* prefix, const int i) {
+      return (fixed_obstacles ? prefix : (std::string(prefix) + "dynamic_")) + std::to_string(i);
+    };
+    const int dim = task_->GetObstaclesDim();
+    std::vector obst_pos(dim, 0.);
+    std::vector obst_vel(dim, 0.);
+    std::vector obst_acc(dim, 0.);
+    for (const auto& link_name : task_->GetCollisionLinkNames()) {
+      for (auto i = 0; i < obstacle_statesX.size(); ++i) {
+        const auto& obstacle_i = obstacle_statesX[i];
+        arguments_.insert_or_assign(fobstacle_prop_name("radius_obst_", i),
+                                    FAB_OBSTACLE_SIZE_SCALE * obstacle_i.size_[0]);
+
+        // [obst_pos]
+        memcpy(obst_pos.data(), obstacle_i.pos_.data(), dim * sizeof(double));
+        arguments_.insert_or_assign(fobstacle_prop_name("x_obst_", i), obst_pos);
+
+        if (!fixed_obstacles) {
+          // [obst_vel]
+          memcpy(obst_vel.data(), obstacle_i.vel_.data(), dim * sizeof(double));
+          arguments_.insert_or_assign(fobstacle_prop_name("xdot_obst_", i), obst_vel);
+
+          // [obst_acc]
+          memcpy(obst_acc.data(), obstacle_i.acc_.data(), dim * sizeof(double));
+          arguments_.insert_or_assign(fobstacle_prop_name("xddot_obst_", i), obst_acc);
+        }
+
+        // LINK OBSTACLE LEAF
         const auto link_name_leaf_str = link_name + "_leaf";
-        arguments_["x_obst_" + i_str] = obstacles[i]->position();
-        arguments_["radius_obst_" + i_str] = obstacles[i]->size();
-        arguments_["exp_geo_obst_" + i_str + "_" + link_name_leaf_str] = params.at("exp_geo_obst_leaf");
-        arguments_["k_geo_obst_" + i_str + "_" + link_name_leaf_str] = params.at("k_geo_obst_leaf");
-        arguments_["exp_fin_obst_" + i_str + "_" + link_name_leaf_str] = params.at("exp_fin_obst_leaf");
-        arguments_["k_fin_obst_" + i_str + "_" + link_name_leaf_str] = params.at("k_fin_obst_leaf");
+        arguments_.insert_or_assign(fobstacle_prop_name("exp_geo_obst_", i) + "_" + link_name_leaf_str,
+                                    params.at("exp_geo_obst_leaf"));
+        arguments_.insert_or_assign(fobstacle_prop_name("k_geo_obst_", i) + "_" + link_name_leaf_str,
+                                    params.at("k_geo_obst_leaf"));
+        arguments_.insert_or_assign(fobstacle_prop_name("exp_fin_obst_", i) + "_" + link_name_leaf_str,
+                                    params.at("exp_fin_obst_leaf"));
+        arguments_.insert_or_assign(fobstacle_prop_name("k_fin_obst_", i) + "_" + link_name_leaf_str,
+                                    params.at("k_fin_obst_leaf"));
       }
     }
-    for (auto j = 0; j < planner_->robot()->dof(); ++j) {
+    for (auto j = 0; j < robot_->dof(); ++j) {
       const auto j_str = std::to_string(j);
       for (auto i = 0; i < 2; ++i) {
         const auto i_str = std::to_string(i);
@@ -222,9 +226,11 @@ public:
       }
     }
 
-    for (const auto& [link_name, links_pair] : planner_->task()->GetSelfCollisionLinkPairs()) {
+    for (const auto& [link_name_key, links_pair] : task_->GetSelfCollisionNamePairs()) {
       for (const auto& paired_link_name : links_pair) {
-        const auto affix = link_name + "_" + paired_link_name;
+        // NOTE: This concatenation order must match one defined in [FabPlanner::set_components()] as params
+        // to add_spherical_self_collision_geometry(), further at [FabSelfCollisionLeaf ctor]
+        const auto affix = paired_link_name + "_" + link_name_key;
         arguments_["exp_self_fin_self_collision_" + affix] = params.at("exp_fin_self_leaf");
         arguments_["exp_self_geo_self_collision_" + affix] = params.at("exp_geo_self_leaf");
         arguments_["k_self_fin_self_collision_" + affix] = params.at("k_fin_self_leaf");
@@ -289,20 +295,24 @@ protected:
   void run_trial(std::shared_ptr<optuna::Trial>& trial) {
     // ob = env.reset(pos=q0)
     // env, obstacles, goal = self.shuffle_env(env,shuffle =shuffle)
-    create_collision_metric(env_.obstacles());
+    if (false == task_->AreObstaclesFixed()) {
+      create_collision_metric();
+    }
     eval(sample_fabrics_params_uniform(trial));
   }
 
-  void create_collision_metric(const std::vector<FabGeometricPrimitivePtr>& obstacles) {
-    const CaSX q = CaSX::sym("q", planner_->robot()->dof());
+  void create_collision_metric() {
+    const CaSX q = CaSX::sym("q", robot_->dof());
     double distance_to_obstacles = 10000;
-    for (const auto& link_name : collision_link_names_) {
-      const CaSX fk = planner_->robot()->fk()->casadi(q, link_name, planner_->task()->GetBaseBodyName(),
-                                                      fab_math::CASX_TRANSF_IDENTITY, true /*position_only*/);
+    for (const auto& link_name : task_->GetCollisionLinkNames()) {
+      const CaSX fk = robot_->fk()->casadi(q, link_name, task_->GetBaseBodyName(),
+                                           fab_math::CASX_TRANSF_IDENTITY, true /*position_only*/);
 
-      for (const auto& obst : obstacles) {
+      for (const auto& obst : task_->GetObstacleStatesX()) {
+        std::vector obst_pos(3, 0.);
+        memcpy(obst_pos.data(), obst.pos_.data(), 3 * sizeof(double));
         distance_to_obstacles =
-            std::fmin(distance_to_obstacles, double(CaSX::norm_2(obst->position() - fk).scalar()));
+            std::fmin(distance_to_obstacles, double(CaSX::norm_2(obst_pos - fk).scalar()));
       }
     }
     collision_metric_ = CaFunction("collision_metric", {q}, {distance_to_obstacles});
@@ -322,39 +332,32 @@ protected:
   }
 
   double evaluate_distance_to_goal(const std::vector<double>& q) const {
-    const auto& sub_goal_0_cfg = planner_->task()->GetSubGoals()[0]->cfg_;
+    const auto& sub_goal_0_cfg = task_->GetSubGoals()[0]->cfg_;
     const auto& sub_goal_0_position = sub_goal_0_cfg.desired_position;
-    const CaSX fk = planner_->robot()->fk()->casadi(q, sub_goal_0_cfg.child_link_name,
-                                                    planner_->task()->GetBaseBodyName(),
-                                                    fab_math::CASX_TRANSF_IDENTITY, true /*position_only*/);
+    const CaSX fk = robot_->fk()->casadi(q, sub_goal_0_cfg.child_link_name, task_->GetBaseBodyName(),
+                                         fab_math::CASX_TRANSF_IDENTITY, true /*position_only*/);
     return double(CaSX::norm_2(CaSX(sub_goal_0_position) - fk).scalar()) / initial_distance_to_goal_0_;
   }
 
-  double evaluate_distance_to_closest_obstacle(const std::vector<FabGeometricPrimitivePtr>& obstacles,
-                                               const CaSX& q) const {
+  double evaluate_distance_to_closest_obstacle(const CaSX& q) const {
     return static_cast<double>(collision_metric_(q)[0]);
   }
 
   void eval(const FabParamWeightDict& params = get_manual_parameters()) {
-    const auto robot = planner_->robot();
-    const auto task = planner_->task();
-    const auto robot_dof = robot->dof();
+    const auto robot_dof = robot_->dof();
 
-    const auto obstacles = env_.obstacles();
-    initial_distance_to_obstacles_ =
-        evaluate_distance_to_closest_obstacle(obstacles, task->QueryJointPos(robot_dof));
-
-    std::vector<double> q0 = task->QueryJointPos(robot_dof);
+    std::vector<double> q0 = task_->QueryJointPos(robot_dof);
     auto q_old = q0;
-    std::vector<double> qdot = task->QueryJointVel(robot_dof);
+    std::vector<double> qdot = task_->QueryJointVel(robot_dof);
     FAB_PRINTDB("QPOS", q0);
     FAB_PRINTDB("QVEL", qdot);
 
 #if 1
     // Setup [arguments_]
     arguments_.clear();
+    set_goal_arguments();
     set_collision_arguments();
-    set_parameters(obstacles, params);
+    set_other_arguments(params);
 
     // [arguments_] -> [args]
     FabCasadiArgMap args = {{"q", q0}, {"qdot", qdot}};
@@ -368,7 +371,7 @@ protected:
     path_length_ += double(CaSX::norm_2(CaSX(q0) - CaSX(q_old)).scalar());
     q_old = q0;
     distances_to_goal_0_.push_back(evaluate_distance_to_goal(q0));
-    distances_to_closest_obstacle_.push_back(evaluate_distance_to_closest_obstacle(obstacles, q0));
+    distances_to_closest_obstacle_.push_back(evaluate_distance_to_closest_obstacle(q0));
   }
 
   FabParamWeightDict get_tune_result() const {
@@ -394,10 +397,15 @@ protected:
 
 protected:
   FabPlanner* planner_ = nullptr;
+  FabRobotPtr robot_ = nullptr;
+  mjpc::Task* task_ = nullptr;
+#if 0
+  // NOTE: Env info (obstacles, etc.) is fetched directly through [task_]
   FabEnvironment env_;
+#endif
   FabCasadiArgMap arguments_;
   double dt_ = 0.05;
-  static constexpr int TRIALS_NUM = 100;
+  static constexpr int TRIALS_NUM = 10;
   std::vector<optuna::TrialPtr> trials_ = std::vector<optuna::TrialPtr>(TRIALS_NUM, nullptr);
   int current_trial_idx_ = 0;
   bool last_trial_started_ = false;
@@ -407,8 +415,6 @@ protected:
   double initial_distance_to_obstacles_ = 0.0;
   std::vector<double> distances_to_goal_0_;
   std::vector<double> distances_to_closest_obstacle_;
-
-  std::vector<std::string> collision_link_names_;
   CaFunction collision_metric_;
 
   // Optuna

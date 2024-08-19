@@ -44,7 +44,6 @@ public:
     return (planner_ && planner_->tuning_on_) ? static_cast<int>(GetCollisionLinkNames().size()) : 0;
   }
   int GetPlaneConstraintsNum() const override { return 0; }
-
   int GetActionDim() const override { return 2; }
   std::vector<FabSubGoalPtr> GetSubGoals() const override {
     // Static subgoals with static [desired_position]
@@ -67,7 +66,6 @@ public:
   }
 
   bool IsGoalFixed() const override { return true; }
-  bool AreObstaclesFixed() const override { return true; }
   int GetDynamicObstaclesDim() const override { return 3; }
   std::vector<FabJointLimit> GetJointLimits() const override { return {}; }
 
