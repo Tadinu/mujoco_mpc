@@ -48,8 +48,7 @@ public:
                const int limit_index)
       : FabGenericGeometryLeaf(
             parent_vars,
-            (std::string("limit_joint_") + std::to_string(joint_index) + "_" + std::to_string(limit_index)) +
-                "_leaf",
+            ("limit_joint_" + std::to_string(joint_index) + "_" + std::to_string(limit_index)) + "_leaf",
             ((limit_index == 0)   ? (fab_core::get_casx(parent_vars->position_var(), joint_index) - limit)
              : (limit_index == 1) ? (limit - fab_core::get_casx(parent_vars->position_var(), joint_index))
                                   : CaSX())) {
@@ -72,16 +71,15 @@ public:
 
   FabSelfCollisionLeaf(FabVariablesPtr parent_vars, const CaSX& fk, const std::string& collision_link_1_name,
                        const std::string& collision_link_2_name)
-      : FabGenericGeometryLeaf(
-            parent_vars, std::string("self_collision_") + collision_link_1_name + "_" + collision_link_2_name,
-            fk) {
+      : FabGenericGeometryLeaf(parent_vars,
+                               "self_collision_" + collision_link_1_name + "_" + collision_link_2_name, fk) {
     set_forward_map(collision_link_1_name, collision_link_2_name);
   }
 
 private:
   void set_forward_map(const std::string& collision_link_1_name, const std::string& collision_link_2_name) {
-    const auto radius_body_1_name = std::string("radius_body_") + collision_link_1_name;
-    const auto radius_body_2_name = std::string("radius_body_") + collision_link_2_name;
+    const auto radius_body_1_name = "radius_body_" + collision_link_1_name;
+    const auto radius_body_2_name = "radius_body_" + collision_link_2_name;
     const CaSX radius_body_1_var = get_parent_var_param(radius_body_1_name, 1);
     const CaSX radius_body_2_var = get_parent_var_param(radius_body_2_name, 1);
     parent_vars_->add_parameters(
@@ -110,14 +108,14 @@ public:
 
 private:
   void set_forward_map(const std::string& obstacle_name, const std::string& collision_link_name) {
-    const auto radius_obstacle_name = std::string("radius_") + obstacle_name;
+    const auto radius_obstacle_name = "radius_" + obstacle_name;
     const CaSX radius_obstacle_var = get_parent_var_param(radius_obstacle_name, 1);
 
-    const auto radius_body_name = std::string("radius_body_") + collision_link_name;
+    const auto radius_body_name = "radius_body_" + collision_link_name;
     const CaSX radius_body_var = get_parent_var_param(radius_body_name, 1);
 
     const auto obstacle_dim = forward_kinematics_.size().first;
-    const auto reference_name = std::string("x_") + obstacle_name;
+    const auto reference_name = "x_" + obstacle_name;
     const CaSX reference_var = get_parent_var_param(reference_name, obstacle_dim);
 
     geom_params_ = {{reference_name, reference_var},
@@ -157,8 +155,8 @@ public:
   FabESDFGeometryLeaf() = default;
 
   FabESDFGeometryLeaf(FabVariablesPtr parent_vars, std::string collision_link_name, const CaSX& collision_fk)
-      : FabGenericGeometryLeaf(std::move(parent_vars), std::string("esdf_leaf_") + collision_link_name,
-                               CaSX::sym(std::string("esdf_phi_") + collision_link_name, 1)),
+      : FabGenericGeometryLeaf(std::move(parent_vars), "esdf_leaf_" + collision_link_name,
+                               CaSX::sym("esdf_phi_" + collision_link_name, 1)),
         collision_link_name_(std::move(collision_link_name)),
         collision_fk_(collision_fk) {
     set_forward_map();
@@ -168,15 +166,15 @@ private:
   void set_forward_map() {
     const CaSX q = parent_vars_->position_var();
     const CaSX J_collision_link = CaSX::jacobian(collision_fk_, q);
-    const CaSX J_esdf = CaSX::sym(std::string("esdf_J_") + collision_link_name_, 3).T();
+    const CaSX J_esdf = CaSX::sym("esdf_J_" + collision_link_name_, 3).T();
 
     CaSX J = CaSX::mtimes(J_esdf, J_collision_link);
-    CaSX Jdot_esdf = CaSX::sym(std::string("esdf_Jdot_") + collision_link_name_, q.size().first).T();
-    const auto radius_body_name = std::string("radius_body_") + collision_link_name_;
+    CaSX Jdot_esdf = CaSX::sym("esdf_Jdot_" + collision_link_name_, q.size().first).T();
+    const auto radius_body_name = "radius_body_" + collision_link_name_;
     const CaSXDict explicit_jacobians = {
-        {std::string("esdf_phi_") + collision_link_name_, forward_kinematics_},
-        {std::string("esdf_J_") + collision_link_name_, J_esdf},
-        {std::string("esdf_Jdot_") + collision_link_name_, Jdot_esdf}};
+        {"esdf_phi_" + collision_link_name_, forward_kinematics_},
+        {"esdf_J_" + collision_link_name_, J_esdf},
+        {"esdf_Jdot_" + collision_link_name_, Jdot_esdf}};
     parent_vars_->add_parameters(explicit_jacobians);
 
     const CaSX radius_body_var = get_parent_var_param(radius_body_name, 1);
@@ -210,7 +208,7 @@ public:
 private:
   void set_forward_map() {
     const CaSX q = parent_vars_->position_var();
-    const auto radius_body_name = std::string("radius_body_") + collision_link_name_;
+    const auto radius_body_name = "radius_body_" + collision_link_name_;
     const CaSX radius_body_var = get_parent_var_param(radius_body_name, 1);
     const CaSX constraint_var = get_parent_var_param(constraint_name_, 4);
 
@@ -240,13 +238,13 @@ public:
 
 private:
   void set_forward_map() {
-    auto capsule_radius_name = std::string("radius_") + capsule_name_;
+    auto capsule_radius_name = "radius_" + capsule_name_;
     const CaSX capsule_radius_var = get_parent_var_param(capsule_radius_name, 1);
 
-    auto sphere_radius_name = std::string("radius_") + sphere_name_;
+    auto sphere_radius_name = "radius_" + sphere_name_;
     const CaSX sphere_radius_var = get_parent_var_param(sphere_radius_name, 1);
 
-    auto sphere_center_name = std::string("x_") + sphere_name_;
+    auto sphere_center_name = "x_" + sphere_name_;
     const auto obstacle_dim = capsule_centers_[0].size().first;
     const CaSX sphere_center_var = get_parent_var_param(sphere_center_name, obstacle_dim);
 
@@ -281,14 +279,14 @@ public:
 
 private:
   void set_forward_map() {
-    auto capsule_radius_name = std::string("radius_") + capsule_name_;
+    auto capsule_radius_name = "radius_" + capsule_name_;
     const CaSX capsule_radius_var = get_parent_var_param(capsule_radius_name, 1);
 
     const auto cuboid_dim = capsule_centers_[0].size().first;
-    auto cuboid_size_name = std::string("size_") + cuboid_name_;
+    auto cuboid_size_name = "size_" + cuboid_name_;
     const CaSX cuboid_size_var = get_parent_var_param(cuboid_size_name, cuboid_dim);
 
-    auto cuboid_center_name = std::string("x_") + cuboid_name_;
+    auto cuboid_center_name = "x_" + cuboid_name_;
     const CaSX cuboid_center_var = get_parent_var_param(cuboid_center_name, cuboid_dim);
 
     parent_vars_->add_parameters({
@@ -323,14 +321,14 @@ public:
 
 private:
   void set_forward_map(const std::string& obstacle_name, const std::string& collision_link_name) {
-    const auto radius_body_name = std::string("radius_body_") + collision_link_name;
+    const auto radius_body_name = "radius_body_" + collision_link_name;
     const CaSX radius_body_var = get_parent_var_param(radius_body_name, 1);
 
     // const auto obstacle_dim = forward_kinematics_.size().first;
-    const auto cuboid_size_name = std::string("size_") + obstacle_name;
+    const auto cuboid_size_name = "size_" + obstacle_name;
     const CaSX cuboid_size_var = get_parent_var_param(cuboid_size_name, 3);
 
-    const auto cuboid_center_name = std::string("x_") + obstacle_name;
+    const auto cuboid_center_name = "x_" + obstacle_name;
     const CaSX cuboid_center_var = get_parent_var_param(cuboid_center_name, 3);
 
     parent_vars_->add_parameters({{radius_body_name, radius_body_var},
