@@ -291,9 +291,15 @@ void Agent::PlanIteration(ThreadPool* pool) {
     // rollout threads
     residual_fn_ = task->Residual();
 
-    // planner tuning active
-    planner.tuning_active_ = tune_enabled;
-    if (plan_enabled) {
+    // Tuning on/off -> switch between symbolic & scalar fabrics config, need to re-init task fabrics
+    const bool tuning_switched = (planner.tuning_on_ != tune_enabled);
+    planner.tuning_on_ = tune_enabled;
+    if (tuning_switched) {
+      planner.InitTaskFabrics();
+    }
+
+    // Plan or Tune
+    if (plan_enabled || tune_enabled) {
       // planner policy
       planner.OptimizePolicy(steps_, *pool);
 

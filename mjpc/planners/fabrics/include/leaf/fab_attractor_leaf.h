@@ -27,21 +27,20 @@ public:
     set_forward_map(attractor_name);
   }
 
-  void set_potential(const std::function<CaSX(const CaSX& x, const double weight)>& potential,
-                     const double weight) override {
-    // new_parameters, potential = parse_symbolic_input(potential_expression, x, xdot, name = self._leaf_name)
-    // parent_vars_->add_parameters(new_parameters);
-    const CaSX psi = weight_var_ * potential(x_, weight);
+  void set_potential(const FabConfigFunc& potential) override {
+    const auto [x_potential, var_names] = potential(x_, xdot_, leaf_name_);
+    parent_vars_->add_parameters(fab_core::parse_symbolic_casx(x_potential, var_names));
+    const CaSX psi = weight_var_ * x_potential;
     CaSX h_psi = CaSX::gradient(psi, x_);
     geom_ = std::make_shared<FabGeometry>(FabGeometryArgs{{"h", std::move(h_psi)}, {"var", leaf_vars_}});
   }
 
-  void set_metric(const std::function<CaSX(const CaSX& x)>& metric) override {
+  void set_metric(const FabConfigFunc& metric) override {
     const auto x = leaf_vars_->position_var();
     const auto xdot = leaf_vars_->velocity_var();
-    // new_parameters, attractor_metric = parse_symbolic_input(attractor_metric_expression, x, xdot,
-    // name=self._leaf_name) self._parent_variables.add_parameters(new_parameters)
-    const auto lagrangian_psi = CaSX::dot(xdot, CaSX::mtimes(metric(x), xdot));
+    const auto [attractor_metric, var_names] = metric(x, xdot, leaf_name_);
+    parent_vars_->add_parameters(fab_core::parse_symbolic_casx(attractor_metric, var_names));
+    const auto lagrangian_psi = CaSX::dot(xdot, CaSX::mtimes(attractor_metric, xdot));
     lag_ = std::make_shared<FabLagrangian>(lagrangian_psi, FabLagrangianArgs{{"var", leaf_vars_}});
   }
 

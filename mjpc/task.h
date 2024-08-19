@@ -136,7 +136,7 @@ public:
   virtual std::string GetBaseBodyName() const { return {}; }
   virtual std::vector<std::string> GetEndtipNames() const { return {}; }
   virtual std::vector<std::string> GetCollisionLinkNames() const { return {}; }
-  virtual std::map<std::string, std::string> GetSelfCollisionLinkPairs() const { return {}; }
+  virtual FabSelfCollisionNamePairs GetSelfCollisionNamePairs() const { return {}; }
   virtual FabLinkCollisionProps GetCollisionLinkProps() const { return {}; }
   virtual std::vector<FabJointLimit> GetJointLimits() const { return {}; }
   virtual std::vector<FabSubGoalPtr> GetSubGoals() const { return {}; }
@@ -249,7 +249,8 @@ public:
   virtual bool QueryGoalReached() { return false; }
 
   // - Obstacles
-  virtual bool AreObstaclesFixed() const { return true; }
+  virtual bool AreObstaclesFixed() const { return (GetDynamicObstaclesNum() == 0); }
+  int GetObstaclesDim() const { return AreObstaclesFixed() ? 3 : GetDynamicObstaclesNum(); }
   virtual int GetDynamicObstaclesDim() const { return 3; }
   virtual void QueryObstacleStatesX() {}
 

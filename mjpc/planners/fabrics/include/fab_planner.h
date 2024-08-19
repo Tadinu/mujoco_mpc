@@ -41,15 +41,15 @@ public:
   ~FabPlanner() override;
 
   FabVariablesPtr vars() const { return vars_; }
-  FabPlannerConfig config() const { return config_; }
+  FabPlannerConfigPtr config() const { return config_; }
   FabRobotPtr robot() const { return robot_; }
   mjpc::Task* task() const { return task_; }
 
   void init_robot(int dof, std::string urdf_path, std::string base_link_name,
-                  std::vector<std::string> endtip_names) {
+                  std::vector<std::string> endtip_names, FabPlannerConfigPtr config) {
     // NOTE: Always need to reset robot afresh regardless to renew its vars
     robot_ = std::make_shared<FabRobot>(dof, std::move(urdf_path), std::move(base_link_name),
-                                        std::move(endtip_names));
+                                        std::move(endtip_names), std::move(config));
     vars_ = robot_->vars();
     geometry_ = robot_->weighted_geometry();
     forced_geometry_ = nullptr;
@@ -176,17 +176,13 @@ public:
     const auto& dm_psi = forced_forward_map_;
     assert(execution_lagrangian_);
     const auto& ex_lag = execution_lagrangian_;
-    const auto a_ex = CaSX::sym("a_ex_damper");
-    const auto a_le = CaSX::sym("a_le_damper");
-
-    damper_ = tuning_active_ ? FabDamper(x_psi, config_.damper_beta_sym(x_psi), a_ex, a_le,
-                                         config_.damper_eta_sym(), dm_psi, ex_lag->l())
-                             : FabDamper(x_psi, config_.damper_beta(x_psi, a_ex, a_le), a_ex, a_le,
-                                         config_.damper_eta(CaSX::vertcat(CaSX::symvar(ex_lag->l()))), dm_psi,
-                                         ex_lag->l());
+    damper_ = FabDamper(x_psi, config_->damper_beta(x_psi, {}, "damper"),
+                        config_->damper_eta({}, CaSX::vertcat(CaSX::symvar(ex_lag->l())), "damper"), dm_psi,
+                        ex_lag->l());
+    vars_->add_parameters(damper_.symbolic_parameters());
   }
 
-  CaSX get_forward_kinematics(const std::string& link_name, bool position_only = true) {
+  CaSX get_forward_kinematics(const std::string& link_name, bool position_only = true) const {
     const auto fk = robot_->fk();
     assert(fk);
     return fk ? fk->casadi(vars_->position_var(), link_name, {}, fab_math::CASX_TRANSF_IDENTITY,
@@ -206,8 +202,8 @@ public:
     auto capsule_sphere_leaf =
         FabCapsuleSphereLeaf(vars_, capsule_name, obstacle_name, fab_core::get_casx2(tf_center_0, {0, 3}, 3),
                              fab_core::get_casx2(tf_center_1, {0, 3}, 3));
-    capsule_sphere_leaf.set_geometry(config_.collision_geometry);
-    capsule_sphere_leaf.set_finsler_structure(config_.collision_finsler);
+    capsule_sphere_leaf.set_geometry(config_->collision_geometry);
+    capsule_sphere_leaf.set_finsler_structure(config_->collision_finsler);
     add_leaf(&capsule_sphere_leaf);
   }
 
@@ -223,8 +219,8 @@ public:
     auto capsule_cuboid_leaf =
         FabCapsuleCuboidLeaf(vars_, capsule_name, obstacle_name, fab_core::get_casx2(tf_center_0, {0, 3}, 3),
                              fab_core::get_casx2(tf_center_1, {0, 3}, 3));
-    capsule_cuboid_leaf.set_geometry(config_.collision_geometry);
-    capsule_cuboid_leaf.set_finsler_structure(config_.collision_finsler);
+    capsule_cuboid_leaf.set_geometry(config_->collision_geometry);
+    capsule_cuboid_leaf.set_finsler_structure(config_->collision_finsler);
     add_leaf(&capsule_cuboid_leaf);
   }
 
@@ -234,8 +230,8 @@ public:
   void add_spherical_obstacle_geometry(const std::string& obstacle_name,
                                        const std::string& collision_link_name, const CaSX& fk) {
     auto spherical_obstacle_leaf = FabObstacleLeaf(vars_, fk, obstacle_name, collision_link_name);
-    spherical_obstacle_leaf.set_geometry(config_.collision_geometry);
-    spherical_obstacle_leaf.set_finsler_structure(config_.collision_finsler);
+    spherical_obstacle_leaf.set_geometry(config_->collision_geometry);
+    spherical_obstacle_leaf.set_finsler_structure(config_->collision_finsler);
     add_leaf(&spherical_obstacle_leaf);
   }
 
@@ -247,32 +243,32 @@ public:
     auto dyn_spherical_obstacle_leaf = FabDynamicObstacleLeaf(
         vars_, fab_core::get_casx(fk, std::array<casadi_int, 2>{0, casadi_int(dynamic_obstacle_dimension)}),
         obstacle_name, collision_link_name, reference_params);
-    dyn_spherical_obstacle_leaf.set_geometry(config_.collision_geometry);
-    dyn_spherical_obstacle_leaf.set_finsler_structure(config_.collision_finsler);
+    dyn_spherical_obstacle_leaf.set_geometry(config_->collision_geometry);
+    dyn_spherical_obstacle_leaf.set_finsler_structure(config_->collision_finsler);
     add_leaf(&dyn_spherical_obstacle_leaf);
   }
 
   void add_plane_constraint(std::string constraint_name, std::string collision_link_name, const CaSX& fk) {
     auto plane_constraint =
         FabPlaneConstraintGeometryLeaf(vars_, std::move(constraint_name), std::move(collision_link_name), fk);
-    plane_constraint.set_geometry(config_.geometry_plane_constraint);
-    plane_constraint.set_finsler_structure(config_.finsler_plane_constraint);
+    plane_constraint.set_geometry(config_->geometry_plane_constraint);
+    plane_constraint.set_finsler_structure(config_->finsler_plane_constraint);
     add_leaf(&plane_constraint);
   }
 
   void add_cuboid_obstacle_geometry(const std::string& obstacle_name, const std::string& collision_link_name,
                                     const CaSX& fk) {
     auto cuboid_obstacle_leaf = FabSphereCuboidLeaf(vars_, fk, obstacle_name, collision_link_name);
-    cuboid_obstacle_leaf.set_geometry(config_.collision_geometry);
-    cuboid_obstacle_leaf.set_finsler_structure(config_.collision_finsler);
+    cuboid_obstacle_leaf.set_geometry(config_->collision_geometry);
+    cuboid_obstacle_leaf.set_finsler_structure(config_->collision_finsler);
     add_leaf(&cuboid_obstacle_leaf);
   }
 
   void add_esdf_geometry(std::string collision_link_name) {
     const CaSX fk = get_forward_kinematics(collision_link_name);
     auto geometry = FabESDFGeometryLeaf(vars_, std::move(collision_link_name), fk);
-    geometry.set_geometry(config_.collision_geometry);
-    geometry.set_finsler_structure(config_.collision_finsler);
+    geometry.set_geometry(config_->collision_geometry);
+    geometry.set_finsler_structure(config_->collision_finsler);
     add_leaf(&geometry);
   }
 
@@ -284,20 +280,20 @@ public:
     if (fab_core::is_casx_sparse(fk)) {
       FAB_PRINT("Expression [" + fk.get_str() + "] for links " + collision_link_1_name + "and " +
                 collision_link_2_name + " is sparse and so skipped");
-      auto geometry = FabSelfCollisionLeaf(vars_, fk, collision_link_1_name, collision_link_2_name);
-      geometry.set_geometry(config_.self_collision_geometry);
-      geometry.set_finsler_structure(config_.self_collision_finsler);
-      add_leaf(&geometry);
     }
+    auto geometry = FabSelfCollisionLeaf(vars_, fk, collision_link_1_name, collision_link_2_name);
+    geometry.set_geometry(config_->self_collision_geometry);
+    geometry.set_finsler_structure(config_->self_collision_finsler);
+    add_leaf(&geometry);
   }
 
   void add_limit_geometry(const int joint_index, const FabJointLimit& limits) {
     auto lower_limit_geometry = FabLimitLeaf(vars_, joint_index, limits[0], 0);
-    lower_limit_geometry.set_geometry(config_.limit_geometry);
-    lower_limit_geometry.set_finsler_structure(config_.limit_finsler);
+    lower_limit_geometry.set_geometry(config_->limit_geometry);
+    lower_limit_geometry.set_finsler_structure(config_->limit_finsler);
     auto upper_limit_geometry = FabLimitLeaf(vars_, joint_index, limits[1], 1);
-    upper_limit_geometry.set_geometry(config_.limit_geometry);
-    upper_limit_geometry.set_finsler_structure(config_.limit_finsler);
+    upper_limit_geometry.set_geometry(config_->limit_geometry);
+    upper_limit_geometry.set_finsler_structure(config_->limit_finsler);
     add_leaf(&lower_limit_geometry);
     add_leaf(&upper_limit_geometry);
   }
@@ -316,7 +312,7 @@ public:
     if (fab_core::has_collection_element(
             std::array<FORCING_TYPE, 3>{FORCING_TYPE::SPEED_CONTROLLED, FORCING_TYPE::FORCED,
                                         FORCING_TYPE::FORCED_ENERGIZED},
-            config_.forcing_type)) {
+            config_->forcing_type)) {
       set_goal_component(problem_config_.goal_composition());
     }
 
@@ -324,12 +320,12 @@ public:
     if (fab_core::has_collection_element(
             std::array<FORCING_TYPE, 3>{FORCING_TYPE::SPEED_CONTROLLED, FORCING_TYPE::EXECUTION_ENERGY,
                                         FORCING_TYPE::FORCED_ENERGIZED},
-            config_.forcing_type)) {
+            config_->forcing_type)) {
       set_execution_energy(std::make_shared<FabExecutionLagrangian>(vars_));
     }
 
     // [SPEED CONTROL]
-    if (config_.forcing_type == FORCING_TYPE::SPEED_CONTROLLED) {
+    if (config_->forcing_type == FORCING_TYPE::SPEED_CONTROLLED) {
       set_speed_control();
     }
   }
@@ -390,8 +386,8 @@ public:
         const CaSX distance = collision_link->distance(obstacle.get());
         const auto leaf_name = link_name + "_" + obstacle->name() + "_leaf";
         auto leaf = FabAvoidanceLeaf(vars_, leaf_name, distance);
-        leaf.set_geometry(config_.collision_geometry);
-        leaf.set_finsler_structure(config_.collision_finsler);
+        leaf.set_geometry(config_->collision_geometry);
+        leaf.set_finsler_structure(config_->collision_finsler);
         add_leaf(&leaf);
       }
 #if 0
@@ -420,12 +416,12 @@ public:
   }
 
   void set_components(const std::vector<std::string>& collision_link_names,
-                      const FabSelfCollisionPairs& self_collision_pairs,
+                      const FabSelfCollisionNamePairs& self_collision_pairs,
                       const std::vector<std::string>& collision_links_esdf, const FabGoalComposition& goal,
                       const std::vector<FabJointLimit>& limits, int static_obstacles_num = 1,
                       int dynamic_obstacles_num = 0, int cuboid_obstacles_num = 0,
                       int plane_constraints_num = 1, int dynamic_obstacle_dimension = 3) {
-    // Obstacles
+    // Dynamic Obstacles
     std::vector<CaSXDict> reference_param_list;
     for (auto i = 0; i < dynamic_obstacles_num; ++i) {
       CaSXDict reference_params = {
@@ -446,10 +442,13 @@ public:
         continue;
       }
 
+      // Static sphere obstacles
       for (auto i = 0; i < static_obstacles_num; ++i) {
         const auto obstacle_name = "obst_" + std::to_string(i);
         add_spherical_obstacle_geometry(obstacle_name, link_name, fk);
       }
+
+      // Dynamic sphere obstacles
       for (auto i = 0; i < dynamic_obstacles_num; ++i) {
         const auto obstacle_name = "obst_dynamic_" + std::to_string(i);
         add_dynamic_spherical_obstacle_geometry(obstacle_name, link_name, fk, reference_param_list[i],
@@ -460,6 +459,7 @@ public:
         add_plane_constraint(constraint_name, link_name, fk);
       }
 
+      // Cuboid obstacles
       for (auto i = 0; i < cuboid_obstacles_num; ++i) {
         const auto obstacle_name = "obst_cuboid_" + std::to_string(i);
         add_cuboid_obstacle_geometry(obstacle_name, link_name, fk);
@@ -472,9 +472,9 @@ public:
     }
 
     // Self-collision link-pairs
-    for (const auto& [link_name_1, link_pair] : self_collision_pairs) {
-      for (const auto& link_name_2 : link_pair) {
-        add_spherical_self_collision_geometry(link_name_2, link_name_1);
+    for (const auto& [link_name_key, link_pair] : self_collision_pairs) {
+      for (const auto& link_name : link_pair) {
+        add_spherical_self_collision_geometry(link_name, link_name_key);
       }
     }
 
@@ -531,10 +531,16 @@ public:
       if (FabSubGoalType::DYNAMIC == sub_goal->type()) {
         attractor = std::make_unique<FabGenericDynamicAttractorLeaf>(vars_, fk_sub_goal, goal_name);
       } else {
+#if 1
+        // TODO: This seems to be redundant since the param will be overwritten any way in
+        // FabGenericAttractorLeaf::set_forward_map()
+        const auto x_goal_name = "x_" + goal_name;
+        vars_->add_parameter(x_goal_name, CaSX::sym(x_goal_name, sub_goal->dimension()));
+#endif
         attractor = std::make_unique<FabGenericAttractorLeaf>(vars_, fk_sub_goal, goal_name);
       }
-      attractor->set_potential(config_.attractor_potential, sub_goal->weight());
-      attractor->set_metric(config_.attractor_metric);
+      attractor->set_potential(config_->attractor_potential);
+      attractor->set_metric(config_->attractor_metric);
       add_leaf(attractor.get(), sub_goal->is_primary_goal());
     }
   }
@@ -548,7 +554,7 @@ public:
 
     // xddot
     CaSX xddot;
-    switch (config_.forcing_type) {
+    switch (config_->forcing_type) {
       case FORCING_TYPE::SPEED_CONTROLLED: {
         const CaSX eta = damper_.substitute_eta();
         const CaSX a_ex =
@@ -589,8 +595,8 @@ public:
       } break;
 
       default:
-        throw FabError(std::to_string(int(config_.forcing_type)) + " :Unknown forcing type");
-    }  // end switch(config_.forcing_type)
+        throw FabError(std::to_string(int(config_->forcing_type)) + " :Unknown forcing type");
+    }  // end switch(config_->forcing_type)
 
     // CasadiFunction
     switch (control_mode) {
@@ -629,10 +635,10 @@ public:
       const double action_magnitude = double(CaSX::norm_2(action).scalar());
       if (action_magnitude < casadi::eps) {
         FAB_PRINT("Fabrics: Avoiding SMALL action with magnitude", action_magnitude);
-        action = 0.0;
+        action = CaSX::zeros(robot_->dof());
       } else if (action_magnitude > (1 / casadi::eps)) {
         FAB_PRINT("Fabrics: Avoiding LARGE action with magnitude", action_magnitude);
-        action = 0.0;
+        action = CaSX::zeros(robot_->dof());
       }
     }
     return action;
@@ -653,6 +659,7 @@ public:
 
   // initialize data and settings
   void Initialize(mjModel* model, const mjpc::Task& task) override;
+  void InitTaskFabrics() override;
 
   void Allocate() override {
     trajectory_->Initialize(dim_state_, dim_action_, task_->num_residual, task_->num_trace, 1);
@@ -743,15 +750,20 @@ public:
       const auto& obstacle_i = obstacle_statesX[i];
       args.insert_or_assign(fobstacle_prop_name("radius_obst_", i),
                             FAB_OBSTACLE_SIZE_SCALE * obstacle_i.size_[0]);
-      args.insert_or_assign(fobstacle_prop_name("x_obst_", i),
-                            fixed_obstacles
-                                ? std::vector{obstacle_i.pos_[0], obstacle_i.pos_[1], obstacle_i.pos_[2]}
-                                : std::vector{obstacle_i.pos_[0], obstacle_i.pos_[1]});
+
+      const int dim = fixed_obstacles ? 3 : task_->GetDynamicObstaclesDim();
+      std::vector obst_pos(dim, 0.);
+      memcpy(obst_pos.data(), obstacle_i.pos_.data(), dim * sizeof(double));
+      args.insert_or_assign(fobstacle_prop_name("x_obst_", i), obst_pos);
+
       if (!fixed_obstacles) {
-        args.insert_or_assign(fobstacle_prop_name("xdot_obst_", i),
-                              std::vector{obstacle_i.vel_[0], obstacle_i.vel_[1]});
-        args.insert_or_assign(fobstacle_prop_name("xddot_obst_", i),
-                              std::vector{obstacle_i.acc_[0], obstacle_i.acc_[1]});
+        std::vector obst_vel(dim, 0.);
+        memcpy(obst_vel.data(), obstacle_i.vel_.data(), dim * sizeof(double));
+        args.insert_or_assign(fobstacle_prop_name("xdot_obst_", i), obst_vel);
+
+        std::vector obst_acc(dim, 0.);
+        memcpy(obst_acc.data(), obstacle_i.acc_.data(), dim * sizeof(double));
+        args.insert_or_assign(fobstacle_prop_name("xddot_obst_", i), obst_acc);
       }
     }
 
@@ -761,6 +773,7 @@ public:
 
   void set_action(const CaSX& action) {
     const FabSharedMutexLock lock(policy_mutex_);
+    assert(action.size1() >= robot_->dof());
     if (action.is_regular() && !action.is_empty()) {
       action_.resize(robot_->dof(), 0.);
       for (auto i = 0; i < action_.size(); ++i) {
@@ -790,7 +803,7 @@ public:
       trajectory_->trace.push_back(cur_pos[1]);
       trajectory_->trace.push_back(cur_pos[2]);
     }
-    FAB_PRINTDB(action_);
+    FAB_PRINT("ACTION", action_);
     mju_copy(action, action_.data(), int(action_.size()));
 #if FAB_USE_ACTUATOR_VELOCITY
     mju_scl(action, action, task_->actuator_kv, int(action_.size()));
@@ -813,7 +826,7 @@ protected:
   FabRobotPtr robot_ = nullptr;
   FabControlMode control_mode_ = FabControlMode::VEL;
   CaSX target_velocity_;
-  FabPlannerConfig config_;
+  FabPlannerConfigPtr config_ = nullptr;
   FabPlannerProblemConfig problem_config_;
   FabVariablesPtr vars_ = nullptr;
   FabWeightedSpecPtr geometry_ = nullptr;
