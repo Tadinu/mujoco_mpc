@@ -3,28 +3,24 @@
 #include "mjpc/planners/fabrics/include/fab_common.h"
 #include "mjpc/planners/fabrics/include/fab_geometry_primitives.h"
 
-using FabSelfCollisionPairs = std::map<std::string/*link_name*/,
-                                       std::array<std::string, 2>/*paired_links_names*/>;
+using FabSelfCollisionPairs =
+    std::map<std::string /*link_name*/, std::array<std::string, 2> /*paired_links_names*/>;
 using FabCollisionLinks = std::map<std::string /*link_name*/, FabGeometricPrimitivePtr /*link_geom*/>;
 
 struct FabCollisionLinkNotExistError : public std::runtime_error {
   explicit FabCollisionLinkNotExistError(const std::string& link_name)
-    : std::runtime_error(std::string("Collision link not existing: ") + link_name) {
-  }
+      : std::runtime_error("Collision link not existing: " + link_name) {}
 
   explicit FabCollisionLinkNotExistError(const char* link_name)
-    : std::runtime_error(std::string("Collision link not existing: ") + link_name) {
-  }
+      : std::runtime_error("Collision link not existing: " + std::string(link_name)) {}
 };
 
 struct FabCollisionLinkUndefinedError : public std::runtime_error {
   explicit FabCollisionLinkUndefinedError(const std::string& link_name)
-    : std::runtime_error(std::string("Collision link undefined: ") + link_name) {
-  }
+      : std::runtime_error("Collision link undefined: " + link_name) {}
 
   explicit FabCollisionLinkUndefinedError(const char* link_name)
-    : std::runtime_error(std::string("Collision link undefined: ") + link_name) {
-  }
+      : std::runtime_error("Collision link undefined: " + std::string(link_name)) {}
 };
 
 class FabRobotRepresentation {
@@ -32,7 +28,7 @@ public:
   FabRobotRepresentation() = default;
 
   FabRobotRepresentation(FabCollisionLinks collision_links, FabSelfCollisionPairs self_collision_pairs)
-    : collision_links_(std::move(collision_links)), self_collision_pairs_(std::move(self_collision_pairs)) {
+      : collision_links_(std::move(collision_links)), self_collision_pairs_(std::move(self_collision_pairs)) {
     check_self_collision_pairs();
   }
 
