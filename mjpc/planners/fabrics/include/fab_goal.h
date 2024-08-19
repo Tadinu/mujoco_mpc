@@ -64,15 +64,15 @@ struct FabSubGoal {
     const auto vel_size = cfg_.desired_vel.size();
     const auto acc_size = cfg_.desired_acc.size();
     if (pos_size != dimension()) {
-      throw FabError(std::string("Desired position size: ") + std::to_string(pos_size) +
+      throw FabError("Desired position size: " + std::to_string(pos_size) +
                      " does not match dimension one: " + std::to_string(dimension()));
     }
     if (vel_size != pos_size) {
-      throw FabError(std::string("Desired velocity size: ") + std::to_string(pos_size) +
+      throw FabError("Desired velocity size: " + std::to_string(pos_size) +
                      " does not match position: " + std::to_string(vel_size));
     }
     if (acc_size != pos_size) {
-      throw FabError(std::string("Desired position size ") + std::to_string(pos_size) +
+      throw FabError("Desired position size " + std::to_string(pos_size) +
                      " does not match dimension: " + std::to_string(acc_size));
     }
   }
@@ -104,7 +104,7 @@ struct FabStaticSubGoal : public FabSubGoal {
     const auto lower_pos_size = limit_low_pos().size();
     const auto upper_pos_size = limit_high_pos().size();
     if (lower_pos_size != upper_pos_size) {
-      throw FabError(std::string("Lower position limits' size: ") + std::to_string(lower_pos_size) +
+      throw FabError("Lower position limits' size: " + std::to_string(lower_pos_size) +
                      "does not match upper one: " + std::to_string(lower_pos_size));
     }
   }

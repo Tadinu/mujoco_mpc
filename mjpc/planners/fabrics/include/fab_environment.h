@@ -15,22 +15,20 @@ public:
   void generate_obstacles() {
     size_t count = obstacles_.size();
     for (auto i = 0; i < spheres_num_; ++i) {
-      auto obst_sphere =
-          std::make_shared<FabSphere>(std::string("obst_sphere_") + std::to_string(count++), 1.0);
-      obst_sphere->set_position(CaSX::sym(std::string("x_") + obst_sphere->name(), 3), true);
+      auto obst_sphere = std::make_shared<FabSphere>("obst_sphere_" + std::to_string(count++), 1.0);
+      obst_sphere->set_position(CaSX::sym("x_" + obst_sphere->name(), 3), true);
       obstacles_.push_back(std::move(obst_sphere));
     }
 
     for (auto i = 0; i < cuboids_num_; ++i) {
-      auto obst_cuboid = std::make_shared<FabCuboid>(std::string("obst_cuboid_") + std::to_string(count++),
-                                                     std::vector<double>{1.0, 1.0, 1.0});
-      obst_cuboid->set_position(CaSX::sym(std::string("x_") + obst_cuboid->name(), 3), true);
+      auto obst_cuboid =
+          std::make_shared<FabCuboid>("obst_cuboid_" + std::to_string(count++), std::vector(3, 1.0) /*size*/);
+      obst_cuboid->set_position(CaSX::sym("x_" + obst_cuboid->name(), 3), true);
       obstacles_.push_back(std::move(obst_cuboid));
     }
 
     for (auto i = 0; i < planes_num_; ++i) {
-      auto constraint_plane =
-          std::make_shared<FabPlane>(std::string("constraint_plane_") + std::to_string(i));
+      auto constraint_plane = std::make_shared<FabPlane>("constraint_plane_" + std::to_string(i));
       constraint_plane->set_position(CaSX::sym(constraint_plane->name(), 3), true);
       obstacles_.push_back(std::move(constraint_plane));
     }
