@@ -94,7 +94,6 @@ public:
   }
 
   bool IsGoalFixed() const override { return !FAB_DYNAMIC_GOAL_SUPPORTED; }
-  bool AreObstaclesFixed() const override { return false; }
   int GetDynamicObstaclesDim() const override { return AreObstaclesFixed() ? 3 : 2; }
   int GetPlaneConstraintsNum() const override { return 1; }
 
@@ -189,7 +188,7 @@ protected:
   BaseResidualFn* InternalResidual() override { return &residual_; }
 
   bool IsFabricsSupported() const override { return true; }
-  FabPlannerConfig GetFabricsConfig(bool is_static_env) const override;
+  FabPlannerConfigPtr GetFabricsConfig(bool is_static_env) const override;
 
 private:
   ResidualFn residual_;
@@ -206,7 +205,6 @@ public:
   std::string XmlPath() const override;
 
   bool IsGoalFixed() const override { return true; }
-  bool AreObstaclesFixed() const override { return true; }
 
   class FixedResidualFn : public mjpc::BaseResidualFn {
   public:

@@ -3,7 +3,7 @@
 #include "mjpc/planners/fabrics/include/fab_common.h"
 #include "mjpc/planners/fabrics/include/fab_geometry_primitives.h"
 
-using FabSelfCollisionPairs =
+using FabSelfCollisionNamePairs =
     std::map<std::string /*link_name*/, std::array<std::string, 2> /*paired_links_names*/>;
 using FabCollisionLinks = std::map<std::string /*link_name*/, FabGeometricPrimitivePtr /*link_geom*/>;
 
@@ -27,7 +27,7 @@ class FabRobotRepresentation {
 public:
   FabRobotRepresentation() = default;
 
-  FabRobotRepresentation(FabCollisionLinks collision_links, FabSelfCollisionPairs self_collision_pairs)
+  FabRobotRepresentation(FabCollisionLinks collision_links, FabSelfCollisionNamePairs self_collision_pairs)
       : collision_links_(std::move(collision_links)), self_collision_pairs_(std::move(self_collision_pairs)) {
     check_self_collision_pairs();
   }
@@ -54,7 +54,7 @@ public:
     throw FabCollisionLinkNotExistError(link_name);
   }
 
-  FabSelfCollisionPairs self_collision_pairs() const { return self_collision_pairs_; }
+  FabSelfCollisionNamePairs self_collision_pairs() const { return self_collision_pairs_; }
 
   std::array<std::string, 2> self_collision_pair(const std::string& link_name) {
     if (self_collision_pairs_.contains(link_name)) {
@@ -65,5 +65,5 @@ public:
 
 protected:
   FabCollisionLinks collision_links_;
-  FabSelfCollisionPairs self_collision_pairs_;
+  FabSelfCollisionNamePairs self_collision_pairs_;
 };

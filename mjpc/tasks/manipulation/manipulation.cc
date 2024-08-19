@@ -105,14 +105,16 @@ void manipulation::Bring::ResetLocked(const mjModel* model) {
   residual_.model_vals_ = ModelValues::FromModel(model);
 }
 
-FabPlannerConfig manipulation::Bring::GetFabricsConfig(bool is_static_env) const {
-  FabPlannerConfig config;
-  config.collision_geometry = [](const CaSX& x, const CaSX& xdot) {
-    return (-4.5 / x) * (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2);
-  };
-  config.geometry_plane_constraint = [](const CaSX& x, const CaSX& xdot) {
-    return (-10.0 / x) * (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2);
-  };
+FabPlannerConfigPtr manipulation::Bring::GetFabricsConfig(bool is_static_env) const {
+  static auto config = std::make_shared<FabPlannerConfig>(FabPlannerConfig{
+      .collision_geometry =
+          [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+            return FabConfigExprMeta{(-4.5 / x) * (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2)};
+          },
+      .geometry_plane_constraint =
+          [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+            return FabConfigExprMeta{(-10.0 / x) * (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2)};
+          }});
   return config;
 }
 }  // namespace mjpc
