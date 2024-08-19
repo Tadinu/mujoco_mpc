@@ -311,6 +311,7 @@ static std::vector<T> tokenize(const std::string& text, const std::string& delim
       }
     });
   }
+  return results;
 #endif
 }
 
@@ -320,6 +321,16 @@ static std::vector<T> tokenize(const std::string& text, const std::string& delim
 static bool is_casx_sparse(const CaSX& expr) { return CaSX::symvar(expr).empty(); }
 
 static CaSX casx_sym(const std::string& name, const casadi_int dim = 1) { return CaSX::sym(name, dim); }
+
+static CaSXDict parse_symbolic_casx(const CaSX& expr, const std::vector<std::string>& var_names) {
+  CaSXDict out_vars_dict;
+  for (const auto& var : CaSX::symvar(expr)) {
+    if (has_collection_element(var_names, var.name())) {
+      out_vars_dict.insert_or_assign(var.name(), var);
+    }
+  }
+  return out_vars_dict;
+}
 
 static bool is_equal_SXPair(const CaSXPair& left, const CaSXPair& right) {
   return (left.first == right.first) && CaSX::is_equal(left.second, right.second);

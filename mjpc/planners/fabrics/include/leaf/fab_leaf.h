@@ -68,9 +68,8 @@ public:
     FAB_PRINT("=============");
   }
 
-  virtual void set_potential(const std::function<CaSX(const CaSX& x, const double weight)>& potential,
-                             const double weight) {}
-  virtual void set_metric(const std::function<CaSX(const CaSX& x)>& metric) {}
+  virtual void set_potential(const FabConfigFunc& potential) {}
+  virtual void set_metric(const FabConfigFunc& metric) {}
 
   void concretize() const {
     diffmap_->concretize();

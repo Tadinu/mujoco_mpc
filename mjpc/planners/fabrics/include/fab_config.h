@@ -18,81 +18,172 @@ enum class FORCING_TYPE : uint8_t {
   FORCED_ENERGIZED
 };
 
+struct FabConfigExprMeta {
+  CaSX eval;  // Evaluated form, can be symbolic or scalar
+  std::vector<std::string> var_names;
+};
+
+using FabConfigFunc =
+    std::function<FabConfigExprMeta(const CaSX& x, const CaSX& xdot, const std::string& affix)>;
 struct FabPlannerConfig {
+  static CaSX sym_var(const std::string& var_name, const std::string& affix) {
+    return CaSX::sym(var_name + (affix.empty() ? "" : ("_" + affix)));
+  }
   FORCING_TYPE forcing_type = FORCING_TYPE::SPEED_CONTROLLED;
-  std::function<CaSX(const CaSX& xdot)> base_energy = [](const CaSX& xdot) {
-    return 0.5 * 0.2 * CaSX::dot(xdot, xdot);
-  };
-  std::function<CaSX(const CaSX& x, const CaSX& xdot)> collision_geometry = [](const CaSX& x,
-                                                                               const CaSX& xdot) {
-    return -0.5 / CaSX::pow(x, 5) * (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2);
+
+  FabConfigFunc base_energy = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+    return FabConfigExprMeta{0.5 * 0.2 * CaSX::dot(xdot, xdot)};
   };
 
-  std::function<CaSX(const CaSX& x, const CaSX& xdot)> collision_finsler =
-      [](const CaSX& x, const CaSX& xdot) { return 0.1 / x * CaSX::pow(xdot, 2); };
-
-  std::function<CaSX(const CaSX& x, const CaSX& xdot)> limit_geometry = [](const CaSX& x, const CaSX& xdot) {
-    return -0.1 / x * CaSX::pow(xdot, 2);
+  FabConfigFunc collision_geometry = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+    return FabConfigExprMeta{-0.5 / CaSX::pow(x, 5) * (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2)};
   };
 
-  std::function<CaSX(const CaSX& x, const CaSX& xdot)> limit_finsler = [](const CaSX& x, const CaSX& xdot) {
-    return 0.1 / x * (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2);
+  FabConfigFunc collision_finsler = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+    return FabConfigExprMeta{0.1 / x * CaSX::pow(xdot, 2)};
   };
 
-  std::function<CaSX(const CaSX& x, const CaSX& xdot)> self_collision_geometry = [](const CaSX& x,
-                                                                                    const CaSX& xdot) {
-    return -0.5 / x * (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2);
+  FabConfigFunc limit_geometry = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+    return FabConfigExprMeta{-0.1 / x * CaSX::pow(xdot, 2)};
   };
 
-  std::function<CaSX(const CaSX& x, const CaSX& xdot)> self_collision_finsler =
-      [](const CaSX& x, const CaSX& xdot) { return 0.1 / x * CaSX::pow(xdot, 2); };
-
-  std::function<CaSX(const CaSX& x, const CaSX& xdot)> geometry_plane_constraint = [](const CaSX& x,
-                                                                                      const CaSX& xdot) {
-    return -0.5 / CaSX::pow(x, 5) * (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2);
+  FabConfigFunc limit_finsler = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+    return FabConfigExprMeta{0.1 / x * (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2)};
   };
 
-  std::function<CaSX(const CaSX& x, const CaSX& xdot)> finsler_plane_constraint =
-      [](const CaSX& x, const CaSX& xdot) { return 0.1 / x * CaSX::pow(xdot, 2); };
+  FabConfigFunc self_collision_geometry = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+    return FabConfigExprMeta{-0.5 / x * (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2)};
+  };
+
+  FabConfigFunc self_collision_finsler = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+    return FabConfigExprMeta{0.1 / x * CaSX::pow(xdot, 2)};
+  };
+
+  FabConfigFunc geometry_plane_constraint = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+    return FabConfigExprMeta{-0.5 / CaSX::pow(x, 5) * (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2)};
+  };
+
+  FabConfigFunc finsler_plane_constraint = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+    return FabConfigExprMeta{0.1 / x * CaSX::pow(xdot, 2)};
+  };
 
   // Directionally stretched metric
-  std::function<CaSX(const CaSX& x, const double)> attractor_potential = [](const CaSX& x,
-                                                                            const double weight) {
+  FabConfigFunc attractor_potential = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
     // alpha: scaling factor for the softmax
     static constexpr float alpha = 10.f;
     const CaSX x_norm = CaSX::norm_2(x);
-    return 5.0 * (x_norm + (1 / alpha) * CaSX::log(1 + CaSX::exp(-2 * alpha * x_norm)));
+    return FabConfigExprMeta{5.0 * (x_norm + (1 / alpha) * CaSX::log(1 + CaSX::exp(-2 * alpha * x_norm)))};
   };
 
-  std::function<CaSX(const CaSX& x)> attractor_metric = [](const CaSX& x) {
+  FabConfigFunc attractor_metric = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
     static constexpr float alpha = 2.0;
     static constexpr float beta = 0.3;
-    return (alpha - beta) * CaSX::exp(-1 * CaSX::pow(0.75 * CaSX::norm_2(x), 2) + beta) *
-           fab_math::CASX_IDENTITY(x.size().first);
+    return FabConfigExprMeta{(alpha - beta) * CaSX::exp(-1 * CaSX::pow(0.75 * CaSX::norm_2(x), 2) + beta) *
+                             fab_math::CASX_IDENTITY(x.size().first)};
   };
 
-  std::function<CaSX(const CaSX& x, const CaSX& a_ex, const CaSX& a_le)> damper_beta = [](const CaSX& x,
-                                                                                          const CaSX& a_ex,
-                                                                                          const CaSX& a_le) {
-    return 0.5 * (CaSX::tanh(-0.5 * (CaSX::norm_2(x) - 0.02)) + 1) * 6.5 + 0.01 + CaSX::fmax(0, a_ex - a_le);
+  FabConfigFunc damper_beta = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+    const auto a_ex = sym_var("a_ex", affix);
+    const auto a_le = sym_var("a_le", affix);
+    return FabConfigExprMeta{
+        0.5 * (CaSX::tanh(-0.5 * (CaSX::norm_2(x) - 0.02)) + 1) * 6.5 + 0.01 + CaSX::fmax(0, a_ex - a_le),
+        {a_ex.name(), a_le.name()}};
   };
 
-  std::function<CaSX(const CaSX& xdot)> damper_eta = [](const CaSX& xdot) {
-    return 0.5 * (CaSX::tanh(-0.9 * 0.5 * CaSX::dot(xdot, xdot) - 0.5) + 1);
+  FabConfigFunc damper_eta = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+    return FabConfigExprMeta{0.5 * (CaSX::tanh(-0.9 * 0.5 * CaSX::dot(xdot, xdot) - 0.5) + 1)};
   };
 
-  std::function<CaSX(const CaSX& x)> damper_beta_sym = [](const CaSX& x) {
-    return 0.5 * (CaSX::tanh(-CaSX::sym("alpha_b") * (CaSX::norm_2(x) - CaSX::sym("radius_shift"))) + 1) *
-               CaSX::sym("beta_close") +
-           CaSX::sym("beta_distant") + CaSX::fmax(0, CaSX::sym("a_ex") - CaSX::sym("a_le"));
-  };
+  // [SYMBOLIC CONFIG] --
+  //
+  using FabPlannerConfigPtr = std::shared_ptr<FabPlannerConfig>;
+  static FabPlannerConfigPtr get_symbolic_config() {
+    static auto config = std::make_shared<FabPlannerConfig>(FabPlannerConfig{
+        .base_energy =
+            [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+              const auto base_inertia = sym_var("base_inertia", affix);
+              return FabConfigExprMeta{0.5 * base_inertia * CaSX::dot(xdot, xdot), {base_inertia.name()}};
+            },
 
-  std::function<CaSX()> damper_eta_sym = []() {
-    return 0.5 *
-           (CaSX::tanh(-CaSX::sym("alpha_eta") * CaSX::sym("ex_lag") * (1 - CaSX::sym("ex_factor")) - 0.5) +
-            1);
-  };
+        .collision_geometry =
+            [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+              const auto k_geo = sym_var("k_geo", affix);
+              const auto exp_geo = sym_var("exp_geo", affix);
+              return FabConfigExprMeta{-k_geo / CaSX::pow(x, exp_geo) * CaSX::pow(xdot, 2),
+                                       {k_geo.name(), exp_geo.name()}};
+            },
+
+        .collision_finsler =
+            [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+              const auto k_fin = sym_var("k_fin", affix);
+              const auto exp_fin = sym_var("exp_fin", affix);
+              return FabConfigExprMeta{
+                  k_fin / CaSX::pow(x, exp_fin) * (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2),
+                  {k_fin.name(), exp_fin.name()}};
+            },
+
+        .limit_geometry =
+            [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+              const auto k_limit_geo = sym_var("k_limit_geo", affix);
+              const auto exp_limit_geo = sym_var("exp_limit_geo", affix);
+              return FabConfigExprMeta{-k_limit_geo / CaSX::pow(x, exp_limit_geo) * CaSX::pow(xdot, 2),
+                                       {k_limit_geo.name(), exp_limit_geo.name()}};
+            },
+
+        .limit_finsler =
+            [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+              const auto k_limit_fin = sym_var("k_limit_fin", affix);
+              const auto exp_limit_fin = sym_var("exp_limit_fin", affix);
+              return FabConfigExprMeta{k_limit_fin / CaSX::pow(x, exp_limit_fin) *
+                                           (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2),
+                                       {k_limit_fin.name(), exp_limit_fin.name()}};
+            },
+
+        .self_collision_geometry =
+            [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+              const auto k_self_geo = sym_var("k_self_geo", affix);
+              const auto exp_self_geo = sym_var("exp_self_geo", affix);
+              return FabConfigExprMeta{-k_self_geo / CaSX::pow(x, exp_self_geo) * CaSX::pow(xdot, 2),
+                                       {k_self_geo.name(), exp_self_geo.name()}};
+            },
+
+        .self_collision_finsler =
+            [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+              const auto k_self_fin = sym_var("k_self_fin", affix);
+              const auto exp_self_fin = sym_var("exp_self_fin", affix);
+              return FabConfigExprMeta{k_self_fin / CaSX::pow(x, exp_self_fin) *
+                                           (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2),
+                                       {k_self_fin.name(), exp_self_fin.name()}};
+            },
+
+        .damper_beta =
+            [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+              const auto alpha_b = sym_var("alpha_b", affix);
+              const auto radius_shift = sym_var("radius_shift", affix);
+              const auto beta_close = sym_var("beta_close", affix);
+              const auto beta_distant = sym_var("beta_distant", affix);
+              const auto a_ex = sym_var("a_ex", affix);
+              const auto a_le = sym_var("a_le", affix);
+
+              return FabConfigExprMeta{
+                  0.5 * (CaSX::tanh(-alpha_b * (CaSX::norm_2(x) - radius_shift)) + 1) * beta_close +
+                      beta_distant + CaSX::fmax(0, a_ex - a_le),
+                  {alpha_b.name(), radius_shift.name(), beta_close.name(), beta_distant.name(), a_ex.name(),
+                   a_le.name()}};
+            },
+
+        .damper_eta =
+            [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+              const auto alpha_eta = sym_var("alpha_eta", affix);
+              const auto ex_lag = sym_var("ex_lag", affix);
+              const auto ex_factor = sym_var("ex_factor", affix);
+              return FabConfigExprMeta{0.5 * (CaSX::tanh(-alpha_eta * ex_lag * (1 - ex_factor) - 0.5) + 1),
+                                       {alpha_eta.name(), ex_lag.name(), ex_factor.name()}};
+            }});
+    return config;
+  }
 };
+using FabPlannerConfigPtr = FabPlannerConfig::FabPlannerConfigPtr;
 
 struct FabJointLimitArray {
   std::vector<double> lower_limits;

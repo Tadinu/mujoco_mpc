@@ -37,6 +37,8 @@ public:
   // initialize data and settings
   virtual void Initialize(mjModel* model, const Task& task) = 0;
 
+  virtual void InitTaskFabrics() {}
+
   // allocate memory
   virtual void Allocate() = 0;
 
@@ -79,7 +81,7 @@ public:
   void ResizeMjData(const mjModel* model, int num_threads);
 
   virtual urdf::UrdfModel RobotURDFModel() const { return {}; }
-  bool tuning_active_ = false;
+  bool tuning_on_ = false;
 };
 
 // additional optional interface for planners that can produce several policy
