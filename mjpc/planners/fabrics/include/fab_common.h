@@ -80,8 +80,8 @@ struct FabError : public std::runtime_error {
 
 struct FabParamNotFoundError : public std::runtime_error {
   explicit FabParamNotFoundError(const std::string& error_msg)
-      : std::runtime_error(std::string("[Param not found]: ") + error_msg) {}
+      : std::runtime_error("[Param not found]: " + error_msg) {}
 
   explicit FabParamNotFoundError(const char* error_msg)
-      : std::runtime_error(std::string("[Param not found]: ") + error_msg) {}
+      : std::runtime_error("[Param not found]: " + std::string(error_msg)) {}
 };

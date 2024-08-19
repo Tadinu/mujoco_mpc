@@ -62,10 +62,10 @@ public:
 
 private:
   void set_forward_map(const std::string& obstacle_name, const std::string& collision_link_name) {
-    const auto radius_obstacle_name = std::string("radius_") + obstacle_name;
+    const auto radius_obstacle_name = "radius_" + obstacle_name;
     const CaSX radius_obstacle_var = get_parent_var_param(radius_obstacle_name, 1);
 
-    const auto radius_body_name = std::string("radius_body_") + collision_link_name;
+    const auto radius_body_name = "radius_body_" + collision_link_name;
     const CaSX radius_body_var = get_parent_var_param(radius_body_name, 1);
 
     geom_params_ = {{radius_obstacle_name, radius_obstacle_var}, {radius_body_name, radius_body_var}};

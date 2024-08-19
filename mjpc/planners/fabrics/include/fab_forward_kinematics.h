@@ -70,7 +70,7 @@ public:
       } else {
         q = q_ca_;
       }
-      fks_[link->name] = CaFunction(std::string("fk") + link->name, {q}, {casadi(q, link->name)});
+      fks_[link->name] = CaFunction("fk" + link->name, {q}, {casadi(q, link->name)});
     }
   }
 

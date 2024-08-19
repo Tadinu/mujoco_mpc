@@ -38,7 +38,7 @@ public:
     const char* what() const _NOEXCEPT override {
       static std::string full_message;
       if (prim1_ && prim2_) {
-        full_message = std::string("Distance undefined between ") + prim1_->name_ + (" & ") + prim2_->name_;
+        full_message = "Distance undefined between " + prim1_->name_ + (" & ") + prim2_->name_;
       } else {
         assert(false);
       }
@@ -113,10 +113,10 @@ public:
 
   FabCapsule(std::string name, double radius, double length)
       : FabGeometricPrimitive(std::move(name)), radius_(radius), length_(length) {
-    sym_radius_ = CaSX::sym(std::string("radius_") + name_, 1);
-    sym_length_ = CaSX::sym(std::string("length_") + name_, 1);
-    parameters_[std::string("radius_") + name_] = radius;
-    parameters_[std::string("length_") + name_] = length;
+    sym_radius_ = CaSX::sym("radius_" + name_, 1);
+    sym_length_ = CaSX::sym("length_" + name_, 1);
+    parameters_["radius_" + name_] = radius;
+    parameters_["length_" + name_] = length;
   }
 
   virtual ~FabCapsule() = default;
@@ -162,8 +162,9 @@ public:
   FabSphere() = default;
 
   FabSphere(std::string name, double radius) : FabGeometricPrimitive(std::move(name)), radius_(radius) {
-    sym_radius_ = CaSX::sym(std::string("radius_") + name_, 1);
-    parameters_[std::string("radius_") + name_] = radius;
+    const auto radius_name = "radius_" + name_;
+    sym_radius_ = CaSX::sym(radius_name, 1);
+    parameters_[radius_name] = radius;
   }
 
   virtual ~FabSphere() = default;
@@ -189,8 +190,9 @@ public:
 
   FabCuboid(std::string name, std::vector<double> size)
       : FabGeometricPrimitive(std::move(name)), size_(std::move(size)) {
-    sym_size_ = CaSX::sym(std::string("size_") + name_, 3);
-    parameters_[std::string("size_") + name_] = size;
+    const auto size_name = "size_" + name_;
+    sym_size_ = CaSX::sym(size_name, 3);
+    parameters_[size_name] = size;
   }
 
   virtual ~FabCuboid() = default;

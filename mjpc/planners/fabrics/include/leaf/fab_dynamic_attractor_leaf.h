@@ -43,8 +43,8 @@ public:
 
 private:
   void set_forward_map(const std::string& goal_name) {
-    auto reference_name = std::string("x_") + goal_name;
-    auto weight_name = std::string("weight_") + goal_name;
+    auto reference_name = "x_" + goal_name;
+    auto weight_name = "weight_" + goal_name;
     const auto goal_dimension = forward_kinematics_.size().first;
     const auto& parent_params = parent_vars_->parameters();
     reference_var_ = parent_params.contains(reference_name) ? parent_params.at(reference_name)
