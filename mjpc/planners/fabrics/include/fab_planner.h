@@ -282,7 +282,7 @@ public:
     const auto fk_2 = get_forward_kinematics(collision_link_2_name);
     const auto fk = fk_2 - fk_1;
     if (fab_core::is_casx_sparse(fk)) {
-      FAB_PRINT(std::string("Expression [") + fk.get_str() + "] for links " + collision_link_1_name + "and " +
+      FAB_PRINT("Expression [" + fk.get_str() + "] for links " + collision_link_1_name + "and " +
                 collision_link_2_name + " is sparse and so skipped");
       auto geometry = FabSelfCollisionLeaf(vars_, fk, collision_link_1_name, collision_link_2_name);
       geometry.set_geometry(config_.self_collision_geometry);
@@ -374,13 +374,12 @@ public:
       if (fk_size == decltype(fk_size){4, 4}) {
         const auto fk_0_3_3 = fab_core::get_casx2(fk, {0, 3}, 3);
         if (fab_core::is_casx_sparse(fk_0_3_3)) {
-          FAB_PRINT(std::string("Expression ") + fk_0_3_3.get_str() + " for link " + link_name +
+          FAB_PRINT("Expression " + fk_0_3_3.get_str() + " for link " + link_name +
                     " is sparse and so skipped");
           continue;
         }
       } else if (fab_core::is_casx_sparse(fk)) {
-        FAB_PRINT(std::string("Expression ") + fk.get_str() + " for link " + link_name +
-                  " is sparse and so skipped");
+        FAB_PRINT("Expression " + fk.get_str() + " for link " + link_name + " is sparse and so skipped");
         continue;
       }
 
@@ -397,21 +396,21 @@ public:
       }
 #if 0
       for (auto i = 0; i < environment.spheres_num(); ++i) {
-        const auto obstacle_name = std::string("obst_sphere_") + std::to_string(i);
+        const auto obstacle_name = "obst_sphere_" + std::to_string(i);
         if (dynamic_pointer_cast<FabSphere>(collision_link)) {
           add_dynamic_spherical_obstacle_geometry(obstacle_name, link_name, fk, reference_parameter_list[i],
                                                   dynamic_obstacle_dimension);
         }
       }
       for (auto i = 0; i < environment.planes_num(); ++i) {
-        const auto constraint_name = std::string("constraint_") + std::to_string(i);
+        const auto constraint_name = "constraint_" + std::to_string(i);
         if (dynamic_pointer_cast<FabSphere>(collision_link)) {
           add_plane_constraint(constraint_name, link_name, fk);
         }
       }
 
       for (auto i = 0; i < environment.cuboids_num(); ++i) {
-        const auto obstacle_name = std::string("obst_cuboid_") + std::to_string(i);
+        const auto obstacle_name = "obst_cuboid_" + std::to_string(i);
         if (dynamic_pointer_cast<FabSphere>(collision_link)) {
           add_cuboid_obstacle_geometry(obstacle_name, link_name, fk);
         }
@@ -430,12 +429,12 @@ public:
     std::vector<CaSXDict> reference_param_list;
     for (auto i = 0; i < dynamic_obstacles_num; ++i) {
       CaSXDict reference_params = {
-          {std::string("x_obst_dynamic_") + std::to_string(i),
-           CaSX::sym(std::string("x_obst_dynamic_") + std::to_string(i), dynamic_obstacle_dimension)},
-          {std::string("xdot_obst_dynamic_") + std::to_string(i),
-           CaSX::sym(std::string("xdot_obst_dynamic_") + std::to_string(i), dynamic_obstacle_dimension)},
-          {std::string("xddot_obst_dynamic_") + std::to_string(i),
-           CaSX::sym(std::string("xddot_obst_dynamic_") + std::to_string(i), dynamic_obstacle_dimension)}};
+          {"x_obst_dynamic_" + std::to_string(i),
+           CaSX::sym("x_obst_dynamic_" + std::to_string(i), dynamic_obstacle_dimension)},
+          {"xdot_obst_dynamic_" + std::to_string(i),
+           CaSX::sym("xdot_obst_dynamic_" + std::to_string(i), dynamic_obstacle_dimension)},
+          {"xddot_obst_dynamic_" + std::to_string(i),
+           CaSX::sym("xddot_obst_dynamic_" + std::to_string(i), dynamic_obstacle_dimension)}};
       reference_param_list.emplace_back(std::move(reference_params));
     }
 
@@ -443,27 +442,26 @@ public:
     for (const auto& link_name : collision_link_names) {
       const auto fk = get_forward_kinematics(link_name);
       if (fab_core::is_casx_sparse(fk)) {
-        FAB_PRINT(std::string("Expression ") + fk.get_str() + " for link " + link_name +
-                  "is sparse and so skipped");
+        FAB_PRINT("Expression " + fk.get_str() + " for link " + link_name + "is sparse and so skipped");
         continue;
       }
 
       for (auto i = 0; i < static_obstacles_num; ++i) {
-        const auto obstacle_name = std::string("obst_") + std::to_string(i);
+        const auto obstacle_name = "obst_" + std::to_string(i);
         add_spherical_obstacle_geometry(obstacle_name, link_name, fk);
       }
       for (auto i = 0; i < dynamic_obstacles_num; ++i) {
-        const auto obstacle_name = std::string("obst_dynamic_") + std::to_string(i);
+        const auto obstacle_name = "obst_dynamic_" + std::to_string(i);
         add_dynamic_spherical_obstacle_geometry(obstacle_name, link_name, fk, reference_param_list[i],
                                                 dynamic_obstacle_dimension);
       }
       for (auto i = 0; i < plane_constraints_num; ++i) {
-        const auto constraint_name = std::string("constraint_") + std::to_string(i);
+        const auto constraint_name = "constraint_" + std::to_string(i);
         add_plane_constraint(constraint_name, link_name, fk);
       }
 
       for (auto i = 0; i < cuboid_obstacles_num; ++i) {
-        const auto obstacle_name = std::string("obst_cuboid_") + std::to_string(i);
+        const auto obstacle_name = "obst_cuboid_" + std::to_string(i);
         add_cuboid_obstacle_geometry(obstacle_name, link_name, fk);
       }
     }
@@ -528,7 +526,7 @@ public:
       }
 
       // [Goal attractor leaf]
-      const auto goal_name = std::string("goal_") + std::to_string(i);
+      const auto goal_name = "goal_" + std::to_string(i);
       std::unique_ptr<FabLeaf> attractor = nullptr;
       if (FabSubGoalType::DYNAMIC == sub_goal->type()) {
         attractor = std::make_unique<FabGenericDynamicAttractorLeaf>(vars_, fk_sub_goal, goal_name);
@@ -717,8 +715,7 @@ public:
 
     // [Plane constraints]
     for (auto i = 0; i < task_->GetPlaneConstraintsNum(); ++i) {
-      args.insert_or_assign(std::string("constraint_") + std::to_string(i),
-                            std::vector<double>{0, 0, 1, 0.0});
+      args.insert_or_assign("constraint_" + std::to_string(i), std::vector<double>{0, 0, 1, 0.0});
     }
 
     // [X-space goals] & [Weights of goals]
@@ -726,13 +723,13 @@ public:
     for (auto i = 0; i < sub_goals.size(); ++i) {
       const auto& sub_goal = sub_goals[i];
       const auto i_str = std::to_string(i);
-      args.insert_or_assign(std::string("x_goal_") + i_str, sub_goal->cfg_.desired_position);
-      args.insert_or_assign(std::string("weight_goal_") + i_str, sub_goal->cfg_.weight);
+      args.insert_or_assign("x_goal_" + i_str, sub_goal->cfg_.desired_position);
+      args.insert_or_assign("weight_goal_" + i_str, sub_goal->cfg_.weight);
     }
 
     // [Radius collision bodies]
     for (const auto& [link_name, link_size] : task_->GetCollisionLinkProps()) {
-      args.insert_or_assign(std::string("radius_body_") + link_name, link_size);
+      args.insert_or_assign("radius_body_" + link_name, link_size);
     }
 
     // [Obstacles' size & pos]

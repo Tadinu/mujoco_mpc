@@ -188,7 +188,7 @@ static const TArg* get_arg_value(const FabNamedMap<TArgs...>& kwargs, const char
     if (const auto* arg_value_ptr = std::get_if<TArg>(&it->second)) {
       return arg_value_ptr;
     }
-    throw FabParamNotFoundError(std::string("Parameter [") + arg_name + "] is not of " + typeid(TArg).name());
+    throw FabParamNotFoundError("Parameter [" + std::string(arg_name) + "] is not of " + typeid(TArg).name());
   }
   return nullptr;
 }
@@ -337,16 +337,16 @@ static bool is_equal_itertable(const TIteratable& left, const TIteratable& right
 template <typename TGeometricComponent1, typename TGeometricComponent2>
 static bool check_compatibility(const TGeometricComponent1& a, const TGeometricComponent2& b) {
   if (a.x().size() != b.x().size()) {
-    throw FabError::customized("Operation invalid", std::string("Different dimensions: ") +
-                                                        std::to_string(a.x().size().first) + "x" +
-                                                        std::to_string(a.x().size().second) + "vs. " +
-                                                        std::to_string(b.x().size().first) + "x" +
-                                                        std::to_string(b.x().size().second));
+    throw FabError::customized("Operation invalid",
+                               "Different dimensions: " + std::to_string(a.x().size().first) + "x" +
+                                   std::to_string(a.x().size().second) + "vs. " +
+                                   std::to_string(b.x().size().first) + "x" +
+                                   std::to_string(b.x().size().second));
   }
 
   if (!CaSX::is_equal(a.x(), b.x())) {
-    throw FabError::customized(
-        "Operation invalid", std::string("Different values: ") + a.x().get_str() + " vs. " + b.x().get_str());
+    throw FabError::customized("Operation invalid",
+                               "Different values: " + a.x().get_str() + " vs. " + b.x().get_str());
   }
   return true;
 }
