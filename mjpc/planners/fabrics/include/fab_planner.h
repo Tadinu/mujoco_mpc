@@ -35,6 +35,9 @@ enum class FabControlMode : uint8_t { VEL, ACC };
 
 class FabParamTuner;
 
+using FabParamDict = std::map<const char*, double>;
+using FabParamWeightDict = FabParamDict;
+
 class FabPlanner : public mjpc::Planner {
 public:
   FabPlanner();
@@ -58,7 +61,7 @@ public:
   }
 
   void add_geometry(const FabDifferentialMap& forward_map, FabLagrangianPtr lagrangian,
-                    FabGeometryPtr geometry) {
+                    FabGeometryPtr geometry) const {
     add_weighted_geometry(forward_map,
                           FabWeightedSpec({{"g", std::move(geometry)}, {"le", std::move(lagrangian)}}));
   }
@@ -66,7 +69,7 @@ public:
   void add_dynamic_geometry(const FabDifferentialMap& forward_map,
                             const FabDynamicDifferentialMap& dynamic_map,
                             const FabDifferentialMap& geometry_map, FabLagrangianPtr lagrangian,
-                            FabGeometryPtr geometry) {
+                            FabGeometryPtr geometry) const {
     const auto weighted_spec = FabWeightedSpec(
         {{"g", std::move(geometry)}, {"le", std::move(lagrangian)}, {"ref_names", dynamic_map.ref_names()}});
     const auto pwg1 = weighted_spec.pull_back<FabWeightedSpec>(geometry_map);
@@ -76,7 +79,7 @@ public:
   }
 
   void add_weighted_geometry(const FabDifferentialMap& forward_map,
-                             const FabWeightedSpec& weighted_geometry) {
+                             const FabWeightedSpec& weighted_geometry) const {
     const auto pulled_geometry = weighted_geometry.pull_back<FabWeightedSpec>(forward_map);
     *geometry_ += *pulled_geometry;
     *vars_ += *pulled_geometry->vars();
@@ -310,8 +313,7 @@ public:
 
     // [Goal composition]
     if (fab_core::has_collection_element(
-            std::array<FORCING_TYPE, 3>{FORCING_TYPE::SPEED_CONTROLLED, FORCING_TYPE::FORCED,
-                                        FORCING_TYPE::FORCED_ENERGIZED},
+            std::array{FORCING_TYPE::SPEED_CONTROLLED, FORCING_TYPE::FORCED, FORCING_TYPE::FORCED_ENERGIZED},
             config_->forcing_type)) {
       set_goal_component(problem_config_.goal_composition());
     }
@@ -424,13 +426,12 @@ public:
     // Dynamic Obstacles
     std::vector<CaSXDict> reference_param_list;
     for (auto i = 0; i < dynamic_obstacles_num; ++i) {
+      const auto i_str = std::to_string(i);
       CaSXDict reference_params = {
-          {"x_obst_dynamic_" + std::to_string(i),
-           CaSX::sym("x_obst_dynamic_" + std::to_string(i), dynamic_obstacle_dimension)},
-          {"xdot_obst_dynamic_" + std::to_string(i),
-           CaSX::sym("xdot_obst_dynamic_" + std::to_string(i), dynamic_obstacle_dimension)},
-          {"xddot_obst_dynamic_" + std::to_string(i),
-           CaSX::sym("xddot_obst_dynamic_" + std::to_string(i), dynamic_obstacle_dimension)}};
+          {"x_obst_dynamic_" + i_str, CaSX::sym("x_obst_dynamic_" + i_str, dynamic_obstacle_dimension)},
+          {"xdot_obst_dynamic_" + i_str, CaSX::sym("xdot_obst_dynamic_" + i_str, dynamic_obstacle_dimension)},
+          {"xddot_obst_dynamic_" + i_str,
+           CaSX::sym("xddot_obst_dynamic_" + i_str, dynamic_obstacle_dimension)}};
       reference_param_list.emplace_back(std::move(reference_params));
     }
 
@@ -712,66 +713,28 @@ public:
   // optimize nominal policy
   void OptimizePolicy(int horizon, mjpc::ThreadPool& pool) override;
 
-  void plan() {
-    const auto robot_dof = robot_->dof();
-    std::vector<double> q = task_->QueryJointPos(robot_dof);
-    std::vector<double> qdot = task_->QueryJointVel(robot_dof);
-    FAB_PRINTDB("QPOS", q);
-    FAB_PRINTDB("QVEL", qdot);
-    FabCasadiArgMap args = {{"q", std::move(q)}, {"qdot", std::move(qdot)}};
-
-    // [Plane constraints]
-    for (auto i = 0; i < task_->GetPlaneConstraintsNum(); ++i) {
-      args.insert_or_assign("constraint_" + std::to_string(i), std::vector<double>{0, 0, 1, 0.0});
-    }
-
-    // [X-space goals] & [Weights of goals]
-    const auto sub_goals = task_->GetSubGoals();
-    for (auto i = 0; i < sub_goals.size(); ++i) {
-      const auto& sub_goal = sub_goals[i];
-      const auto i_str = std::to_string(i);
-      args.insert_or_assign("x_goal_" + i_str, sub_goal->cfg_.desired_position);
-      args.insert_or_assign("weight_goal_" + i_str, sub_goal->cfg_.weight);
-    }
-
-    // [Radius collision bodies]
-    for (const auto& [link_name, link_size] : task_->GetCollisionLinkProps()) {
-      args.insert_or_assign("radius_body_" + link_name, link_size);
-    }
-
-    // [Obstacles' size & pos]
-    const auto obstacle_statesX = task_->GetObstacleStatesX();
-    const auto obstacles_num = obstacle_statesX.size();
-    const bool fixed_obstacles = task_->AreObstaclesFixed();
-    const auto fobstacle_prop_name = [&fixed_obstacles](const char* prefix, const int i) {
-      return (fixed_obstacles ? prefix : (std::string(prefix) + "dynamic_")) + std::to_string(i);
-    };
-    for (auto i = 0; i < obstacles_num; ++i) {
-      const auto& obstacle_i = obstacle_statesX[i];
-      args.insert_or_assign(fobstacle_prop_name("radius_obst_", i),
-                            FAB_OBSTACLE_SIZE_SCALE * obstacle_i.size_[0]);
-
-      const int dim = fixed_obstacles ? 3 : task_->GetDynamicObstaclesDim();
-      std::vector obst_pos(dim, 0.);
-      memcpy(obst_pos.data(), obstacle_i.pos_.data(), dim * sizeof(double));
-      args.insert_or_assign(fobstacle_prop_name("x_obst_", i), obst_pos);
-
-      if (!fixed_obstacles) {
-        std::vector obst_vel(dim, 0.);
-        memcpy(obst_vel.data(), obstacle_i.vel_.data(), dim * sizeof(double));
-        args.insert_or_assign(fobstacle_prop_name("xdot_obst_", i), obst_vel);
-
-        std::vector obst_acc(dim, 0.);
-        memcpy(obst_acc.data(), obstacle_i.acc_.data(), dim * sizeof(double));
-        args.insert_or_assign(fobstacle_prop_name("xddot_obst_", i), obst_acc);
-      }
-    }
-
-    // Compute action
-    set_action(compute_action(args));
+  double GetDistanceToGoal(const std::vector<double>& q, int subgoal_idx = 0) const {
+    const auto& sub_goal_0_cfg = task_->GetSubGoals()[subgoal_idx]->cfg_;
+    const auto& sub_goal_0_position = sub_goal_0_cfg.desired_position;
+    const CaSX fk = robot_->fk()->casadi(q, sub_goal_0_cfg.child_link_name, task_->GetBaseBodyName(),
+                                         fab_math::CASX_TRANSF_IDENTITY, true /*position_only*/);
+    return double(CaSX::norm_2(CaSX(sub_goal_0_position) - fk).scalar());
   }
 
-  void set_action(const CaSX& action) {
+  double GetCurrentDistanceToGoal(int subgoal_idx = 0) const {
+    return GetDistanceToGoal(task_->QueryJointPos(robot_->dof()), subgoal_idx);
+  }
+
+  std::string GetObstaclePropName(const char* prefix, int idx) const;
+
+  void SetGoalArguments();
+  void SetConstraintArguments();
+  void SetCollisionArguments();
+  void SetObstacleArguments();
+  void SetTuningArguments(const FabParamDict& params);
+  void Plan(const FabParamDict& params);
+
+  void SetAction(const CaSX& action) {
     const FabSharedMutexLock lock(policy_mutex_);
     assert(action.size1() >= robot_->dof());
     if (action.is_regular() && !action.is_empty()) {
@@ -803,7 +766,7 @@ public:
       trajectory_->trace.push_back(cur_pos[1]);
       trajectory_->trace.push_back(cur_pos[2]);
     }
-    FAB_PRINT("ACTION", action_);
+    FAB_PRINTDB("ACTION", action_);
     mju_copy(action, action_.data(), int(action_.size()));
 #if FAB_USE_ACTUATOR_VELOCITY
     mju_scl(action, action, task_->actuator_kv, int(action_.size()));
@@ -840,6 +803,9 @@ protected:
   FabDamper damper_;
   FabCasadiFunctionPtr cafunc_ = nullptr;
   int8_t ref_sign_ = 1;
+
+  // Arguments to compute action
+  FabCasadiArgMap arguments_;
 
   // [FabParamTuner] is forward-declared above, so cannot be initialized here (even to nullptr)
   std::unique_ptr<FabParamTuner> param_tuner_;

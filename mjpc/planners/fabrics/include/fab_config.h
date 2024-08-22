@@ -27,6 +27,7 @@ using FabConfigFunc =
     std::function<FabConfigExprMeta(const CaSX& x, const CaSX& xdot, const std::string& affix)>;
 struct FabPlannerConfig {
   static CaSX sym_var(const std::string& var_name, const std::string& affix) {
+    FAB_PRINTDB("sym_var:", var_name + (affix.empty() ? "" : ("_" + affix)));
     return CaSX::sym(var_name + (affix.empty() ? "" : ("_" + affix)));
   }
   FORCING_TYPE forcing_type = FORCING_TYPE::SPEED_CONTROLLED;
@@ -78,7 +79,8 @@ struct FabPlannerConfig {
   FabConfigFunc attractor_metric = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
     static constexpr float alpha = 2.0;
     static constexpr float beta = 0.3;
-    return FabConfigExprMeta{(alpha - beta) * CaSX::exp(-1 * CaSX::pow(0.75 * CaSX::norm_2(x), 2) + beta) *
+    const CaSX x_norm = CaSX::norm_2(x);
+    return FabConfigExprMeta{((alpha - beta) * CaSX::exp(-1 * CaSX::pow(0.75 * x_norm, 2)) + beta) *
                              fab_math::CASX_IDENTITY(x.size().first)};
   };
 
@@ -105,6 +107,7 @@ struct FabPlannerConfig {
               return FabConfigExprMeta{0.5 * base_inertia * CaSX::dot(xdot, xdot), {base_inertia.name()}};
             },
 
+        // Obstacles
         .collision_geometry =
             [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
               const auto k_geo = sym_var("k_geo", affix);
@@ -156,20 +159,66 @@ struct FabPlannerConfig {
                                        {k_self_fin.name(), exp_self_fin.name()}};
             },
 
+        // Plane constraint
+        .geometry_plane_constraint =
+            [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+              const auto k_plane_geo = sym_var("k_plane_geo", affix);
+              const auto exp_plane_geo = sym_var("exp_plane_geo", affix);
+              return FabConfigExprMeta{-k_plane_geo / CaSX::pow(x, exp_plane_geo) *
+                                           (-0.5 * (CaSX::sign(xdot) - 1)) * CaSX::pow(xdot, 2),
+                                       {k_plane_geo.name(), exp_plane_geo.name()}};
+            },
+
+        .finsler_plane_constraint =
+            [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+              const auto k_plane_fin = sym_var("k_plane_fin", affix);
+              const auto exp_plane_fin = sym_var("exp_plane_fin", affix);
+              return FabConfigExprMeta{k_plane_fin / x * CaSX::pow(xdot, exp_plane_fin),
+                                       {k_plane_fin.name(), exp_plane_fin.name()}};
+            },
+
+        // Attractor
+        // https://arxiv.org/abs/2008.02399 - Form. 153-156
+        // https://arxiv.org/abs/2109.10443 = Form. 10-11
+        .attractor_potential =
+            [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+              const CaSX x_norm = CaSX::norm_2(x);
+
+              // alpha: scaling factor for the softmax
+              const auto a = sym_var("attractor_alpha", affix);
+              const auto w = sym_var("attractor_weight", affix);
+              return FabConfigExprMeta{w * (x_norm + (1 / a) * CaSX::log(1 + CaSX::exp(-2 * a * x_norm))),
+                                       {a.name(), w.name()}};
+            },
+
+        .attractor_metric =
+            [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+              const CaSX x_norm = CaSX::norm_2(x);
+
+              // Upper and lower isotropic masses
+              const auto u = sym_var("attractor_metric_alpha", affix);
+              const auto l = sym_var("attractor_metric_beta", affix);
+              const auto a = sym_var("attractor_metric_scale", affix);
+              return FabConfigExprMeta{((u - l) * CaSX::exp(-1 * CaSX::pow(a * x_norm, 2)) + l) *
+                                           fab_math::CASX_IDENTITY(x.size().first),
+                                       {u.name(), l.name(), a.name()}};
+            },
+
+        // Damper
+        // https://arxiv.org/abs/2010.14750 - Form. 8-9
         .damper_beta =
             [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
-              const auto alpha_b = sym_var("alpha_b", affix);
+              const auto alpha_beta = sym_var("alpha_beta", affix);
               const auto radius_shift = sym_var("radius_shift", affix);
               const auto beta_close = sym_var("beta_close", affix);
               const auto beta_distant = sym_var("beta_distant", affix);
               const auto a_ex = sym_var("a_ex", affix);
               const auto a_le = sym_var("a_le", affix);
-
               return FabConfigExprMeta{
-                  0.5 * (CaSX::tanh(-alpha_b * (CaSX::norm_2(x) - radius_shift)) + 1) * beta_close +
+                  0.5 * (CaSX::tanh(-alpha_beta * (CaSX::norm_2(x) - radius_shift)) + 1) * beta_close +
                       beta_distant + CaSX::fmax(0, a_ex - a_le),
-                  {alpha_b.name(), radius_shift.name(), beta_close.name(), beta_distant.name(), a_ex.name(),
-                   a_le.name()}};
+                  {alpha_beta.name(), radius_shift.name(), beta_close.name(), beta_distant.name(),
+                   a_ex.name(), a_le.name()}};
             },
 
         .damper_eta =
@@ -177,8 +226,10 @@ struct FabPlannerConfig {
               const auto alpha_eta = sym_var("alpha_eta", affix);
               const auto ex_lag = sym_var("ex_lag", affix);
               const auto ex_factor = sym_var("ex_factor", affix);
-              return FabConfigExprMeta{0.5 * (CaSX::tanh(-alpha_eta * ex_lag * (1 - ex_factor) - 0.5) + 1),
-                                       {alpha_eta.name(), ex_lag.name(), ex_factor.name()}};
+              const auto alpha_shift = sym_var("alpha_shift", affix);
+              return FabConfigExprMeta{
+                  0.5 * (CaSX::tanh(-alpha_eta * (1 - ex_factor) * ex_lag - alpha_shift) + 1),
+                  {alpha_eta.name(), ex_lag.name(), ex_factor.name(), alpha_shift.name()}};
             }});
     return config;
   }
@@ -208,9 +259,9 @@ public:
     construct_robot_representation();
     const auto env_config =
         fab_core::get_variant_value<std::map<std::string, std::string>>(configs_["environment"]);
-    environment_ =
-        FabEnvironment(std::stoi(env_config["number_spheres"]), std::stoi(env_config["number_planes"]),
-                       std::stoi(env_config["number_cuboids"]));
+    environment_ = FabEnvironment{.spheres_num_ = std::stoi(env_config["number_spheres"]),
+                                  .planes_num_ = std::stoi(env_config["number_planes"]),
+                                  .cuboids_num_ = std::stoi(env_config["number_cuboids"])};
   }
 
   FabEnvironment environment() const { return environment_; }

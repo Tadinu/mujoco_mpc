@@ -97,22 +97,22 @@ public:
       return bArg_matched;
     };
 
-    for (const auto& [arg_name, arg_value] : kwargs) {
-      if (fill_arg(arg_name, arg_value, {"x_obst", "x_obsts"})) {
-      } else if (fill_arg(arg_name, arg_value, {"radius_obst", "radius_obsts"})) {
-      } else if (fill_arg(arg_name, arg_value, {"x_obst_dynamic", "x_obsts_dynamic"})) {
-      } else if (fill_arg(arg_name, arg_value, {"xdot_obst_dynamic", "xdot_obsts_dynamic"})) {
-      } else if (fill_arg(arg_name, arg_value, {"xddot_obst_dynamic", "xddot_obsts_dynamic"})) {
-      } else if (fill_arg(arg_name, arg_value, {"radius_obst_dynamic", "radius_obsts_dynamic"})) {
-      } else if (fill_arg(arg_name, arg_value, {"x_obst_cuboid", "x_obsts_cuboid"})) {
-      } else if (fill_arg(arg_name, arg_value, {"size_obst_cuboid", "size_obsts_cuboid"})) {
+    for (const auto& [arg_name, arg] : kwargs) {
+      if (fill_arg(arg_name, arg, {"x_obst", "x_obsts"})) {
+      } else if (fill_arg(arg_name, arg, {"radius_obst", "radius_obsts"})) {
+      } else if (fill_arg(arg_name, arg, {"x_obst_dynamic", "x_obsts_dynamic"})) {
+      } else if (fill_arg(arg_name, arg, {"xdot_obst_dynamic", "xdot_obsts_dynamic"})) {
+      } else if (fill_arg(arg_name, arg, {"xddot_obst_dynamic", "xddot_obsts_dynamic"})) {
+      } else if (fill_arg(arg_name, arg, {"radius_obst_dynamic", "radius_obsts_dynamic"})) {
+      } else if (fill_arg(arg_name, arg, {"x_obst_cuboid", "x_obsts_cuboid"})) {
+      } else if (fill_arg(arg_name, arg, {"size_obst_cuboid", "size_obsts_cuboid"})) {
       } else if (arg_name.starts_with("radius_body") && arg_name.starts_with("links")) {
         std::vector<std::string> body_size_input_keys;
         std::copy_if(input_names_.begin(), input_names_.end(), std::back_inserter(body_size_input_keys),
                      [](auto& input_key) { return input_key.starts_with("radius_body"); });
 
         for (const auto& body_size_key : body_size_input_keys) {
-          if (const auto* arg_values = std::get_if<std::map<int, double>>(&arg_value)) {
+          if (const auto* arg_values = std::get_if<std::map<int, double>>(&arg)) {
             for (const auto& [link_no, body_radius] : *arg_values) {
               if (body_size_key.find(std::to_string(link_no)) != std::string::npos) {
                 arguments_.insert_or_assign(body_size_key, body_radius);
@@ -121,7 +121,7 @@ public:
           }
         }
       } else {
-        fill_arg(arg_name, arg_value, {});
+        fill_arg(arg_name, arg, {});
       }
     }
     fab_core::print_named_map2db<CaSX>(arguments_, "POST-PROCESSED KWARGS");
@@ -134,7 +134,7 @@ public:
     if (function_.is_null() || !function_.get()) {
       return {};
     }
-    // FAB_PRINTDB("CASADI FUNCTION GENERATED TO:", function_.generate(function_.name()));
+    FAB_PRINTDB("CASADI FUNCTION GENERATED TO:", function_.generate(function_.name()));
     FAB_PRINTDB("CASADI FUNCTION INPUTS NUM:", function_.name_in().size());
     FAB_PRINTDB("CASADI FUNCTION OUTPUTS NUM:", function_.name_out().size());
     CaSXDict outputs = function_(arguments_);
