@@ -17,6 +17,10 @@
 
 #include <mujoco/mujoco.h>
 
+#include <Eigen/Eigen>
+
+#include "mjpc/planners/planner.h"
+#include "mjpc/planners/rmp/include/util/rmp_util.h"
 #include "mjpc/task.h"
 #include "mjpc/tasks/manipulation/common.h"
 #include "mjpc/utilities.h"
@@ -33,10 +37,13 @@ public:
     return name;
   }
   std::vector<std::string> GetEndtipNames() const override {
+    // Ones in URDF, not XML
     static std::vector<std::string> names = {"panda_leftfinger"};
     return names;
   }
   std::vector<std::string> GetCollisionLinkNames() const override {
+    // Ones in URDF, not XML
+    // NOTE: In XML, link5 collisions, composed of 3 subparts, is not obvious to fetch
     static std::vector<std::string> names = {"panda_hand", "panda_link3", "panda_link4"};
     return names;
   }
@@ -47,10 +54,11 @@ public:
     return props;
   }
   FabSelfCollisionNamePairs GetSelfCollisionNamePairs() const override {
+    // Ones in URDF, not XML
     return {{"panda_hand", {"panda_link2", "panda_link4"}}};
   }
   int GetDynamicObstaclesNum() const override { return static_cast<int>(GetCollisionLinkNames().size()); }
-  int GetPlaneConstraintsNum() const override { return 0; }
+  int GetPlaneConstraintsNum() const override { return 1; }
 
   int GetActionDim() const override { return 7; }
   std::vector<FabSubGoalPtr> GetSubGoals() const override {
@@ -139,7 +147,67 @@ public:
   const mjtNum* GetGoalPos() const override { return QueryTargetPos(); }
 
   bool QueryGoalReached() override { return false; }
-  void QueryObstacleStatesX() override {}
+  void QueryObstacleStatesX() override {
+    // NOTE: As observed, unclear why yet involving body links (as obstacles) disrupt the arm ik planning
+    if (!planner_->tuning_on_) {
+      return;
+    }
+    const auto fQueryObstacle = [this](const std::string& link_xml_name,
+                                       const std::string& link_collision_name) {
+      const auto obstacle_i_id = mj_name2id(model_, mjOBJ_BODY, link_xml_name.c_str());
+      const auto obstacle_geom_i_id = mj_name2id(model_, mjOBJ_GEOM, link_collision_name.c_str());
+      assert(obstacle_i_id >= 0);
+      mjtNum* obstacle_i_size =
+          (obstacle_geom_i_id >= 0) ? &model_->geom_size[3 * obstacle_geom_i_id] : nullptr;
+      mjtNum* obstacle_i_pos = &data_->xpos[3 * obstacle_i_id];
+      mjtNum* obstacle_i_rot = &data_->xquat[4 * obstacle_i_id];
+
+      static constexpr int LIN_IDX = 3;
+#if 1
+      mjtNum obstacle_i_full_vel[6];  // rot+lin
+      mj_objectVelocity(model_, data_, mjOBJ_BODY, obstacle_i_id, obstacle_i_full_vel,
+                        /*flg_local=*/0);
+      mjtNum obstacle_i_lin_vel[StateX::dim];
+      memcpy(obstacle_i_lin_vel, &obstacle_i_full_vel[LIN_IDX], sizeof(mjtNum) * StateX::dim);
+
+      mjtNum obstacle_i_full_acc[6];  // rot+lin
+      mj_objectAcceleration(model_, data_, mjOBJ_BODY, obstacle_i_id, obstacle_i_full_acc,
+                            /*flg_local=*/0);
+      mjtNum obstacle_i_lin_acc[StateX::dim];
+      memcpy(obstacle_i_lin_acc, &obstacle_i_full_acc[LIN_IDX], sizeof(mjtNum) * StateX::dim);
+#else
+      const auto obstacle_i_lin_idx = 6 * obstacle_i_id + LIN_IDX;
+      mjtNum obstacle_i_lin_vel[StateX::dim];
+      mju_copy(obstacle_i_lin_vel, &data_->cvel[obstacle_i_lin_idx], StateX::dim);
+
+      mjtNum obstacle_i_lin_acc[StateX::dim];
+      mju_copy(obstacle_i_lin_acc, &data_->cacc[obstacle_i_lin_idx], StateX::dim);
+#endif
+      obstacle_statesX_.push_back(StateX{
+          .pos_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_pos),
+          .rot_ = rmp::quatFromScalarArray<StateX::dim>(obstacle_i_rot).toRotationMatrix(),
+          .vel_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_lin_vel),
+          .acc_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_lin_acc),
+          .size_ =
+              rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_size ? obstacle_i_size : (mjtNum[]){})});
+    };
+
+    MJPC_LOCK_TASK_DATA_ACCESS;
+    obstacle_statesX_.clear();
+    static const int prefix_len = std::string("panda_").size();
+    for (const auto& link_urdf_name : GetCollisionLinkNames()) {
+      const auto link_xml_name = link_urdf_name.substr(prefix_len);
+
+      // NOTE: In this case, GetObstaclesstate
+      if (link_urdf_name == "link5") {
+        fQueryObstacle("link5", "link5_c0");
+        fQueryObstacle("link5", "link5_c1");
+        fQueryObstacle("link5", "link5_c2");
+      } else {
+        fQueryObstacle(link_xml_name, link_xml_name + "_c");
+      }
+    }
+  }
 
   std::vector<double> QueryJointPos(int dof) const override {
     if (model_ && data_) {

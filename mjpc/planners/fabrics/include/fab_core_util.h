@@ -57,7 +57,8 @@ static void print_variant(const FabVariant<TArgs...>& var, const std::string& va
 }
 
 template <typename... TArgs>
-static void print_named_map(const FabNamedMap<TArgs...>& vars) {
+static void print_named_map(const FabNamedMap<TArgs...>& vars, const char* label = nullptr) {
+  if (label) print(label);
   for (const auto& [name, var] : vars) {
     print_variant(var, name);
   }
@@ -65,9 +66,9 @@ static void print_named_map(const FabNamedMap<TArgs...>& vars) {
 }
 
 template <typename... TArgs>
-static void print_named_mapdb(const FabNamedMap<TArgs...>& vars) {
+static void print_named_mapdb(const FabNamedMap<TArgs...>& vars, const char* label = nullptr) {
 #if FAB_DEBUG
-  print_named_map(vars);
+  print_named_map(vars, label);
 #endif
 }
 
@@ -322,10 +323,13 @@ static bool is_casx_sparse(const CaSX& expr) { return CaSX::symvar(expr).empty()
 
 static CaSX casx_sym(const std::string& name, const casadi_int dim = 1) { return CaSX::sym(name, dim); }
 
+// NOTE: Not all symbolic expression go through this parsing function!
 static CaSXDict parse_symbolic_casx(const CaSX& expr, const std::vector<std::string>& var_names) {
   CaSXDict out_vars_dict;
+  FAB_PRINT("PARSE SYMBOLIC VARS OUTPUT:");
   for (const auto& var : CaSX::symvar(expr)) {
     if (has_collection_element(var_names, var.name())) {
+      FAB_PRINT(var.name(), var);
       out_vars_dict.insert_or_assign(var.name(), var);
     }
   }
