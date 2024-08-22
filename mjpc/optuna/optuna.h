@@ -80,6 +80,14 @@ public:
   T param(const std::string &name) const {
     return this->params[name].get<T>();
   }
+
+  template <typename T>
+  T param_to(const std::string &name) const {
+    T out;
+    return this->params[name].get_to<T>(out);
+  }
+
+  bool contains(const std::string &name) const { return this->params.contains(name); }
 };
 
 class SearchSpace {

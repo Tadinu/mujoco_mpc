@@ -20,8 +20,6 @@
 #ifndef RMP_UTIL_H_
 #define RMP_UTIL_H_
 
-#include "mjpc/planners/fabrics/include/fab_diff_map.h"
-
 namespace rmp {
 template <int dim, typename T = double, typename TVector = Eigen::Matrix<T, dim, 1>>
 TVector vectorFromScalarArray(const T* scalarArray) {
@@ -122,7 +120,7 @@ public:
       : start_range_(start), end_range_(end), inc_(inc) {
     // calculates how many individual increments in each dimension happen to reach
     // the end
-    ticks_ = Vector(((end_range_ - start_range_).array() / inc_.array()).floor());
+    ticks_ = TVector(((end_range_ - start_range_).array() / inc_.array()).floor());
     ticks_ = (ticks_.array() < 0).select(0, ticks_);          // set all elements smaller 0 to 0.
     ticks_ = (!ticks_.array().isFinite()).select(0, ticks_);  // set all elements NAN to 0.
 

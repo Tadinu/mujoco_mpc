@@ -28,7 +28,9 @@ public:
   }
 
   void set_potential(const FabConfigFunc& potential) override {
-    const CaSX psi = weight_var_ * potential(x_rel_, xdot_rel_, {}).eval;
+    const auto [x_potential, var_names] = potential(x_rel_, xdot_rel_, leaf_name_);
+    parent_vars_->add_parameters(fab_core::parse_symbolic_casx(x_potential, var_names));
+    const CaSX psi = weight_var_ * x_potential;
     CaSX h_psi = CaSX::gradient(psi, x_rel_);
     geom_ = std::make_shared<FabGeometry>(FabGeometryArgs{{"h", std::move(h_psi)}, {"var", relative_vars_}});
   }

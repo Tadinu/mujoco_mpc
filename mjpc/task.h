@@ -134,9 +134,16 @@ public:
   virtual std::string XmlPath() const = 0;
   virtual std::string URDFPath() const { return {}; }
   virtual std::string GetBaseBodyName() const { return {}; }
-  virtual std::vector<std::string> GetEndtipNames() const { return {}; }
-  virtual std::vector<std::string> GetCollisionLinkNames() const { return {}; }
-  virtual FabSelfCollisionNamePairs GetSelfCollisionNamePairs() const { return {}; }
+  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */
+    return {};
+  }
+  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */
+    return {};
+  }
+  virtual FabSelfCollisionNamePairs GetSelfCollisionNamePairs() const {
+    /* Ones in URDF, not XML */
+    return {};
+  }
   virtual FabLinkCollisionProps GetCollisionLinkProps() const { return {}; }
   virtual std::vector<FabJointLimit> GetJointLimits() const { return {}; }
   virtual std::vector<FabSubGoalPtr> GetSubGoals() const { return {}; }
