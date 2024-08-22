@@ -9,7 +9,6 @@
 #include "mjpc/planners/fabrics/include/fab_robot.h"
 #include "mjpc/task.h"
 
-using FabParamWeightDict = std::map<const char*, double>;
 using FabSearchSpaceData = std::map<const char*, FabParamWeightDict>;
 
 class FabParamTuner {
@@ -34,45 +33,56 @@ public:
     env_ = FabEnvironment(task_->GetTotalObstaclesNum(), 0, 1);
 #endif
     create_collision_metric();
-    initial_distance_to_obstacles_ =
-        evaluate_distance_to_closest_obstacle(task_->QueryJointPos(robot_->dof()));
+    const auto robot_dof = robot_->dof();
+    q0_ = task_->QueryJointPos(robot_dof);
+    qdot_ = task_->QueryJointVel(robot_dof);
+    initial_distance_to_goal_0_ = planner_->GetDistanceToGoal(q0_);
+    initial_distance_to_obstacles_ = evaluate_distance_to_closest_obstacle();
   }
 
-  static FabParamWeightDict get_manual_parameters() {
-    return {{"exp_geo_obst_leaf", 3},   {"k_geo_obst_leaf", 0.03},
-            {"exp_fin_obst_leaf", 3},   {"k_fin_obst_leaf", 0.03},
-            {"exp_geo_self_leaf", 3},   {"k_geo_self_leaf", 0.03},
-            {"exp_fin_self_leaf", 3},   {"k_fin_self_leaf", 0.03},
-            {"exp_geo_limit_leaf", 2},  {"k_geo_limit_leaf", 0.3},
-            {"exp_fin_limit_leaf", 3},  {"k_fin_limit_leaf", 0.05},
-            {"weight_attractor", 2},    {"base_inertia", 0.20},
-            {"alpha_b_damper", 0.5},    {"beta_distant_damper", 0.01},
-            {"beta_close_damper", 6.5}, {"radius_shift_damper", 0.05},
-            {"ex_factor", 15.0}};
+  static FabParamDict get_default_parameters() {
+    static const FabParamDict default_params = {// Base energy
+                                                {"base_inertia", 0.20},
+
+                                                // Obstacles
+                                                {"exp_geo_obst_leaf", 5},
+                                                {"k_geo_obst_leaf", 0.5},
+                                                {"exp_fin_obst_leaf", 1},
+                                                {"k_fin_obst_leaf", 0.1},
+                                                {"exp_geo_self_leaf", 1},
+                                                {"k_geo_self_leaf", 0.5},
+                                                {"exp_fin_self_leaf", 1},
+                                                {"k_fin_self_leaf", -0.1},
+                                                {"exp_geo_limit_leaf", 1},
+                                                {"k_geo_limit_leaf", 0.1},
+                                                {"exp_fin_limit_leaf", 1},
+                                                {"k_fin_limit_leaf", 0.1},
+
+                                                // Plane constraint
+                                                {"k_plane_geo", 0.5},
+                                                {"exp_plane_geo", 5},
+                                                {"k_plane_fin", 0.1},
+                                                {"exp_plane_fin", 1},
+
+                                                // Attractor
+                                                {"attractor_alpha", 10},
+                                                {"attractor_weight", 5},
+                                                {"attractor_metric_alpha", 2},
+                                                {"attractor_metric_beta", 0.3},
+                                                {"attractor_metric_scale", 0.3},
+
+                                                // Damper
+                                                {"alpha_beta_damper", 0.5},
+                                                {"beta_distant_damper", 0.01},
+                                                {"beta_close_damper", 6.5},
+                                                {"radius_shift_damper", 0.05},
+                                                {"alpha_eta_damper", 0.9},
+                                                {"alpha_shift_damper", 0.5},
+                                                {"ex_factor_damper", 0.5}};
+    return default_params;
   }
 
-  static FabParamWeightDict get_caspar_parameters() {
-    return {
-        {"exp_geo_obst_leaf", 2},        //[1, 5]
-        {"exp_geo_self_leaf", 2},        //[1, 5]
-        {"exp_geo_limit_leaf", 2},       //[1, 5]
-        {"exp_fin_obst_leaf", 2},        //[1, 5]
-        {"exp_fin_self_leaf", 2},        //[1, 1]
-        {"exp_fin_limit_leaf", 2},       //[1, 5]
-        {"k_geo_obst_leaf", 0.01},       //[0.01, 1]
-        {"k_geo_self_leaf", 0.01},       //[0.01, 1]
-        {"k_geo_limit_leaf", 0.01},      //[0.01, 1]
-        {"k_fin_self_leaf", 0.01},       //[0.01, 1]
-        {"k_fin_obst_leaf", 0.01},       //[0.01, 1]
-        {"k_fin_limit_leaf", 0.01},      //[0.01, 1]
-        {"base_inertia", 0.50},          //[0, 1]
-        {"alpha_b_damper", 0.7},         //[0, 1]
-        {"beta_distant_damper", 0.},     //[0, 1]
-        {"beta_close_damper", 9},        //[5, 20]
-        {"radius_shift_damper", 0.050},  //[0.01, 0.1]
-        {"ex_factor", 30.0}              //[1, 30]
-    };
-  }
+  static FabParamDict get_best_parameters() { return best_params_; }
 
   static const std::string DEFAULT_STUDY_DB_PATH;
   void init_study(const std::string& study_name = "fab_param_tuner_study",
@@ -95,6 +105,10 @@ public:
 
   void init_search_space() {
     search_space_data_ = {
+        // Base energy
+        {"base_inertia", {{"low", 0.01}, {"high", 1.0}, {"int", false}, {"log", false}}},
+
+        // Obstacles
         {"exp_geo_obst_leaf", {{"low", 1}, {"high", 5}, {"int", true}, {"log", false}}},
         {"exp_geo_self_leaf", {{"low", 1}, {"high", 5}, {"int", true}, {"log", false}}},
         {"exp_geo_limit_leaf", {{"low", 1}, {"high", 5}, {"int", true}, {"log", false}}},
@@ -107,12 +121,29 @@ public:
         {"k_fin_obst_leaf", {{"low", 0.01}, {"high", 1}, {"int", false}, {"log", true}}},
         {"k_fin_self_leaf", {{"low", 0.01}, {"high", 1}, {"int", false}, {"log", true}}},
         {"k_fin_limit_leaf", {{"low", 0.01}, {"high", 1}, {"int", false}, {"log", true}}},
-        {"alpha_b_damper", {{"low", 0.0}, {"high", 1}, {"int", false}, {"log", false}}},
-        {"base_inertia", {{"low", 0.01}, {"high", 1.0}, {"int", false}, {"log", false}}},
+
+        // Plane constraint
+        {"k_plane_geo", {{"low", 0.01}, {"high", 1}, {"int", false}, {"log", true}}},
+        {"exp_plane_geo", {{"low", 1}, {"high", 5}, {"int", true}, {"log", true}}},
+        {"k_plane_fin", {{"low", 0.01}, {"high", 1}, {"int", false}, {"log", true}}},
+        {"exp_plane_fin", {{"low", 1}, {"high", 5}, {"int", true}, {"log", true}}},
+
+        // Attractor
+        {"attractor_alpha", {{"low", 0.0}, {"high", 50}, {"int", false}, {"log", false}}},
+        {"attractor_weight", {{"low", 0.0}, {"high", 100}, {"int", false}, {"log", false}}},
+        {"attractor_metric_alpha", {{"low", 1.0}, {"high", 5}, {"int", false}, {"log", false}}},
+        {"attractor_metric_beta", {{"low", 0.1}, {"high", 5}, {"int", false}, {"log", false}}},
+        {"attractor_metric_scale", {{"low", 0.1}, {"high", 1}, {"int", false}, {"log", false}}},
+
+        // Damper
+        {"alpha_beta_damper", {{"low", 0.0}, {"high", 1}, {"int", false}, {"log", false}}},
         {"beta_distant_damper", {{"low", 0.0}, {"high", 1.0}, {"int", false}, {"log", false}}},
         {"beta_close_damper", {{"low", 5.0}, {"high", 20.0}, {"int", false}, {"log", false}}},
         {"radius_shift_damper", {{"low", 0.01}, {"high", 0.1}, {"int", false}, {"log", false}}},
-        {"ex_factor", {{"low", 1.0}, {"high", 30.0}, {"int", false}, {"log", false}}}};
+        {"alpha_eta_damper", {{"low", 0.0}, {"high", 1}, {"int", false}, {"log", false}}},
+        {"alpha_shift_damper", {{"low", 0.0}, {"high", 1}, {"int", false}, {"log", false}}},
+        {"ex_factor_damper", {{"low", 1.0}, {"high", 30.0}, {"int", false}, {"log", false}}}};
+    assert(search_space_data_.size() == get_default_parameters().size());
     for (const auto& [name, data] : search_space_data_) {
       if (data.at("int") > 0) {
         search_space_.add_int(name, static_cast<int>(data.at("low")), static_cast<int>(data.at("high")),
@@ -129,6 +160,7 @@ public:
     for (const auto& [param_name, param_weight] : param_weights_) {
       sum += param_weight * costs.at(param_name);
     }
+    FAB_PRINT("OPTUNA TOTAL COST", sum);
     return sum;
   }
 
@@ -144,107 +176,6 @@ public:
       }
     }
     return parameters;
-  }
-
-  void set_goal_arguments() {
-    // [X-space goals] & [Weights of goals]
-    const auto sub_goals = task_->GetSubGoals();
-    for (auto i = 0; i < sub_goals.size(); ++i) {
-      const auto& sub_goal = sub_goals[i];
-      const auto i_str = std::to_string(i);
-      arguments_.insert_or_assign("x_goal_" + i_str, sub_goal->cfg_.desired_position);
-      arguments_.insert_or_assign("weight_goal_" + i_str, sub_goal->cfg_.weight);
-    }
-
-#if 0
-    // [Plane constraints]
-    for (auto i = 0; i < task_->GetPlaneConstraintsNum(); ++i) {
-      arguments_.insert_or_assign("constraint_" + std::to_string(i), std::vector<double>{0, 0, 1, 0.0});
-    }
-#endif
-  }
-
-  void set_collision_arguments() {
-    const auto collision_link_props = task_->GetCollisionLinkProps();
-    for (const auto& link_name : task_->GetCollisionLinkNames()) {
-      arguments_["radius_body_" + link_name] = collision_link_props.at(link_name);
-    }
-  }
-
-  void set_other_arguments(const FabParamWeightDict& params) {
-    const auto obstacle_statesX = task_->GetObstacleStatesX();
-    const bool fixed_obstacles = task_->AreObstaclesFixed();
-
-    const auto fobstacle_prop_name = [&fixed_obstacles](const char* prefix, const int i) {
-      return (fixed_obstacles ? prefix : (std::string(prefix) + "dynamic_")) + std::to_string(i);
-    };
-    const int dim = task_->GetObstaclesDim();
-    std::vector obst_pos(dim, 0.);
-    std::vector obst_vel(dim, 0.);
-    std::vector obst_acc(dim, 0.);
-    for (const auto& link_name : task_->GetCollisionLinkNames()) {
-      for (auto i = 0; i < obstacle_statesX.size(); ++i) {
-        const auto& obstacle_i = obstacle_statesX[i];
-        arguments_.insert_or_assign(fobstacle_prop_name("radius_obst_", i),
-                                    FAB_OBSTACLE_SIZE_SCALE * obstacle_i.size_[0]);
-
-        // [obst_pos]
-        memcpy(obst_pos.data(), obstacle_i.pos_.data(), dim * sizeof(double));
-        arguments_.insert_or_assign(fobstacle_prop_name("x_obst_", i), obst_pos);
-
-        if (!fixed_obstacles) {
-          // [obst_vel]
-          memcpy(obst_vel.data(), obstacle_i.vel_.data(), dim * sizeof(double));
-          arguments_.insert_or_assign(fobstacle_prop_name("xdot_obst_", i), obst_vel);
-
-          // [obst_acc]
-          memcpy(obst_acc.data(), obstacle_i.acc_.data(), dim * sizeof(double));
-          arguments_.insert_or_assign(fobstacle_prop_name("xddot_obst_", i), obst_acc);
-        }
-
-        // LINK OBSTACLE LEAF
-        const auto link_name_leaf_str = link_name + "_leaf";
-        arguments_.insert_or_assign(fobstacle_prop_name("exp_geo_obst_", i) + "_" + link_name_leaf_str,
-                                    params.at("exp_geo_obst_leaf"));
-        arguments_.insert_or_assign(fobstacle_prop_name("k_geo_obst_", i) + "_" + link_name_leaf_str,
-                                    params.at("k_geo_obst_leaf"));
-        arguments_.insert_or_assign(fobstacle_prop_name("exp_fin_obst_", i) + "_" + link_name_leaf_str,
-                                    params.at("exp_fin_obst_leaf"));
-        arguments_.insert_or_assign(fobstacle_prop_name("k_fin_obst_", i) + "_" + link_name_leaf_str,
-                                    params.at("k_fin_obst_leaf"));
-      }
-    }
-    for (auto j = 0; j < robot_->dof(); ++j) {
-      const auto j_str = std::to_string(j);
-      for (auto i = 0; i < 2; ++i) {
-        const auto i_str = std::to_string(i);
-        const auto j_i_leaf_str = j_str + "_" + i_str + "_leaf";
-        arguments_["exp_limit_fin_limit_joint_" + j_i_leaf_str] = params.at("exp_fin_limit_leaf");
-        arguments_["exp_limit_geo_limit_joint_" + j_i_leaf_str] = params.at("exp_geo_limit_leaf");
-        arguments_["k_limit_fin_limit_joint_" + j_i_leaf_str] = params.at("k_fin_limit_leaf");
-        arguments_["k_limit_geo_limit_joint_" + j_i_leaf_str] = params.at("k_geo_limit_leaf");
-      }
-    }
-
-    for (const auto& [link_name_key, links_pair] : task_->GetSelfCollisionNamePairs()) {
-      for (const auto& paired_link_name : links_pair) {
-        // NOTE: This concatenation order must match one defined in [FabPlanner::set_components()] as params
-        // to add_spherical_self_collision_geometry(), further at [FabSelfCollisionLeaf ctor]
-        const auto affix = paired_link_name + "_" + link_name_key;
-        arguments_["exp_self_fin_self_collision_" + affix] = params.at("exp_fin_self_leaf");
-        arguments_["exp_self_geo_self_collision_" + affix] = params.at("exp_geo_self_leaf");
-        arguments_["k_self_fin_self_collision_" + affix] = params.at("k_fin_self_leaf");
-        arguments_["k_self_geo_self_collision_" + affix] = params.at("k_geo_self_leaf");
-      }
-    }
-
-    // damper arguments
-    arguments_["alpha_b_damper"] = params.at("alpha_b_damper");
-    arguments_["beta_close_damper"] = params.at("beta_close_damper");
-    arguments_["beta_distant_damper"] = params.at("beta_distant_damper");
-    arguments_["radius_shift_damper"] = params.at("radius_shift_damper");
-    arguments_["base_inertia"] = params.at("base_inertia");
-    arguments_["ex_factor_damper"] = params.at("ex_factor");
   }
 
   virtual void shuffle_env() {}
@@ -273,17 +204,23 @@ public:
     if (false == (is_valid_trial_idx(current_trial_idx_) && last_trial_started_)) {
       return;
     }
-    study_->tell(*trials_[current_trial_idx_], total_costs(get_tune_result()));
+    study_->tell(*trials_[current_trial_idx_], total_costs(get_trial_result()));
 
     if (current_trial_idx_ == (trials_.size() - 1)) {
-      FAB_PRINT("Best trial");
       const optuna::FrozenTrial best_trial = study_->best_trial();
-      FAB_PRINT(best_trial.number, best_trial.value);
+      FAB_PRINT("BEST TRIAL", best_trial.number, best_trial.value);
+
+      // Refresh [best_params_]
+      best_params_.clear();
+      for (const auto& [param_name, param_val] : get_default_parameters()) {
+        if (best_trial.contains(param_name)) {
+          best_params_.insert_or_assign(param_name, best_trial.param_to<double>(param_name));
+        }
+      }
       // FAB_PRINT("Saving study");
       // save_study();
-    } else {
-      current_trial_idx_++;
     }
+    current_trial_idx_++;
     last_trial_result_fetched_ = true;
   }
 
@@ -303,7 +240,7 @@ protected:
 
   void create_collision_metric() {
     const CaSX q = CaSX::sym("q", robot_->dof());
-    double distance_to_obstacles = 10000;
+    CaSX distance_to_obstacles = 10000;
     for (const auto& link_name : task_->GetCollisionLinkNames()) {
       const CaSX fk = robot_->fk()->casadi(q, link_name, task_->GetBaseBodyName(),
                                            fab_math::CASX_TRANSF_IDENTITY, true /*position_only*/);
@@ -311,8 +248,7 @@ protected:
       for (const auto& obst : task_->GetObstacleStatesX()) {
         std::vector obst_pos(3, 0.);
         memcpy(obst_pos.data(), obst.pos_.data(), 3 * sizeof(double));
-        distance_to_obstacles =
-            std::fmin(distance_to_obstacles, double(CaSX::norm_2(obst_pos - fk).scalar()));
+        distance_to_obstacles = CaSX::fmin(distance_to_obstacles, double(CaSX::norm_2(obst_pos - fk)));
       }
     }
     collision_metric_ = CaFunction("collision_metric", {q}, {distance_to_obstacles});
@@ -331,52 +267,38 @@ protected:
     return parameters;
   }
 
-  double evaluate_distance_to_goal(const std::vector<double>& q) const {
-    const auto& sub_goal_0_cfg = task_->GetSubGoals()[0]->cfg_;
-    const auto& sub_goal_0_position = sub_goal_0_cfg.desired_position;
-    const CaSX fk = robot_->fk()->casadi(q, sub_goal_0_cfg.child_link_name, task_->GetBaseBodyName(),
-                                         fab_math::CASX_TRANSF_IDENTITY, true /*position_only*/);
-    return double(CaSX::norm_2(CaSX(sub_goal_0_position) - fk).scalar()) / initial_distance_to_goal_0_;
+  double evaluate_pace_to_goal() const {
+    return planner_->GetDistanceToGoal(q0_) / initial_distance_to_goal_0_;
   }
 
-  double evaluate_distance_to_closest_obstacle(const CaSX& q) const {
-    return static_cast<double>(collision_metric_(q)[0]);
+  double evaluate_distance_to_closest_obstacle() const {
+    return static_cast<double>(collision_metric_(CaSX(q0_))[0]);
   }
 
-  void eval(const FabParamWeightDict& params = get_manual_parameters()) {
+  void eval(const FabParamDict& params) {
+    // Plan
+    planner_->Plan(params);
+
+    // Compute [path_length_, distances_to_goal_0_, distances_to_closest_obstacle_]
     const auto robot_dof = robot_->dof();
-
-    std::vector<double> q0 = task_->QueryJointPos(robot_dof);
-    auto q_old = q0;
-    std::vector<double> qdot = task_->QueryJointVel(robot_dof);
-    FAB_PRINTDB("QPOS", q0);
-    FAB_PRINTDB("QVEL", qdot);
-
-#if 1
-    // Setup [arguments_]
-    arguments_.clear();
-    set_goal_arguments();
-    set_collision_arguments();
-    set_other_arguments(params);
-
-    // [arguments_] -> [args]
-    FabCasadiArgMap args = {{"q", q0}, {"qdot", qdot}};
-    for (const auto& [arg_name, arg] : arguments_) {
-      args.insert_or_assign(arg_name, arg);
-    }
-    planner_->set_action(planner_->compute_action(args));
-#else
-    planner_->plan();
-#endif
-    path_length_ += double(CaSX::norm_2(CaSX(q0) - CaSX(q_old)).scalar());
-    q_old = q0;
-    distances_to_goal_0_.push_back(evaluate_distance_to_goal(q0));
-    distances_to_closest_obstacle_.push_back(evaluate_distance_to_closest_obstacle(q0));
+    q0_ = task_->QueryJointPos(robot_dof);
+    static auto q_last = q0_;
+    qdot_ = task_->QueryJointVel(robot_dof);
+    FAB_PRINTDB("QPOS", q0_);
+    FAB_PRINTDB("QVEL", qdot_);
+    path_length_ += double(CaSX::norm_2(CaSX(q0_) - CaSX(q_last)).scalar());
+    q_last = q0_;
+    distances_to_goal_0_.push_back(evaluate_pace_to_goal());
+    distances_to_closest_obstacle_.push_back(evaluate_distance_to_closest_obstacle());
+    FAB_PRINT("current_trial_idx_", current_trial_idx_);
+    FAB_PRINT("initial_distance_to_obstacles_", initial_distance_to_obstacles_);
+    FAB_PRINT("distances_to_goal_0_", distances_to_goal_0_.back());
+    FAB_PRINT("distances_to_closest_obstacle_", distances_to_closest_obstacle_.back());
   }
 
-  FabParamWeightDict get_tune_result() const {
+  FabParamWeightDict get_trial_result() const {
     return {{"path_length_", path_length_ / 10},
-            {"time_to_goal", std::reduce(distances_to_goal_0_.begin(), distances_to_goal_0_.end()) /
+            {"pace_to_goal", std::reduce(distances_to_goal_0_.begin(), distances_to_goal_0_.end()) /
                                  int(distances_to_goal_0_.size())},
             {"obstacles", 1 - *std::min_element(distances_to_closest_obstacle_.begin(),
                                                 distances_to_closest_obstacle_.end()) /
@@ -389,8 +311,6 @@ protected:
     last_trial_started_ = false;
     last_trial_result_fetched_ = false;
     path_length_ = 0.0;
-    initial_distance_to_goal_0_ = 0.0;
-    initial_distance_to_obstacles_ = 0.0;
     distances_to_goal_0_.clear();
     distances_to_closest_obstacle_.clear();
   }
@@ -403,13 +323,15 @@ protected:
   // NOTE: Env info (obstacles, etc.) is fetched directly through [task_]
   FabEnvironment env_;
 #endif
-  FabCasadiArgMap arguments_;
-  double dt_ = 0.05;
-  static constexpr int TRIALS_NUM = 10;
+  double dt_ = 0.01;
+  static constexpr int TRIALS_NUM = 100;
   std::vector<optuna::TrialPtr> trials_ = std::vector<optuna::TrialPtr>(TRIALS_NUM, nullptr);
   int current_trial_idx_ = 0;
   bool last_trial_started_ = false;
   bool last_trial_result_fetched_ = true;
+
+  std::vector<double> q0_;
+  std::vector<double> qdot_;
   double path_length_ = 0.0;
   double initial_distance_to_goal_0_ = 0.0;
   double initial_distance_to_obstacles_ = 0.0;
@@ -421,7 +343,9 @@ protected:
   std::shared_ptr<optuna::Study> study_ = nullptr;
   FabSearchSpaceData search_space_data_;
   optuna::SearchSpace search_space_;
-  FabParamWeightDict param_weights_ = {{"path_length_", 0.4}, {"time_to_goal", 0.4}, {"obstacles", 0.2}};
+  FabParamWeightDict param_weights_ = {{"path_length_", 0.4}, {"pace_to_goal", 0.4}, {"obstacles", 0.2}};
+  static FabParamDict best_params_;
 };
 
+FabParamDict FabParamTuner::best_params_ = get_default_parameters();
 const std::string FabParamTuner::DEFAULT_STUDY_DB_PATH = "sqlite:///fab_param_study.db";

@@ -41,6 +41,7 @@ using FabVariantVector = std::vector<FabVariant<TVariant...>>;
 static constexpr auto FAB_EPS = 1e-6;
 
 #define FAB_DEBUG (0)
+#define FAB_VERIFY_TUNED_PARAMS (1)
 #define FAB_USE_ACTUATOR_VELOCITY (1)
 #define FAB_USE_ACTUATOR_MOTOR (!FAB_USE_ACTUATOR_VELOCITY)
 #define FAB_DRAW_TRAJECTORY (1)

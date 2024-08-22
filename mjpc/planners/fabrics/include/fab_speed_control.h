@@ -15,7 +15,6 @@ public:
     // [beta_](initially as [beta] in initializer list)
     for (const auto& beta_param : CaSX::symvar(beta_)) {
       const auto beta_param_name = beta_param.name();
-
       if (fab_core::has_collection_element(beta_meta.var_names, beta_param_name)) {
         symbolic_params_.insert_or_assign(beta_param_name, beta_param);
       }
