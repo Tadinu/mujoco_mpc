@@ -88,9 +88,7 @@ public:
   // Fabrics config
   virtual bool IsFabricsSupported() const { return false; }
 
-  virtual FabPlannerConfigPtr GetFabricsConfig(bool is_static_env) const {
-    return std::make_shared<FabPlannerConfig>();
-  }
+  virtual FabPlannerConfigPtr GetFabricsConfig() const { return std::make_shared<FabPlannerConfig>(); }
 
   // delegates to ResidualLocked, while holding a lock
   std::unique_ptr<AbstractResidualFn> Residual() const;
@@ -134,12 +132,8 @@ public:
   virtual std::string XmlPath() const = 0;
   virtual std::string URDFPath() const { return {}; }
   virtual std::string GetBaseBodyName() const { return {}; }
-  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */
-    return {};
-  }
-  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */
-    return {};
-  }
+  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */ return {}; }
+  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */ return {}; }
   virtual FabSelfCollisionNamePairs GetSelfCollisionNamePairs() const {
     /* Ones in URDF, not XML */
     return {};
@@ -257,8 +251,8 @@ public:
 
   // - Obstacles
   virtual bool AreObstaclesFixed() const { return (GetDynamicObstaclesNum() == 0); }
-  int GetObstaclesDim() const { return AreObstaclesFixed() ? 3 : GetDynamicObstaclesNum(); }
-  virtual int GetDynamicObstaclesDim() const { return 3; }
+  int GetObstaclesDim() const { return AreObstaclesFixed() ? 3 : GetDynamicObstaclesDimension(); }
+  virtual int GetDynamicObstaclesDimension() const { return 3; }
   virtual void QueryObstacleStatesX() {}
 
   std::vector<StateX> GetObstacleStatesX() const {

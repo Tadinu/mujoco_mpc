@@ -37,8 +37,7 @@ void FabPlanner::InitTaskFabrics() {
   // NOTE: This can be invoked amid a run as "Tune" is toggled (to switch the setup), so requiring a lock
   const FabSharedMutexLock lock(policy_mutex_);
   // 1- Config
-  config_ = tuning_on_ ? FabPlannerConfig::get_symbolic_config()
-                       : task_->GetFabricsConfig(task_->IsGoalFixed() && task_->AreObstaclesFixed());
+  config_ = tuning_on_ ? FabPlannerConfig::get_symbolic_config() : task_->GetFabricsConfig();
 
   // 2- Robot, resetting [vars_, geometry_, target_velocity_] here-in!
   init_robot(dim_action_, task_->URDFPath(), task_->GetBaseBodyName(), task_->GetEndtipNames(), config_);
@@ -53,7 +52,7 @@ void FabPlanner::InitTaskFabrics() {
   set_components(task_->GetCollisionLinkNames(), task_->GetSelfCollisionNamePairs(), {}, goal,
                  task_->GetJointLimits() /* TODO: Fetch from RobotURDFModel()->joint_map*/,
                  task_->GetStaticObstaclesNum(), task_->GetDynamicObstaclesNum(), 0 /*cuboid_obstacles_num*/,
-                 task_->GetPlaneConstraintsNum(), task_->GetDynamicObstaclesDim());
+                 task_->GetPlaneConstraintsNum(), task_->GetDynamicObstaclesDimension());
 
   // 5- Concretize, calculating [xddot] + composing [cafunc_] based on it
   concretize(FAB_USE_ACTUATOR_VELOCITY ? FabControlMode::VEL : FabControlMode::ACC, 0.01);
