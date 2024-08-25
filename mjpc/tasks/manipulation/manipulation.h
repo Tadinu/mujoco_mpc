@@ -38,7 +38,7 @@ public:
   }
   std::vector<std::string> GetEndtipNames() const override {
     // Ones in URDF, not XML
-    static std::vector<std::string> names = {"panda_leftfinger"};
+    static std::vector<std::string> names = {"panda_leftfinger", "panda_rightfinger"};
     return names;
   }
   std::vector<std::string> GetCollisionLinkNames() const override {
@@ -57,10 +57,13 @@ public:
     // Ones in URDF, not XML
     return {{"panda_hand", {"panda_link2", "panda_link4"}}};
   }
-  int GetDynamicObstaclesNum() const override { return static_cast<int>(GetCollisionLinkNames().size()); }
+  int GetStaticObstaclesNum() const override { return 3; }
+  int GetDynamicObstaclesNum() const override {
+    return (planner_ && planner_->tuning_on_) ? static_cast<int>(GetCollisionLinkNames().size()) : 0;
+  }
   int GetPlaneConstraintsNum() const override { return 1; }
 
-  int GetActionDim() const override { return 7; }
+  int GetActionDim() const override { return (GetSubGoals()[0]->child_link_name() == "panda_hand") ? 7 : 9; }
   std::vector<FabSubGoalPtr> GetSubGoals() const override {
     // Static subgoals with static [desired_position]
     static std::vector<FabSubGoalPtr> subgoals = {
@@ -99,11 +102,18 @@ public:
     const auto* goal_pos = GetGoalPos();
     mju_copy(subgoals[0]->cfg_.desired_position.data(), goal_pos, 3);
     mju_copy(subgoals[1]->cfg_.desired_position.data(), goal_pos, 3);
+#if 0
+    static const auto link0_id = mj_name2id(model_, mjOBJ_BODY, "link0");  // GetBaseBodyName() - "pand_"
+    static const mjtNum* link0_pos = &data_->xpos[3 * link0_id];
+    FAB_PRINTDB(link0_id, link0_pos[0], link0_pos[1], link0_pos[2]);
+    mju_subFrom3(subgoals[0]->cfg_.desired_position.data(), link0_pos);
+    FAB_PRINTDB("Subgoal0 pos", subgoals[0]->cfg_.desired_position);
+#endif
     return subgoals;
   }
 
   bool IsGoalFixed() const override { return true; }
-  int GetDynamicObstaclesDim() const override { return 3; }
+  int GetDynamicObstaclesDimension() const override { return 3; }
   std::vector<FabJointLimit> GetJointLimits() const override {
     return {{-2.8973, 2.8973},   // panda_joint1
             {-1.7628, 1.7628},   // panda_joint2
@@ -148,14 +158,12 @@ public:
 
   bool QueryGoalReached() override { return false; }
   void QueryObstacleStatesX() override {
-    // NOTE: As observed, unclear why yet involving body links (as obstacles) disrupt the arm ik planning
-    if (!planner_->tuning_on_) {
-      return;
-    }
-    const auto fQueryObstacle = [this](const std::string& link_xml_name,
-                                       const std::string& link_collision_name) {
-      const auto obstacle_i_id = mj_name2id(model_, mjOBJ_BODY, link_xml_name.c_str());
-      const auto obstacle_geom_i_id = mj_name2id(model_, mjOBJ_GEOM, link_collision_name.c_str());
+    MJPC_LOCK_TASK_DATA_ACCESS;
+    obstacle_statesX_.clear();
+    const auto fQueryObstacle = [this](const std::string& obst_xml_name,
+                                       const std::string& obst_collision_name) {
+      const auto obstacle_i_id = mj_name2id(model_, mjOBJ_BODY, obst_xml_name.c_str());
+      const auto obstacle_geom_i_id = mj_name2id(model_, mjOBJ_GEOM, obst_collision_name.c_str());
       assert(obstacle_i_id >= 0);
       mjtNum* obstacle_i_size =
           (obstacle_geom_i_id >= 0) ? &model_->geom_size[3 * obstacle_geom_i_id] : nullptr;
@@ -192,19 +200,26 @@ public:
               rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_size ? obstacle_i_size : (mjtNum[]){})});
     };
 
-    MJPC_LOCK_TASK_DATA_ACCESS;
-    obstacle_statesX_.clear();
-    static const int prefix_len = std::string("panda_").size();
-    for (const auto& link_urdf_name : GetCollisionLinkNames()) {
-      const auto link_xml_name = link_urdf_name.substr(prefix_len);
+    // Env obstacles
+    fQueryObstacle("obstacle_0", "obstacle_0");
+    fQueryObstacle("obstacle_1", "obstacle_1");
 
-      // NOTE: In this case, GetObstaclesstate
-      if (link_urdf_name == "link5") {
-        fQueryObstacle("link5", "link5_c0");
-        fQueryObstacle("link5", "link5_c1");
-        fQueryObstacle("link5", "link5_c2");
-      } else {
-        fQueryObstacle(link_xml_name, link_xml_name + "_c");
+    // Body arm links as obstacles
+    // NOTE: As observed, unclear why yet involving body links (as obstacles) disrupt the arm ik planning
+    if (planner_ && planner_->tuning_on_) {
+      static const int prefix_len = std::string("panda_").size();
+      for (const auto& link_urdf_name : GetCollisionLinkNames()) {
+        const auto link_xml_name = link_urdf_name.substr(prefix_len);
+        // NOTE:
+        // WIP-["link5"]: This requires GetDynamicObstaclesNum() to be updated to match the total no of
+        // collision links + free obsts
+        if (link_urdf_name == "link5") {
+          fQueryObstacle("link5", "link5_c0");
+          fQueryObstacle("link5", "link5_c1");
+          fQueryObstacle("link5", "link5_c2");
+        } else {
+          fQueryObstacle(link_xml_name, link_xml_name + "_c");
+        }
       }
     }
   }
@@ -247,7 +262,7 @@ public:
   void ModifyScene(const mjModel* model, const mjData* data, mjvScene* scene) const override {
     // Draw goal
     static constexpr float GREEN[] = {0.0, 1.0, 0.0, 1.0};
-    mjpc::AddGeom(scene, mjGEOM_SPHERE, (mjtNum[]){0.05}, GetGoalPos(), /*mat=*/nullptr, GREEN);
+    mjpc::AddGeom(scene, mjGEOM_SPHERE, (mjtNum[]){0.02}, GetGoalPos(), /*mat=*/nullptr, GREEN);
 
     // Draw pinch
     static constexpr float BLUE[] = {0.0, 0.0, 1.0, 1.0};
@@ -262,7 +277,7 @@ protected:
   }
   ResidualFn* InternalResidual() override { return &residual_; }
   bool IsFabricsSupported() const override { return true; }
-  FabPlannerConfigPtr GetFabricsConfig(bool is_static_env) const override;
+  FabPlannerConfigPtr GetFabricsConfig() const override;
 
 private:
   ResidualFn residual_;

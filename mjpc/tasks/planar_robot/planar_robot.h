@@ -66,7 +66,7 @@ public:
   }
 
   bool IsGoalFixed() const override { return true; }
-  int GetDynamicObstaclesDim() const override { return 3; }
+  int GetDynamicObstaclesDimension() const override { return 3; }
   std::vector<FabJointLimit> GetJointLimits() const override { return {}; }
 
   // NOTES on mutex:

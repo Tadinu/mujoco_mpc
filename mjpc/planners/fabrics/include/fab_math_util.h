@@ -14,7 +14,7 @@
 
 struct FabRandom {
   static int seed;
-  // PRN
+  // PRN, random seed for the random number engine
   static std::random_device rd;
 
   // Standard mersenne_twister_engine seeded with rd()
@@ -32,6 +32,7 @@ struct FabRandom {
   }
 
   static double rand() { return rand<double>(0.f, 1.f); }
+  static bool rand_bool() { return rand() < 0.5f; }
 };
 
 namespace fab_math {

@@ -105,7 +105,7 @@ void manipulation::Bring::ResetLocked(const mjModel* model) {
   residual_.model_vals_ = ModelValues::FromModel(model);
 }
 
-FabPlannerConfigPtr manipulation::Bring::GetFabricsConfig(bool is_static_env) const {
+FabPlannerConfigPtr manipulation::Bring::GetFabricsConfig() const {
   static auto config = std::make_shared<FabPlannerConfig>(FabPlannerConfig{
       .collision_geometry =
           [](const CaSX& x, const CaSX& xdot, const std::string& affix) {

@@ -211,10 +211,10 @@ void Particle::TransitionLocked(mjModel* model, mjData* data) {
   Task::TransitionLocked(model, data);
 
   // some Lissajous curve
-  double goal_curve_pos[2] = {0.25 * mju_sin(data->time), 0.25 * mju_cos(data->time / mjPI)};
-
-  // update mocap position
-  SetGoalPos(goal_curve_pos);
+  static constexpr float amplitude = 0.1;
+  static constexpr float angular_vel = 2;  // rad/s
+  SetGoalPos((double[]){amplitude * mju_sin(angular_vel * data->time),
+                        amplitude * mju_cos(angular_vel * data->time / mjPI), 0.01});
   MoveObstacles();
 }
 
@@ -236,22 +236,39 @@ void Particle::ModifyScene(const mjModel* model, const mjData* data, mjvScene* s
 #endif
 }
 
-FabPlannerConfigPtr Particle::GetFabricsConfig(bool is_static_env) const {
+FabPlannerConfigPtr Particle::GetFabricsConfig() const {
   static const FabConfigFunc f1 = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
     return FabConfigExprMeta{(-2.0 / x) * CaSX::pow(xdot, 2)};
   };
   static const FabConfigFunc f2 = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
     return FabConfigExprMeta{(1.0 / CaSX::pow(x, 2)) * (1 - CaSX::heaviside(xdot)) * CaSX::pow(xdot, 2)};
   };
-  // NOTE: Either create a new config instance here, or using a static one but requiring more custom setups
+  const FabConfigFunc fAttractor_potential = [this](const CaSX& x, const CaSX& xdot,
+                                                    const std::string& affix) {
+    // alpha: scaling factor for the softmax
+    const float alpha = (IsGoalFixed() && AreObstaclesFixed()) ? 70.f : 1000.f;
+    const CaSX x_norm = CaSX::norm_2(x);
+    return FabConfigExprMeta{5.0 * (x_norm + (1 / alpha) * CaSX::log(1 + CaSX::exp(-2 * alpha * x_norm)))};
+  };
+  const FabConfigFunc fAttractor_metric = [this](const CaSX& x, const CaSX& xdot, const std::string& affix) {
+    const float alpha = (IsGoalFixed() && AreObstaclesFixed()) ? 20.f : 300.f;
+    static constexpr float beta = 0.3;
+    const CaSX x_norm = CaSX::norm_2(x);
+    return FabConfigExprMeta{((alpha - beta) * CaSX::exp(-1 * CaSX::pow(0.75 * x_norm, 2)) + beta) *
+                             fab_math::CASX_IDENTITY(x.size().first)};
+  };
+  // NOTE: Either create a new config instance here, or using a static one but requiring separate
+  // [GetFabricsConfig()] definitions for [Particle] & [ParticleFixed]
   auto config = std::make_shared<FabPlannerConfig>();
-  if (is_static_env) {
+  if (IsGoalFixed() && AreObstaclesFixed()) {
     config->geometry_plane_constraint = f1;
     config->finsler_plane_constraint = f2;
   } else {
     config->collision_geometry = f1;
     config->collision_finsler = f2;
   }
+  config->attractor_potential = fAttractor_potential;
+  config->attractor_metric = fAttractor_metric;
   return config;
 }
 
@@ -269,8 +286,7 @@ void ParticleFixed::TransitionLocked(mjModel* model, mjData* data) {
     data->ctrl[0] = 0.f;
     data->ctrl[1] = 0.f;
     // Randomize goal and obstacles for the next run
-    double new_goal_pos[2] = {rand_val(), rand_val()};
-    SetGoalPos(new_goal_pos);
+    SetGoalPos((double[]){rand_val(), rand_val(), 0.01});
     RandomizeObstacles();
   }
 }
