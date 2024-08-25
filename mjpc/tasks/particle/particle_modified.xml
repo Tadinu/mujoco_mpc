@@ -1,6 +1,6 @@
 <mujoco model="Particle">
   <option timestep="0.01">
-    <flag contact="enable"/>
+    <flag contact="enable" multiccd="enable"/>
   </option>
 
   <default>

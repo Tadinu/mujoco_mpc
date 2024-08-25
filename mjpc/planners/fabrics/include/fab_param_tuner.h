@@ -323,7 +323,6 @@ protected:
   // NOTE: Env info (obstacles, etc.) is fetched directly through [task_]
   FabEnvironment env_;
 #endif
-  double dt_ = 0.01;
   static constexpr int TRIALS_NUM = 100;
   std::vector<optuna::TrialPtr> trials_ = std::vector<optuna::TrialPtr>(TRIALS_NUM, nullptr);
   int current_trial_idx_ = 0;
