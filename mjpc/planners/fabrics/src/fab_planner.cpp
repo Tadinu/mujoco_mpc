@@ -133,9 +133,7 @@ void FabPlanner::SetTuningArguments(const FabParamWeightDict& params) {
 #endif
       return params.at(param_name);
     }
-    FAB_PRINT("SetTuningArguments: param not defined", param_name);
-    assert(false);
-    return 0.0;
+    throw FabError::customized("SetTuningArguments", "Undefined param: " + std::string(param_name));
   };
 
   const auto fconstraint_prop_name = [](const char* prefix, const std::string& link_name, const int i) {
@@ -162,7 +160,7 @@ void FabPlanner::SetTuningArguments(const FabParamWeightDict& params) {
       arguments_[fconstraint_prop_name("k_plane_fin_", link_name, i)] = fetch_param("k_plane_fin");
       arguments_[fconstraint_prop_name("exp_plane_fin_", link_name, i)] = fetch_param("exp_plane_fin");
     }  // End plane constraints
-  }    // End collision link names
+  }  // End collision link names
 
   // Sundries
   arguments_["base_inertia"] = fetch_param("base_inertia");
