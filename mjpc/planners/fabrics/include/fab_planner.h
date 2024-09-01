@@ -31,8 +31,6 @@
 #include "mjpc/planners/planner.h"
 #include "mjpc/utilities.h"
 
-enum class FabControlMode : uint8_t { VEL, ACC };
-
 class FabParamTuner;
 
 using FabParamDict = std::map<const char*, double>;
@@ -48,10 +46,10 @@ public:
   FabRobotPtr robot() const { return robot_; }
   mjpc::Task* task() const { return task_; }
 
-  void init_robot(int dof, std::string urdf_path, std::string base_link_name,
+  void init_robot(std::string name, int dof, std::string urdf_path, std::string base_link_name,
                   std::vector<std::string> endtip_names, FabPlannerConfigPtr config) {
     // NOTE: Always need to reset robot afresh regardless to renew its vars
-    robot_ = std::make_shared<FabRobot>(dof, std::move(urdf_path), std::move(base_link_name),
+    robot_ = std::make_shared<FabRobot>(std::move(name), dof, std::move(urdf_path), std::move(base_link_name),
                                         std::move(endtip_names), std::move(config));
     vars_ = robot_->vars();
     geometry_ = robot_->weighted_geometry();
@@ -63,7 +61,8 @@ public:
   void add_geometry(const FabDifferentialMap& forward_map, FabLagrangianPtr lagrangian,
                     FabGeometryPtr geometry) const {
     add_weighted_geometry(forward_map,
-                          FabWeightedSpec({{"g", std::move(geometry)}, {"le", std::move(lagrangian)}}));
+                          FabWeightedSpec(geometry->name() + "_" + lagrangian->name(),
+                                          {{"g", std::move(geometry)}, {"le", std::move(lagrangian)}}));
   }
 
   void add_dynamic_geometry(const FabDifferentialMap& forward_map,
@@ -71,6 +70,7 @@ public:
                             const FabDifferentialMap& geometry_map, FabLagrangianPtr lagrangian,
                             FabGeometryPtr geometry) const {
     const auto weighted_spec = FabWeightedSpec(
+        geometry->name() + "_" + lagrangian->name(),
         {{"g", std::move(geometry)}, {"le", std::move(lagrangian)}, {"ref_names", dynamic_map.ref_names()}});
     const auto pwg1 = weighted_spec.pull_back<FabWeightedSpec>(geometry_map);
     const auto pwg2 = pwg1->dynamic_pull_back<FabWeightedSpec>(dynamic_map);
@@ -122,7 +122,9 @@ public:
     if (nullptr == forced_geometry_) {
       forced_geometry_ = std::make_shared<FabWeightedSpec>(*geometry_);
     }
-    *forced_geometry_ += *FabWeightedSpec({{"g", geometry}, {"le", std::move(lagrangian)}})
+
+    *forced_geometry_ += *FabWeightedSpec(geometry->name() + "_" + lagrangian->name(),
+                                          {{"g", geometry}, {"le", std::move(lagrangian)}})
                               .pull_back<FabWeightedSpec>(*forward_map);
     if (is_prime_forcing_leaf) {
       forced_vars_ = geometry->vars();
@@ -140,9 +142,12 @@ public:
     if (nullptr == forced_geometry_) {
       forced_geometry_ = std::make_shared<FabWeightedSpec>(*geometry_);
     }
-    const auto wg = FabWeightedSpec({{"g", geometry}, {"le", std::move(lagrangian)}})
-                        .pull_back<FabWeightedSpec>(*forward_map);
-    const auto pwg = wg->dynamic_pull_back<FabWeightedSpec>(dynamic_map);
+
+    // 1- Pullback from a weighted spec by [dynamic_map]
+    const auto pwg = FabWeightedSpec(geometry->name() + "_" + lagrangian->name(),
+                                     {{"g", geometry}, {"le", std::move(lagrangian)}})
+                         .dynamic_pull_back<FabWeightedSpec>(dynamic_map);
+    // 2- Pullback 2nd time by [forward_map]
     const auto ppwg = pwg->pull_back<FabWeightedSpec>(*forward_map);
     *forced_geometry_ += *ppwg;
     if (is_prime_forcing_leaf) {
@@ -159,13 +164,17 @@ public:
   void set_execution_energy(FabLagrangianPtr execution_lagrangian) {
     execution_lagrangian_ = std::move(execution_lagrangian);
     execution_geometry_ = std::make_shared<FabWeightedSpec>(
-        FabWeightedSpecArgs{{"g", std::make_shared<FabGeometry>(FabGeometryArgs{{"s", geometry_}})},
-                            {"le", execution_lagrangian_}});
+        execution_lagrangian_->name() + "_weighted_spec",
+        FabWeightedSpecArgs{
+            {"g", std::make_shared<FabGeometry>(geometry_->name(), FabGeometryArgs{{"s", geometry_}})},
+            {"le", execution_lagrangian_}});
     execution_geometry_->concretize();
 
     try {
       forced_speed_controlled_geometry_ = std::make_shared<FabWeightedSpec>(
-          FabWeightedSpecArgs{{"g", std::make_shared<FabGeometry>(FabGeometryArgs{{"s", forced_geometry_}})},
+          execution_lagrangian_->name() + "_weighted_spec",
+          FabWeightedSpecArgs{{"g", std::make_shared<FabGeometry>(forced_geometry_->name(),
+                                                                  FabGeometryArgs{{"s", forced_geometry_}})},
                               {"le", execution_lagrangian_}});
       forced_speed_controlled_geometry_->concretize();
     } catch (const FabParamNotFoundError& e) {
@@ -179,16 +188,19 @@ public:
     const auto& dm_psi = forced_forward_map_;
     assert(execution_lagrangian_);
     const auto& ex_lag = execution_lagrangian_;
+    // NOTE: [damper_] will be later used in [FabPlanner::concretize()]
     damper_ = FabDamper(x_psi, config_->damper_beta(x_psi, {}, "damper"),
                         config_->damper_eta({}, CaSX::vertcat(CaSX::symvar(ex_lag->l())), "damper"), dm_psi,
                         ex_lag->l());
     vars_->add_parameters(damper_.symbolic_parameters());
   }
 
-  CaSX get_forward_kinematics(const std::string& link_name, bool position_only = true) const {
+  CaSX get_forward_kinematics(const std::string& link_name,
+                              const CaSX& offset = fab_math::CASX_TRANSF_IDENTITY,
+                              bool position_only = true) const {
     const auto fk = robot_->fk();
     assert(fk);
-    return fk ? fk->casadi(vars_->position_var(), link_name, {}, fab_math::CASX_TRANSF_IDENTITY,
+    return fk ? fk->casadi(vars_->position_var(), link_name, {}, fab_math::CASX_TRANSF_IDENTITY, offset,
                            position_only)
               : CaSX();
   }
@@ -244,7 +256,7 @@ public:
                                                int dynamic_obstacle_dimension = 3) {
     assert(dynamic_obstacle_dimension <= fk.size().first);
     auto dyn_spherical_obstacle_leaf = FabDynamicObstacleLeaf(
-        vars_, fab_core::get_casx(fk, std::array<casadi_int, 2>{0, casadi_int(dynamic_obstacle_dimension)}),
+        vars_, fab_core::get_casx(fk, std::array<casadi_int, 2>{0, (casadi_int)dynamic_obstacle_dimension}),
         obstacle_name, collision_link_name, reference_params);
     dyn_spherical_obstacle_leaf.set_geometry(config_->collision_geometry);
     dyn_spherical_obstacle_leaf.set_finsler_structure(config_->collision_finsler);
@@ -303,7 +315,7 @@ public:
 
   void load_problem_configuration(FabPlannerProblemConfig problem_config) {
     problem_config_ = std::move(problem_config);
-    for (const auto& obstacle : problem_config_.environment().obstacles()) {
+    for (const auto& obstacle : problem_config_.environment()->obstacles()) {
       vars_->add_parameters(obstacle->sym_parameters());
     }
 
@@ -323,7 +335,8 @@ public:
             std::array<FORCING_TYPE, 3>{FORCING_TYPE::SPEED_CONTROLLED, FORCING_TYPE::EXECUTION_ENERGY,
                                         FORCING_TYPE::FORCED_ENERGIZED},
             config_->forcing_type)) {
-      set_execution_energy(std::make_shared<FabExecutionLagrangian>(vars_));
+      set_execution_energy(
+          std::make_shared<FabExecutionLagrangian>(problem_config_.environment()->name(), vars_));
     }
 
     // [SPEED CONTROL]
@@ -357,7 +370,7 @@ public:
   }
 
   void set_collision_avoidance() {
-    const auto environment = problem_config_.environment();
+    const auto& environment = problem_config_.environment();
     const auto robot_representation = problem_config_.robot_representation();
     const auto collision_links = robot_representation.collision_links();
     for (const auto& [link_name, collision_link] : collision_links) {
@@ -384,10 +397,9 @@ public:
       collision_link->set_origin(fk);
       vars_->add_parameters(collision_link->sym_parameters());
       vars_->add_parameter_values(collision_link->parameters());
-      for (const auto& obstacle : environment.obstacles()) {
+      for (const auto& obstacle : environment->obstacles()) {
         const CaSX distance = collision_link->distance(obstacle.get());
-        const auto leaf_name = link_name + "_" + obstacle->name() + "_leaf";
-        auto leaf = FabAvoidanceLeaf(vars_, leaf_name, distance);
+        auto leaf = FabAvoidanceLeaf(link_name + "_" + obstacle->name() + "_leaf", vars_, distance);
         leaf.set_geometry(config_->collision_geometry);
         leaf.set_finsler_structure(config_->collision_finsler);
         add_leaf(&leaf);
@@ -487,12 +499,13 @@ public:
     }
 
     // Execution energy
+    const auto exec_energy = std::make_shared<FabExecutionLagrangian>(task()->Name() + "_exec_lag", vars_);
     if (goal.is_valid()) {
       set_goal_component(goal);
-      set_execution_energy(std::make_shared<FabExecutionLagrangian>(vars_));
+      set_execution_energy(exec_energy);
       set_speed_control();
     } else {
-      set_execution_energy(std::make_shared<FabExecutionLagrangian>(vars_));
+      set_execution_energy(exec_energy);
     }
   }
 
@@ -502,10 +515,13 @@ public:
     if (FabSubGoalType::STATIC_JOINT_SPACE == subgoal_type) {
       return fab_core::get_casx(vars_->position_var(), subgoal_indices);
     } else {
-      const auto fk_child = get_forward_kinematics(sub_goal->child_link_name());
+      static constexpr bool position_only = true;
+      const auto fk_child =
+          get_forward_kinematics(sub_goal->child_link_name(), sub_goal->desired_pose_offset(), position_only);
       CaSX fk_parent;
       try {
-        fk_parent = get_forward_kinematics(sub_goal->parent_link_name());
+        fk_parent = get_forward_kinematics(sub_goal->parent_link_name(), sub_goal->desired_pose_offset(),
+                                           position_only);
       } catch (const FabError& e) {
         fk_parent = CaSX::zeros(3);
       }
@@ -548,7 +564,7 @@ public:
 
   void concretize(const FabControlMode control_mode = FabControlMode::ACC, float time_step = 0) {
     control_mode_ = control_mode;
-    if ((FabControlMode::VEL == control_mode) && (time_step < 0)) {
+    if ((FabControlMode::VEL == control_mode) && (time_step <= 0)) {
       throw FabError(std::to_string(time_step) + ": Invalid time step passed in velocity control mode");
     }
     geometry_->concretize();
@@ -561,12 +577,14 @@ public:
         const CaSX a_ex =
             (eta * execution_geometry_->alpha()) + ((1 - eta) * forced_speed_controlled_geometry_->alpha());
         const CaSX beta_subst = damper_.substitute_beta(-a_ex, -geometry_->alpha());
+
+        // https://arxiv.org/abs/2010.15676 - Form. 13, 14, 15
 #if 1
         xddot = forced_geometry_->xddot() -
                 (a_ex + beta_subst) *
                     (geometry_->xdot() - CaSX::mtimes(forced_geometry_->Minv(), target_velocity_));
 #else
-        xddot = forced_geometry_.xddot();
+        xddot = forced_geometry_->xddot();
 #endif
       } break;
 
@@ -600,16 +618,17 @@ public:
     }  // end switch(config_->forcing_type)
 
     // CasadiFunction
+    auto&& func_name =
+        fab_core::task_function_name(task_->Name(), task_->IsGoalFixed(), task_->AreObstaclesFixed());
     switch (control_mode) {
       case FabControlMode::ACC: {
-        cafunc_ =
-            std::make_shared<FabCasadiFunction>("fab_planner_func", *vars_, CaSXDict{{"action", xddot}});
+        cafunc_ = std::make_shared<FabCasadiFunction>(func_name, *vars_, CaSXDict{{"action", xddot}}, true);
       } break;
 
       case FabControlMode::VEL: {
         assert(time_step > 0);
         cafunc_ = std::make_shared<FabCasadiFunction>(
-            "fab_planner_func", *vars_, CaSXDict{{"action", geometry_->xdot() + time_step * xddot}});
+            func_name, *vars_, CaSXDict{{"action", geometry_->xdot() + time_step * xddot}}, true);
       } break;
     }
   }
@@ -713,12 +732,19 @@ public:
   // optimize nominal policy
   void OptimizePolicy(int horizon, mjpc::ThreadPool& pool) override;
 
-  double GetDistanceToGoal(const std::vector<double>& q, int subgoal_idx = 0) const {
-    const auto& sub_goal_0_cfg = task_->GetSubGoals()[subgoal_idx]->cfg_;
-    const auto& sub_goal_0_position = sub_goal_0_cfg.desired_position;
-    const CaSX fk = robot_->fk()->casadi(q, sub_goal_0_cfg.child_link_name, task_->GetBaseBodyName(),
-                                         fab_math::CASX_TRANSF_IDENTITY, true /*position_only*/);
-    return double(CaSX::norm_2(CaSX(sub_goal_0_position) - fk).scalar());
+  double GetDistanceToGoal(const std::vector<double>& q, int subgoal_idx = 0,
+                           bool position_only = true) const {
+    const auto& subgoal_0_cfg = task_->GetSubGoals()[subgoal_idx]->cfg_;
+    const auto& subgoal_0_pose = subgoal_0_cfg.desired_state.pose;
+    const auto& subgoal_0_position = subgoal_0_pose.pos;
+
+    const auto& subgoal_0_pose_offset = subgoal_0_cfg.desired_state.pose;
+    const CaSX fk = robot_->fk()->casadi(q, subgoal_0_cfg.child_link_name, task_->GetBaseBodyName(),
+                                         fab_math::CASX_TRANSF_IDENTITY,
+                                         fab_math::transform(urdf::Vector3(subgoal_0_pose_offset.pos),
+                                                             urdf::Vector3(subgoal_0_pose_offset.rot)),
+                                         position_only);
+    return double(CaSX::norm_2(CaSX(subgoal_0_position) - fk).scalar());
   }
 
   double GetCurrentDistanceToGoal(int subgoal_idx = 0) const {
@@ -760,21 +786,15 @@ public:
     }
 
     // APPLY ACTION: COPY [action_] -> [action]
-    const mjtNum* cur_pos = task_->GetStartPos();
-    if (cur_pos) {
-      trajectory_->trace.push_back(cur_pos[0]);
-      trajectory_->trace.push_back(cur_pos[1]);
-      trajectory_->trace.push_back(cur_pos[2]);
+    const mjtNum* target_pos = task_->QueryTargetPos();
+    if (target_pos) {
+      trajectory_->trace.push_back(target_pos[0]);
+      trajectory_->trace.push_back(target_pos[1]);
+      trajectory_->trace.push_back(target_pos[2]);
     }
     FAB_PRINTDB("ACTION", action_);
-    mju_copy(action, action_.data(), int(action_.size()));
 #if FAB_USE_ACTUATOR_VELOCITY
-    mju_scl(action, action, task_->actuator_kv, int(action_.size()));
-#elif FAB_USE_ACTUATOR_MOTOR
-    static const auto pointmass_id = task_->GetTargetObjectId();
-    static const auto pointmass = model_->body_mass[pointmass_id];
-    static const auto& linear_inertia = pointmass;
-    mju_scl(action, action, linear_inertia, action_.size());
+    mju_scl(action, action_.data(), task_->actuator_kv, int(action_.size()));
 #endif
 
     // Clear [action_]
