@@ -17,9 +17,9 @@
 class FabRobot {
 public:
   FabRobot() = default;
-  FabRobot(int dof, std::string model_path, std::string base_link_name, std::vector<std::string> endtip_names,
-           FabPlannerConfigPtr config)
-      : dof_(dof), model_path_(std::move(model_path)), config_(std::move(config)) {
+  FabRobot(std::string name, int dof, std::string model_path, std::string base_link_name,
+           std::vector<std::string> endtip_names, FabPlannerConfigPtr config)
+      : name_(std::move(name)), dof_(dof), model_path_(std::move(model_path)), config_(std::move(config)) {
     // 1- FK
     if (absl::EndsWith(model_path_, ".urdf")) {
       fk_ = std::make_shared<FabURDFForwardKinematics>(model_path_, std::move(base_link_name),
@@ -41,13 +41,16 @@ public:
     const auto qdot = vars_->velocity_var();
     const auto [base_energy, new_var_names] = config_->base_energy(q, qdot, {});
     vars_->add_parameters(fab_core::parse_symbolic_casx(base_energy, new_var_names));
-    auto base_geometry =
-        std::make_shared<FabGeometry>(FabGeometryArgs{{"h", CaSX::zeros(dof_)}, {"var", vars_}});
-    auto base_lagrangian = std::make_shared<FabLagrangian>(base_energy, FabLagrangianArgs{{"var", vars_}});
+    auto base_geometry = std::make_shared<FabGeometry>(
+        name() + "_base_geom", FabGeometryArgs{{"h", CaSX::zeros(dof_)}, {"var", vars_}});
+    auto base_lagrangian =
+        std::make_shared<FabLagrangian>(name() + "_base_lag", base_energy, FabLagrangianArgs{{"var", vars_}});
     geometry_ = std::make_shared<FabWeightedSpec>(
+        name() + "_weighted_spec",
         FabWeightedSpecArgs{{"g", std::move(base_geometry)}, {"le", std::move(base_lagrangian)}});
   }
 
+  std::string name() const { return name_; }
   std::string model_name() const { return std::filesystem::path(model_path_).stem().string(); }
   int dof() const { return dof_; }
   FabVariablesPtr vars() const { return vars_; }
@@ -55,6 +58,7 @@ public:
   FabWeightedSpecPtr weighted_geometry() const { return geometry_; }
 
 protected:
+  std::string name_;
   std::string model_path_;
   int dof_ = 0;
   FabVariablesPtr vars_ = nullptr;

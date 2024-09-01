@@ -12,9 +12,9 @@
 #include "mjpc/planners/fabrics/include/fab_variables.h"
 #include "mjpc/planners/fabrics/include/leaf/fab_leaf.h"
 
-/* The GenericAttractor is a leaf to the tree of fabrics.
+/* FabGenericAttractorLeaf is a leaf to the tree of fabrics.
  * The attractor's potential and metric are defined through the corresponding functions to which the symbolic
- * expression is passed as a string.
+ * expression function
  */
 class FabGenericAttractorLeaf : public FabLeaf {
 public:
@@ -23,7 +23,7 @@ public:
 
   FabGenericAttractorLeaf(const FabVariablesPtr& root_variables, const CaSX& fk_goal,
                           const std::string& attractor_name)
-      : FabLeaf(root_variables, attractor_name + "_leaf", fk_goal, int(fk_goal.size().first)) {
+      : FabLeaf(attractor_name + "_leaf", root_variables, fk_goal, int(fk_goal.size().first)) {
     set_forward_map(attractor_name);
   }
 
@@ -32,7 +32,8 @@ public:
     parent_vars_->add_parameters(fab_core::parse_symbolic_casx(x_potential, var_names));
     const CaSX psi = weight_var_ * x_potential;
     CaSX h_psi = CaSX::gradient(psi, x_);
-    geom_ = std::make_shared<FabGeometry>(FabGeometryArgs{{"h", std::move(h_psi)}, {"var", leaf_vars_}});
+    geom_ = std::make_shared<FabGeometry>(name() + "_geom",
+                                          FabGeometryArgs{{"h", std::move(h_psi)}, {"var", leaf_vars_}});
   }
 
   void set_metric(const FabConfigFunc& metric) override {
@@ -41,7 +42,8 @@ public:
     const auto [attractor_metric, var_names] = metric(x, xdot, leaf_name_);
     parent_vars_->add_parameters(fab_core::parse_symbolic_casx(attractor_metric, var_names));
     const auto lagrangian_psi = CaSX::dot(xdot, CaSX::mtimes(attractor_metric, xdot));
-    lag_ = std::make_shared<FabLagrangian>(lagrangian_psi, FabLagrangianArgs{{"var", leaf_vars_}});
+    lag_ = std::make_shared<FabLagrangian>(name() + "_lag", lagrangian_psi,
+                                           FabLagrangianArgs{{"var", leaf_vars_}});
   }
 
 private:
@@ -58,7 +60,8 @@ private:
     geom_params_ = {{std::move(reference_name), reference_var_}, {std::move(weight_name), weight_var_}};
     leaf_vars_->add_parameters(geom_params_);
     parent_vars_->add_parameters(geom_params_);
-    diffmap_ = std::make_shared<FabParameterizedGoalMap>(parent_vars_, forward_kinematics_, reference_var_);
+    diffmap_ = std::make_shared<FabParameterizedGoalMap>(name() + "_diffmap", parent_vars_,
+                                                         forward_kinematics_, reference_var_);
   }
 
 protected:

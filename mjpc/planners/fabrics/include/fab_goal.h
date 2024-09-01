@@ -10,6 +10,28 @@ enum class FabSubGoalType : uint8_t { STATIC, STATIC_JOINT_SPACE, DYNAMIC /* Ana
 
 enum class FabSubGoalTrajectoryType : uint8_t { ANALYTIC, SPLINE };
 
+struct FabPose {
+  std::vector<double> pos;
+  std::vector<double> rot;
+  bool empty() const { return pos.empty() && rot.empty(); }
+};
+
+struct FabDynamicsState {
+  std::vector<double> default_lin;
+  std::vector<double> default_ang;
+  FabPose pose;
+  FabPose pose_offset;
+  std::vector<double> linear_vel;
+  std::vector<double> angular_vel;
+  std::vector<double> linear_acc;
+  std::vector<double> angular_acc;
+  void reset() {
+    pose.pos = pose_offset.pos = linear_vel = linear_acc = default_lin;
+    pose.rot = pose_offset.rot = angular_vel = angular_acc = default_ang;
+  }
+  bool valid() const { return (!pose.empty()); }
+};
+
 struct FabSubGoalConfig {
   std::string name;
   FabSubGoalType type = FabSubGoalType::STATIC;
@@ -21,9 +43,7 @@ struct FabSubGoalConfig {
   std::string child_link_name;
   std::vector<double> lower_pos;
   std::vector<double> upper_pos;
-  std::vector<double> desired_position = default_values(0.);
-  std::vector<double> desired_vel = default_values(0.);
-  std::vector<double> desired_acc = default_values(0.);
+  FabDynamicsState desired_state = {.default_lin = default_values(0.), .default_ang = default_values(0.)};
 
   FabSubGoalTrajectoryType traj_type = FabSubGoalTrajectoryType::ANALYTIC;
 
@@ -32,7 +52,7 @@ struct FabSubGoalConfig {
     return std::vector<double>(dimension(), default_val);
   }
 
-  void clear() { desired_position = desired_vel = desired_acc = default_values(0.); }
+  void clear() { desired_state.reset(); }
 };
 
 struct FabSubGoal {
@@ -59,10 +79,23 @@ struct FabSubGoal {
 
   bool is_primary_goal() const { return cfg_.is_primary_goal; }
 
+  CaSX desired_pose(bool position_only = false) const {
+    const auto& pose = cfg_.desired_state.pose;
+    return position_only ? CaSX(pose.pos)
+                         : fab_math::transform(urdf::Vector3(pose.pos), urdf::Vector3(pose.rot));
+  }
+
+  CaSX desired_pose_offset(bool position_only = false) const {
+    const auto& pose_offset = cfg_.desired_state.pose_offset;
+    return position_only
+               ? CaSX(pose_offset.pos)
+               : fab_math::transform(urdf::Vector3(pose_offset.pos), urdf::Vector3(pose_offset.rot));
+  }
+
   virtual void verify() const {
-    const auto pos_size = cfg_.desired_position.size();
-    const auto vel_size = cfg_.desired_vel.size();
-    const auto acc_size = cfg_.desired_acc.size();
+    const auto pos_size = cfg_.desired_state.pose.pos.size();
+    const auto vel_size = cfg_.desired_state.linear_vel.size();
+    const auto acc_size = cfg_.desired_state.linear_acc.size();
     if (pos_size != dimension()) {
       throw FabError("Desired position size: " + std::to_string(pos_size) +
                      " does not match dimension one: " + std::to_string(dimension()));
@@ -95,7 +128,7 @@ struct FabStaticSubGoal : public FabSubGoal {
     const auto limit_highs = limit_high_pos();
     const auto low_limit_size = limit_lows.size();
     for (auto i = 0; i < low_limit_size; ++i) {
-      cfg_.desired_position[i] = FabRandom::rand<double>(limit_lows[i], limit_highs[i]);
+      cfg_.desired_state.pose.pos[i] = FabRandom::rand<double>(limit_lows[i], limit_highs[i]);
     }
   }
 
@@ -151,12 +184,14 @@ public:
           .weight = fab_core::get_variant_value<double>(subgoal_config_map.at("weight")),
           .parent_link_name = fab_core::get_variant_value<std::string>(subgoal_config_map.at("parent_link")),
           .child_link_name = fab_core::get_variant_value<std::string>(subgoal_config_map.at("child_link")),
-          .desired_position =
-              fab_core::get_variant_value<std::vector<double>>(subgoal_config_map.at("desired_pos")),
-          .desired_vel =
-              fab_core::get_variant_value<std::vector<double>>(subgoal_config_map.at("desired_vel")),
-          .desired_acc =
-              fab_core::get_variant_value<std::vector<double>>(subgoal_config_map.at("desired_acc"))});
+          .desired_state = {.pose = FabPose{.pos = fab_core::get_variant_value<std::vector<double>>(
+                                                subgoal_config_map.at("desired_pos")),
+                                            .rot = fab_core::get_variant_value<std::vector<double>>(
+                                                subgoal_config_map.at("desired_rot"))},
+                            .linear_vel = fab_core::get_variant_value<std::vector<double>>(
+                                subgoal_config_map.at("desired_vel")),
+                            .linear_acc = fab_core::get_variant_value<std::vector<double>>(
+                                subgoal_config_map.at("desired_acc"))}});
       add_sub_goal(sub_goal);
     }
   }

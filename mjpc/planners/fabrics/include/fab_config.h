@@ -84,6 +84,7 @@ struct FabPlannerConfig {
                              fab_math::CASX_IDENTITY(x.size().first)};
   };
 
+  // https://arxiv.org/abs/2010.15676 - Eq 15
   FabConfigFunc damper_beta = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
     const auto a_ex = sym_var("a_ex", affix);
     const auto a_le = sym_var("a_le", affix);
@@ -206,6 +207,9 @@ struct FabPlannerConfig {
 
         // Damper
         // https://arxiv.org/abs/2010.14750 - Form. 8-9
+        // https://arxiv.org/abs/2010.15676 - Eq 15
+        // https://arxiv.org/abs/2109.10443 - Appx E.B
+        // Beta regulator
         .damper_beta =
             [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
               const auto alpha_beta = sym_var("alpha_beta", affix);
@@ -214,19 +218,20 @@ struct FabPlannerConfig {
               const auto beta_distant = sym_var("beta_distant", affix);
               const auto a_ex = sym_var("a_ex", affix);
               const auto a_le = sym_var("a_le", affix);
-              return FabConfigExprMeta{
-                  0.5 * (CaSX::tanh(-alpha_beta * (CaSX::norm_2(x) - radius_shift)) + 1) * beta_close +
-                      beta_distant + CaSX::fmax(0, a_ex - a_le),
-                  {alpha_beta.name(), radius_shift.name(), beta_close.name(), beta_distant.name(),
-                   a_ex.name(), a_le.name()}};
+              // Switch in [0, 1] as the system approach the target (Form. 45)
+              const auto s_beta = 0.5 * (CaSX::tanh(-alpha_beta * (CaSX::norm_2(x) - radius_shift)) + 1);
+              return FabConfigExprMeta{s_beta * beta_close + beta_distant + CaSX::fmax(0, a_ex - a_le),
+                                       {alpha_beta.name(), radius_shift.name(), beta_close.name(),
+                                        beta_distant.name(), a_ex.name(), a_le.name()}};
             },
 
+        // Eta regulator (Form. 46)
         .damper_eta =
             [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
-              const auto alpha_eta = sym_var("alpha_eta", affix);
+              const auto alpha_eta = sym_var("alpha_eta", affix);  // switch rate
               const auto ex_lag = sym_var("ex_lag", affix);
               const auto ex_factor = sym_var("ex_factor", affix);
-              const auto alpha_shift = sym_var("alpha_shift", affix);
+              const auto alpha_shift = sym_var("alpha_shift", affix);  // switch offset
               return FabConfigExprMeta{
                   0.5 * (CaSX::tanh(-alpha_eta * (1 - ex_factor) * ex_lag - alpha_shift) + 1),
                   {alpha_eta.name(), ex_lag.name(), ex_factor.name(), alpha_shift.name()}};
@@ -259,12 +264,14 @@ public:
     construct_robot_representation();
     const auto env_config =
         fab_core::get_variant_value<std::map<std::string, std::string>>(configs_["environment"]);
-    environment_ = FabEnvironment{.spheres_num_ = std::stoi(env_config["number_spheres"]),
-                                  .planes_num_ = std::stoi(env_config["number_planes"]),
-                                  .cuboids_num_ = std::stoi(env_config["number_cuboids"])};
+    environment_ = std::make_shared<FabEnvironment>(
+        FabEnvironment{.name_ = env_config["name"],
+                       .spheres_num_ = std::stoi(env_config["number_spheres"]),
+                       .planes_num_ = std::stoi(env_config["number_planes"]),
+                       .cuboids_num_ = std::stoi(env_config["number_cuboids"])});
   }
 
-  FabEnvironment environment() const { return environment_; }
+  FabEnvironmentPtr environment() const { return environment_; }
 
   void construct_robot_representation() {
     std::map<std::string, FabGeometricPrimitivePtr> collision_links;
@@ -299,7 +306,7 @@ public:
 protected:
   FabJointLimitArray joint_limits_;
   FabNamedMap<TArgs...> configs_;
-  FabEnvironment environment_;
+  FabEnvironmentPtr environment_ = nullptr;
   FabGoalComposition goal_composition_;
   FabRobotRepresentation robot_representation_;
 };

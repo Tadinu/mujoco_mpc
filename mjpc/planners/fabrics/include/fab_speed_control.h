@@ -15,7 +15,10 @@ public:
     // [beta_](initially as [beta] in initializer list)
     for (const auto& beta_param : CaSX::symvar(beta_)) {
       const auto beta_param_name = beta_param.name();
-      if (fab_core::has_collection_element(beta_meta.var_names, beta_param_name)) {
+
+      // [symbolic_params_]
+      if ((beta_param_name != "a_ex_damper") && (beta_param_name != "a_le_damper") &&
+          fab_core::has_collection_element(beta_meta.var_names, beta_param_name)) {
         symbolic_params_.insert_or_assign(beta_param_name, beta_param);
       }
 
@@ -33,7 +36,10 @@ public:
     CaSX ex_lag_sym;
     for (const auto& eta_param : CaSX::symvar(eta_)) {
       const std::string eta_param_name = eta_param.name();
-      if (fab_core::has_collection_element(eta_meta.var_names, eta_param_name)) {
+
+      // [symbolic_params_]
+      if ((eta_param_name != "ex_lag_damper") &&
+          fab_core::has_collection_element(eta_meta.var_names, eta_param_name)) {
         symbolic_params_.insert_or_assign(eta_param_name, eta_param);
       }
 

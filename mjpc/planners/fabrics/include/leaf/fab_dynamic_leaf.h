@@ -15,9 +15,9 @@ class FabDynamicLeaf : public FabLeaf {
 public:
   FabDynamicLeaf() = default;
 
-  FabDynamicLeaf(FabVariablesPtr parent_vars, std::string leaf_name, const int dim = 1, const int dim_ref = 1,
+  FabDynamicLeaf(std::string leaf_name, FabVariablesPtr parent_vars, const int dim = 1, const int dim_ref = 1,
                  const CaSX& fk = CaSX::zeros(), CaSXDict reference_params = CaSXDict())
-      : FabLeaf(std::move(parent_vars), std::move(leaf_name), fk, dim),
+      : FabLeaf(std::move(leaf_name), std::move(parent_vars), fk, dim),
         dim_ref_(dim_ref),
         fk_x_(CASX_SYM(fk_x_, dim_ref)),
         fk_xdot_(CASX_SYM(fk_xdot_, dim_ref)),
@@ -61,8 +61,9 @@ public:
     const auto phi_dot_dynamic = xdot_ - xdot_ref_;
     const auto Jdotqdot_dynamic = -xddot_ref_;
 #endif
-    dynamic_map_ = std::make_shared<FabDynamicDifferentialMap>(fk_vars_, ref_names);
+    dynamic_map_ = std::make_shared<FabDynamicDifferentialMap>(name() + "_diffmap", fk_vars_, ref_names);
     FAB_PRINTDB(dynamic_map_->ref_names());
+    parent_vars_->add_parameters(reference_params);
   }
 
   FabDynamicDifferentialMapPtr dynamic_map() const { return dynamic_map_; }
