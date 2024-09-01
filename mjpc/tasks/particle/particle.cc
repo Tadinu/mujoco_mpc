@@ -46,8 +46,8 @@ bool Particle::CheckBlocking(const double start[], const double end[]) {
   for (auto i = 0; i < GetTotalObstaclesNum(); ++i) {
     std::ostringstream obstacle_name;
     obstacle_name << "obstacle_" << i;
-    // auto obstacle_i_id = mj_name2id(model_, mjOBJ_BODY, obstacle_name.str().c_str());
-    auto obstacle_geom_i_id = mj_name2id(model_, mjOBJ_GEOM, obstacle_name.str().c_str());
+    // auto obstacle_i_id = QueryBodyId(obstacle_name.str().c_str());
+    auto obstacle_geom_i_id = QueryGeomId(obstacle_name.str().c_str());
     // Scale up obstacles size to make a contour around them by a larger margin, so safer
     mju_scl3(obstacle_i_size, &model_->geom_size[3 * obstacle_geom_i_id], RMP_BLOCKING_OBSTACLES_SIZE_SCALE);
 
@@ -94,7 +94,7 @@ bool Particle::CheckBlocking(const double start[], const double end[]) {
     for (auto i = 0; i < obstacles_id.size(); ++i) {
       std::ostringstream obstacle_name;
       obstacle_name << "obstacle_" << i;
-      obstacles_id[i] = mj_name2id(model_, mjOBJ_BODY, obstacle_name.str().c_str());
+      obstacles_id[i] = QueryBodyId(obstacle_name.str().c_str());
     }
     return obstacles_id;
   }();
@@ -154,8 +154,8 @@ void Particle::QueryObstacleStatesX() {
     std::ostringstream obstacle_name;
     obstacle_name << "obstacle_" << i;
     const std::string obs_name = obstacle_name.str();
-    auto obstacle_i_id = mj_name2id(model_, mjOBJ_BODY, obs_name.c_str());
-    auto obstacle_geom_i_id = mj_name2id(model_, mjOBJ_GEOM, obs_name.c_str());
+    auto obstacle_i_id = QueryBodyId(obs_name.c_str());
+    auto obstacle_geom_i_id = QueryGeomId(obs_name.c_str());
     mjtNum* obstacle_mocap_i_pos = QueryBodyMocapPos(obs_name.c_str());
 
     mjtNum* obstacle_i_size = &model_->geom_size[3 * obstacle_geom_i_id];

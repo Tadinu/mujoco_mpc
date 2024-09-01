@@ -72,30 +72,7 @@ public:
   // NOTES on mutex:
   // Access to model & data: already locked by [sim.mtx]
   // Access to task local data: lock on [task_data_mutex_]
-  int GetTargetObjectId() const override { return mj_name2id(model_, mjOBJ_GEOM, "target"); }
-
-  const mjtNum* QueryTargetPos() const {
-    if (model_) {
-      return &data_->geom_xpos[3 * GetTargetObjectId()];
-    }
-    return nullptr;
-  }
-
-  const mjtNum* QueryTargetVel() const {
-    if (model_) {
-      static double lvel[3] = {0};
-      auto target_id = GetTargetObjectId();
-#if 1
-      memcpy(lvel, &data_->cvel[6 * target_id + 3], sizeof(mjtNum) * 3);
-#else
-      mjtNum vel[6];
-      mj_objectVelocity(model_, data_, mjOBJ_BODY, target_id, vel, 0);
-      memcpy(lvel, &vel[3], sizeof(mjtNum) * 3);
-#endif
-      return &lvel[0];
-    }
-    return nullptr;
-  }
+  int GetTargetObjectId() const override { return QueryBodyId("target"); }
 
   const mjtNum* GetStartPos() override { return QueryTargetPos(); }
   const mjtNum* GetStartVel() override { return QueryTargetVel(); }

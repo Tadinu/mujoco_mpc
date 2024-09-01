@@ -27,7 +27,10 @@
 namespace mjpc {
 // task_panda_bring.xml
 // task_panda_robotiq_bring.xml
-std::string manipulation::Bring::XmlPath() const { return GetModelPath("manipulation/task_panda_bring.xml"); }
+std::string manipulation::Bring::XmlPath() const {
+  return is_static ? GetModelPath("manipulation/task_panda_bring.xml")
+                   : GetModelPath("manipulation/task_panda_dynamic.xml");
+}
 std::string manipulation::Bring::Name() const { return "PickAndPlace"; }
 
 std::string manipulation::Bring::URDFPath() const {
@@ -99,6 +102,46 @@ void manipulation::Bring::TransitionLocked(mjModel* model, mjData* data) {
     // return stage: bring
     data->userdata[0] = 0;
   }
+
+  // Move goals, obstacles
+  if (!is_static) {
+    static constexpr float amplitude = 0.5;
+    double goal_curve_pos[3] = {amplitude * mju_sin(data->time), amplitude * mju_cos(data->time / mjPI), 0.3};
+    SetGoalPos(goal_curve_pos);
+    MoveObstacles();
+  }
+}
+
+void manipulation::Bring::MoveObstacles() {
+#if 0
+  static constexpr bool ALTERNATING = 0;
+  static int8_t sign = 1;
+  if constexpr (ALTERNATING) {
+    static bool sign_switched = true;
+    if (fmod(data_->time, 2 * M_PI) < 0.1) {
+      if (!sign_switched) {
+        sign = -sign;
+        sign_switched = true;
+      }
+    } else {
+      sign_switched = false;
+    }
+  }
+  for (auto i = 1; i <= GetTotalObstaclesNum(); ++i) {
+    const auto angular_vel_i = (i > 3) ? (0.1 * i) : M_PI;
+    const auto phase_i = angular_vel_i * data_->time;
+    if constexpr (ALTERNATING) {
+    } else {
+      sign = (i % 2) == 0 ? 1 : -1;
+    }
+    const auto sin_pos_i = sign * mju_sin(phase_i);
+    const auto cos_pos_i = mju_cos(phase_i);
+    double obstacle_curve_pos[2] = {0.05 * log(i + 1) * sin_pos_i, 0.05 * log(i + 1) * cos_pos_i};
+    std::ostringstream obstacle_name;
+    obstacle_name << "obstacle_" << (i - 1);
+    SetBodyMocapPos(obstacle_name.str().c_str(), obstacle_curve_pos);
+  }
+#endif
 }
 
 void manipulation::Bring::ResetLocked(const mjModel* model) {

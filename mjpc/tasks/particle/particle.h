@@ -62,10 +62,11 @@ public:
     static FabLinkCollisionProps props = {{GetCollisionLinkNames()[0], {0.01}}};
     return props;
   }
-  int GetActionDim() const override { return IsGoalFixed() ? 3 : 2; }
+  int GetActionDim() const override { return 3; }
   std::vector<FabSubGoalPtr> GetSubGoals() const override {
-    static const std::vector<int> indices = {0, 1};
-    // NOTE: [Particle] & [ParticleFixed] can be switched on-off at run-time,
+    // NOTE: Due to base_link's fk having Z-translation as constant
+    static const std::vector<int> indices = std::vector{0, 1};
+    // NOTE: [Particle] & [ParticleFixed] can be toggled by users at run-time,
     // so [GetSubGoals()] are defined separately
     static auto subgoals = std::vector<FabSubGoalPtr>{
 #if FAB_DYNAMIC_GOAL_SUPPORTED
@@ -92,8 +93,18 @@ public:
     };
     const auto* goal_pos = GetGoalPos();
     if (goal_pos) {
-      subgoals[0]->cfg_.desired_position = {goal_pos[0], goal_pos[1]};  // EXCLUDING goal[2]
+      subgoals[0]->cfg_.desired_position = {goal_pos[0], goal_pos[1]};  // EXCLUDING goal_pos[2]
     }
+#if FAB_DYNAMIC_GOAL_SUPPORTED
+    const auto* goal_vel = GetGoalVel();
+    const auto* goal_acc = GetGoalAcc();
+    if (goal_vel) {
+      subgoals[0]->cfg_.desired_vel = {goal_vel[0], goal_vel[1]};  // EXCLUDING goal_vel[2]
+    }
+    if (goal_acc) {
+      subgoals[0]->cfg_.desired_acc = {goal_acc[0], goal_acc[1]};  // EXCLUDING goal_acc[2]
+    }
+#endif
     return subgoals;
   }
 
@@ -104,8 +115,8 @@ public:
   // NOTES on mutex:
   // Access to model & data: already locked by [sim.mtx]
   // Access to task local data: lock on [task_data_mutex_]
-  int GetTargetObjectId() const override { return mj_name2id(model_, mjOBJ_BODY, "rigidmass"); }
-  int GetTargetObjectGeomId() const override { return mj_name2id(model_, mjOBJ_GEOM, "rigidmass"); }
+  int GetTargetObjectId() const override { return QueryBodyId("rigidmass"); }
+  int GetTargetObjectGeomId() const override { return QueryGeomId("rigidmass"); }
 
   mjtNum* GetParticlePos() { return const_cast<mjtNum*>(QueryParticlePos()); }
   const mjtNum* QueryParticlePos() const {
@@ -141,6 +152,8 @@ public:
 
   void SetGoalPos(const double* pos) const { SetBodyMocapPos("goal", pos); }
   const mjtNum* GetGoalPos() const override { return QueryBodyMocapPos("goal"); }
+  const mjtNum* GetGoalVel() const override { return QueryBodyVel(QueryBodyId("goal")); }
+  const mjtNum* GetGoalAcc() const override { return QueryBodyAcc(QueryBodyId("goal")); }
 
   static constexpr float PARTICLE_GOAL_REACH_THRESHOLD = 0.01;
   bool QueryGoalReached() override;
@@ -231,7 +244,7 @@ public:
   bool IsGoalFixed() const override { return true; }
   std::vector<FabSubGoalPtr> GetSubGoals() const override {
     static const std::vector<int> indices = {0, 1};
-    // [Particle] & [ParticleFixed] can be switched on-off
+    // [Particle] & [ParticleFixed] can be toggled by users at runtime
     static auto subgoals = std::vector<FabSubGoalPtr>{
         std::make_shared<FabStaticSubGoal>(FabSubGoalConfig{.name = "subgoal0",
                                                             .type = FabSubGoalType::STATIC,

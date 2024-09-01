@@ -132,8 +132,12 @@ public:
   virtual std::string XmlPath() const = 0;
   virtual std::string URDFPath() const { return {}; }
   virtual std::string GetBaseBodyName() const { return {}; }
-  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */ return {}; }
-  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */ return {}; }
+  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */
+    return {};
+  }
+  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */
+    return {};
+  }
   virtual FabSelfCollisionNamePairs GetSelfCollisionNamePairs() const {
     /* Ones in URDF, not XML */
     return {};
@@ -145,6 +149,10 @@ public:
   virtual int GetActionDim() const { return 0; }
   virtual int GetTargetObjectId() const { return -1; }
   virtual int GetTargetObjectGeomId() const { return -1; }
+  const mjtNum* QueryTargetPos() const { return QueryBodyPos(GetTargetObjectId()); }
+  const mjtNum* QueryTargetVel() const { return QueryBodyVel(GetTargetObjectId()); }
+  const mjtNum* QueryTargetAcc() const { return QueryBodyAcc(GetTargetObjectId()); }
+
   virtual bool CheckBlocking(const double start[], const double end[]) { return false; }
 
   // model
@@ -156,6 +164,8 @@ public:
   virtual const mjtNum* GetStartPos() { return nullptr; }
   virtual const mjtNum* GetStartVel() { return nullptr; }
   virtual const mjtNum* GetGoalPos() const { return nullptr; }
+  virtual const mjtNum* GetGoalVel() const { return nullptr; }
+  virtual const mjtNum* GetGoalAcc() const { return nullptr; }
 
   // NOTE: model_->nq,nv are actuated joints/controls configured in MJ model
   // dof: full dof of the robot
@@ -180,10 +190,56 @@ public:
   void SetPlanner(Planner* planner) { planner_ = planner; }
   Planner* Planner() const { return planner_; }
 
+  // Body
+  int QueryBodyId(const char* body_name) const {
+    return model_ ? mj_name2id(model_, mjOBJ_BODY, body_name) : -1;
+  }
+
+  const mjtNum* QueryBodyPos(int body_id) const {
+    if (model_) {
+      return &data_->xipos[3 * body_id];
+    }
+    return nullptr;
+  }
+
+  mjtNum* QueryBodyVel(int body_id) const {
+    if (model_) {
+      static double lvel[3] = {0};
+#if 1
+      // Linear: copy from &cvel[6 * target_id + 3], Angular: copy from &cvel[6 * target_id]
+      memcpy(lvel, &data_->cvel[6 * body_id + 3], sizeof(mjtNum) * 3);
+#else
+      mjtNum vel[6];
+      mj_objectVelocity(model_, data_, mjOBJ_BODY, body_id, vel, 0);
+      // Linear: copy from &vel[3], Angular: copy from &vel[0]
+      memcpy(lvel, &vel[3], sizeof(mjtNum) * 3);
+#endif
+      return &lvel[0];
+    }
+    return nullptr;
+  }
+
+  mjtNum* QueryBodyAcc(int body_id) const {
+    if (model_) {
+      static double lacc[3] = {0};
+#if 0
+      memcpy(lacc, &data_->cacc[6 * body_id + 3], sizeof(mjtNum) * 3);
+#else
+      mjtNum acc[6];
+      mj_objectAcceleration(model_, data_, mjOBJ_BODY, body_id, acc, 0);
+      // Linear: copy from &acc[3], Angular: copy from &acc[0]
+      memcpy(lacc, &acc[3], sizeof(mjtNum) * 3);
+#endif
+      return &lacc[0];
+    }
+    return nullptr;
+  }
+
+  // Body mocap
   int GetBodyMocapId(const char* body_name) const {
     if (model_) {
-      int goal = mj_name2id(model_, mjOBJ_BODY, body_name);
-      return model_->body_mocapid[goal];
+      int body_id = QueryBodyId(body_name);
+      return (body_id >= 0) ? model_->body_mocapid[body_id] : -1;
     }
     return -1;
   }
@@ -192,8 +248,7 @@ public:
     if (data_) {
       int bodyMocapId = GetBodyMocapId(body_name);
       mju_copy3(&data_->mocap_pos[3 * bodyMocapId], pos);
-      data_->mocap_pos[3 * bodyMocapId + 2] = 0.01;
-      // std::cout << body_name << ":" << bodyMocapId << " " << pos[0] << " " << pos[1] << std::endl;
+      //  std::cout << body_name << ":" << bodyMocapId << " " << pos[0] << " " << pos[1] << std::endl;
     }
   }
 
@@ -203,6 +258,11 @@ public:
       return &data_->mocap_pos[3 * bodyMocapId];
     }
     return nullptr;
+  }
+
+  // Geom
+  int QueryGeomId(const char* geom_name) const {
+    return model_ ? mj_name2id(model_, mjOBJ_GEOM, geom_name) : -1;
   }
 
   void SetGeomColor(uint geom_id, const float* rgba) const {

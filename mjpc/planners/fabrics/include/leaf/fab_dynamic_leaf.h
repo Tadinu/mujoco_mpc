@@ -63,6 +63,7 @@ public:
 #endif
     dynamic_map_ = std::make_shared<FabDynamicDifferentialMap>(fk_vars_, ref_names);
     FAB_PRINTDB(dynamic_map_->ref_names());
+    parent_vars_->add_parameters(reference_params);
   }
 
   FabDynamicDifferentialMapPtr dynamic_map() const { return dynamic_map_; }

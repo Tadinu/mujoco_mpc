@@ -66,17 +66,17 @@ public:
   int GetActionDim() const override { return (GetSubGoals()[0]->child_link_name() == "panda_hand") ? 7 : 9; }
   std::vector<FabSubGoalPtr> GetSubGoals() const override {
     // Static subgoals with static [desired_position]
-    static std::vector<FabSubGoalPtr> subgoals = {
-        std::make_shared<FabStaticSubGoal>(FabSubGoalConfig{.name = "subgoal0",
-                                                            .type = FabSubGoalType::STATIC,
-                                                            .is_primary_goal = true,
-                                                            .epsilon = 0.05,
-                                                            .indices = {0, 1, 2},
-                                                            .weight = 0.7,
-                                                            .parent_link_name = "panda_link0",
-                                                            .child_link_name = "panda_hand",
-                                                            .desired_position = {0.6, 0., 0.4}}),
-
+    static std::vector<FabSubGoalPtr> subgoals = {std::make_shared<FabStaticSubGoal>(FabSubGoalConfig{
+        .name = "subgoal0",
+        .type = FabSubGoalType::STATIC,
+        .is_primary_goal = true,
+        .epsilon = 0.05,
+        .indices = {0, 1, 2},
+        .weight = 0.7,
+        .parent_link_name = "panda_link0",
+        .child_link_name = "panda_hand",
+    })};
+#if 0
         std::make_shared<FabStaticSubGoal>(
             FabSubGoalConfig{.name = "subgoal1",
                              .type = FabSubGoalType::STATIC,
@@ -99,20 +99,32 @@ public:
                              .child_link_name = "panda_hand",
                              .desired_position = {M_PI_4}})};
 
-    const auto* goal_pos = GetGoalPos();
-    mju_copy(subgoals[0]->cfg_.desired_position.data(), goal_pos, 3);
-    mju_copy(subgoals[1]->cfg_.desired_position.data(), goal_pos, 3);
-#if 0
-    static const auto link0_id = mj_name2id(model_, mjOBJ_BODY, "link0");  // GetBaseBodyName() - "pand_"
+    static const auto link0_id = QueryBodyId("link0");  // GetBaseBodyName() - "pand_"
     static const mjtNum* link0_pos = &data_->xpos[3 * link0_id];
     FAB_PRINTDB(link0_id, link0_pos[0], link0_pos[1], link0_pos[2]);
     mju_subFrom3(subgoals[0]->cfg_.desired_position.data(), link0_pos);
     FAB_PRINTDB("Subgoal0 pos", subgoals[0]->cfg_.desired_position);
 #endif
-    return subgoals;
+
+    const auto* goal_pos = GetGoalPos();
+    mju_copy3(subgoals[0]->cfg_.desired_position.data(), goal_pos);
+    if (is_static) {
+      return subgoals;
+    } else {
+      subgoals[0]->cfg_.type = FabSubGoalType::DYNAMIC;
+      const auto* goal_vel = GetGoalVel();
+      mju_copy3(subgoals[0]->cfg_.desired_vel.data(), goal_vel);
+
+      const auto* goal_acc = GetGoalAcc();
+      mju_copy3(subgoals[0]->cfg_.desired_acc.data(), goal_acc);
+      FAB_PRINT("Goal pos", goal_pos[0], goal_pos[1], goal_pos[2]);
+      FAB_PRINT("Goal vel", goal_vel[0], goal_vel[1], goal_vel[2]);
+      FAB_PRINT("Goal acc", goal_acc[0], goal_acc[1], goal_acc[2]);
+      return {subgoals[0]};
+    }
   }
 
-  bool IsGoalFixed() const override { return true; }
+  bool AreObstaclesFixed() const override { return true; }
   int GetDynamicObstaclesDimension() const override { return 3; }
   std::vector<FabJointLimit> GetJointLimits() const override {
     return {{-2.8973, 2.8973},   // panda_joint1
@@ -127,34 +139,17 @@ public:
   // NOTES on mutex:
   // Access to model & data: already locked by [sim.mtx]
   // Access to task local data: lock on [task_data_mutex_]
-  int GetTargetObjectId() const override { return mj_name2id(model_, mjOBJ_BODY, "target"); }
+  int GetTargetObjectId() const override { return QueryBodyId("target"); }
+  int GetTargetObjectGeomId() const override { return QueryGeomId("target/target_00_collision"); }
 
-  const mjtNum* QueryTargetPos() const {
-    if (model_) {
-      return &data_->xipos[3 * GetTargetObjectId()];
-    }
-    return nullptr;
+  void SetGoalPos(const double* pos) const { SetBodyMocapPos("target", pos); }
+  const mjtNum* GetGoalPos() const override {
+    return IsGoalFixed() ? QueryTargetPos() : QueryBodyMocapPos("target");
   }
-
-  const mjtNum* QueryTargetVel() const {
-    if (model_) {
-      static double lvel[3] = {0};
-      auto target_id = GetTargetObjectId();
-#if 1
-      memcpy(lvel, &data_->cvel[6 * target_id + 3], sizeof(mjtNum) * 3);
-#else
-      mjtNum vel[6];
-      mj_objectVelocity(model_, data_, mjOBJ_BODY, target_id, vel, 0);
-      memcpy(lvel, &vel[3], sizeof(mjtNum) * 3);
-#endif
-      return &lvel[0];
-    }
-    return nullptr;
-  }
-
-  const mjtNum* GetStartPos() override { return QueryTargetPos(); }
-  const mjtNum* GetStartVel() override { return QueryTargetVel(); }
-  const mjtNum* GetGoalPos() const override { return QueryTargetPos(); }
+  const mjtNum* GetGoalVel() const override { return QueryTargetVel(); }
+  const mjtNum* GetGoalAcc() const override { return QueryTargetAcc(); }
+  bool IsGoalFixed() const override { return is_static; }
+  virtual void MoveObstacles();
 
   bool QueryGoalReached() override { return false; }
   void QueryObstacleStatesX() override {
@@ -162,8 +157,8 @@ public:
     obstacle_statesX_.clear();
     const auto fQueryObstacle = [this](const std::string& obst_xml_name,
                                        const std::string& obst_collision_name) {
-      const auto obstacle_i_id = mj_name2id(model_, mjOBJ_BODY, obst_xml_name.c_str());
-      const auto obstacle_geom_i_id = mj_name2id(model_, mjOBJ_GEOM, obst_collision_name.c_str());
+      const auto obstacle_i_id = QueryBodyId(obst_xml_name.c_str());
+      const auto obstacle_geom_i_id = QueryGeomId(obst_collision_name.c_str());
       assert(obstacle_i_id >= 0);
       mjtNum* obstacle_i_size =
           (obstacle_geom_i_id >= 0) ? &model_->geom_size[3 * obstacle_geom_i_id] : nullptr;
@@ -260,9 +255,11 @@ public:
   void ResetLocked(const mjModel* model) override;
 
   void ModifyScene(const mjModel* model, const mjData* data, mjvScene* scene) const override {
-    // Draw goal
-    static constexpr float GREEN[] = {0.0, 1.0, 0.0, 1.0};
-    mjpc::AddGeom(scene, mjGEOM_SPHERE, (mjtNum[]){0.02}, GetGoalPos(), /*mat=*/nullptr, GREEN);
+    if (is_static) {
+      // Draw goal
+      static constexpr float GREEN[] = {0.0, 1.0, 0.0, 1.0};
+      mjpc::AddGeom(scene, mjGEOM_SPHERE, (mjtNum[]){0.02}, GetGoalPos(), /*mat=*/nullptr, GREEN);
+    }
 
     // Draw pinch
     static constexpr float BLUE[] = {0.0, 0.0, 1.0, 1.0};
@@ -281,6 +278,7 @@ protected:
 
 private:
   ResidualFn residual_;
+  bool is_static = false;
 };
 }  // namespace mjpc::manipulation
 

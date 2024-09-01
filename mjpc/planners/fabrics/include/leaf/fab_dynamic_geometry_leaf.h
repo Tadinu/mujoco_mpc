@@ -14,10 +14,9 @@
 
 /*
  * The FabGenericDynamicGeometryLeaf is a leaf to the tree of fabrics.
- * The geometry's geometry and metric are defined through the corresponding functions
- * to which the symbolic expression is passed as a string.
+ * The geometry's geometry and metric are defined through the corresponding symbolic expression functions
  *
- * In contrast to the GenericGeometry, the GenericDynamicGeometry has an additional differential map,
+ * In contrast to FabGenericGeometryLeaf, FabGenericDynamicGeometryLeaf has an additional differential map,
  * namely a RelativeDifferentialMap.
  */
 class FabGenericDynamicGeometryLeaf : public FabDynamicLeaf {

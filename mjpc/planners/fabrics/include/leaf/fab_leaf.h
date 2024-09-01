@@ -28,7 +28,7 @@ public:
         leaf_vars_(
             std::make_shared<FabVariables>(CaSXDict{{LEAF_VAR_NAME(x_), x_}, {LEAF_VAR_NAME(xdot_), xdot_}})),
         forward_kinematics_(fk),
-        diffmap_(std::make_shared<FabDifferentialMap>(forward_kinematics_, parent_vars_)) {}
+        diffmap_(std::make_shared<FabDifferentialMap>(fk, parent_vars_)) {}
 
   void set_params(const CaSXDict& kwargs) {
     for (const auto& [key, _] : p_) {

@@ -142,9 +142,13 @@ public:
     }
     const auto wg = FabWeightedSpec({{"g", geometry}, {"le", std::move(lagrangian)}})
                         .pull_back<FabWeightedSpec>(*forward_map);
-    const auto pwg = wg->dynamic_pull_back<FabWeightedSpec>(dynamic_map);
-    const auto ppwg = pwg->pull_back<FabWeightedSpec>(*forward_map);
-    *forced_geometry_ += *ppwg;
+    if ((wg->x().size() == dynamic_map.phi().size()) && (wg->xdot().size() == dynamic_map.phidot().size())) {
+      const auto pwg = wg->dynamic_pull_back<FabWeightedSpec>(dynamic_map);
+      const auto ppwg = pwg->pull_back<FabWeightedSpec>(*forward_map);
+      *forced_geometry_ += *ppwg;
+    } else {
+      *forced_geometry_ += *wg;
+    }
     if (is_prime_forcing_leaf) {
       forced_vars_ = geometry->vars();
       forced_forward_map_ = forward_map;
@@ -502,10 +506,10 @@ public:
     if (FabSubGoalType::STATIC_JOINT_SPACE == subgoal_type) {
       return fab_core::get_casx(vars_->position_var(), subgoal_indices);
     } else {
-      const auto fk_child = get_forward_kinematics(sub_goal->child_link_name());
+      const auto fk_child = get_forward_kinematics(sub_goal->child_link_name(), /*position_only*/ true);
       CaSX fk_parent;
       try {
-        fk_parent = get_forward_kinematics(sub_goal->parent_link_name());
+        fk_parent = get_forward_kinematics(sub_goal->parent_link_name(), /*position_only*/ true);
       } catch (const FabError& e) {
         fk_parent = CaSX::zeros(3);
       }
@@ -760,11 +764,11 @@ public:
     }
 
     // APPLY ACTION: COPY [action_] -> [action]
-    const mjtNum* cur_pos = task_->GetStartPos();
-    if (cur_pos) {
-      trajectory_->trace.push_back(cur_pos[0]);
-      trajectory_->trace.push_back(cur_pos[1]);
-      trajectory_->trace.push_back(cur_pos[2]);
+    const mjtNum* target_pos = task_->QueryTargetPos();
+    if (target_pos) {
+      trajectory_->trace.push_back(target_pos[0]);
+      trajectory_->trace.push_back(target_pos[1]);
+      trajectory_->trace.push_back(target_pos[2]);
     }
     FAB_PRINTDB("ACTION", action_);
     mju_copy(action, action_.data(), int(action_.size()));

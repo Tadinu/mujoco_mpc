@@ -161,7 +161,7 @@ public:
     if (position_only) {
       fk = fab_core::get_casx2(fk, {0, 3}, 3);
     }
-    FAB_PRINTDB("URDFFK casadi", parent_link_name, child_link_name, fk);
+    FAB_PRINT("URDFFK casadi", parent_link_name, child_link_name, q, fk);
     return fk;
   }
 

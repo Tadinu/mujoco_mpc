@@ -72,7 +72,13 @@ void FabPlanner::SetGoalArguments() {
   for (auto i = 0; i < sub_goals.size(); ++i) {
     const auto& sub_goal = sub_goals[i];
     const auto i_str = std::to_string(i);
-    arguments_.insert_or_assign("x_goal_" + i_str, sub_goal->cfg_.desired_position);
+    if (task_->IsGoalFixed()) {
+      arguments_.insert_or_assign("x_goal_" + i_str, sub_goal->cfg_.desired_position);
+    } else {
+      arguments_.insert_or_assign("x_ref_goal_" + i_str + "_leaf", sub_goal->cfg_.desired_position);
+      arguments_.insert_or_assign("xdot_ref_goal_" + i_str + "_leaf", sub_goal->cfg_.desired_vel);
+      arguments_.insert_or_assign("xddot_ref_goal_" + i_str + "_leaf", sub_goal->cfg_.desired_acc);
+    }
     arguments_.insert_or_assign("weight_goal_" + i_str, sub_goal->cfg_.weight);
   }
 }
@@ -160,7 +166,7 @@ void FabPlanner::SetTuningArguments(const FabParamWeightDict& params) {
       arguments_[fconstraint_prop_name("k_plane_fin_", link_name, i)] = fetch_param("k_plane_fin");
       arguments_[fconstraint_prop_name("exp_plane_fin_", link_name, i)] = fetch_param("exp_plane_fin");
     }  // End plane constraints
-  }  // End collision link names
+  }    // End collision link names
 
   // Sundries
   arguments_["base_inertia"] = fetch_param("base_inertia");

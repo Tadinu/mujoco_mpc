@@ -12,9 +12,9 @@
 #include "mjpc/planners/fabrics/include/fab_variables.h"
 #include "mjpc/planners/fabrics/include/leaf/fab_leaf.h"
 
-/* The GenericAttractor is a leaf to the tree of fabrics.
+/* FabGenericAttractorLeaf is a leaf to the tree of fabrics.
  * The attractor's potential and metric are defined through the corresponding functions to which the symbolic
- * expression is passed as a string.
+ * expression function
  */
 class FabGenericAttractorLeaf : public FabLeaf {
 public:
