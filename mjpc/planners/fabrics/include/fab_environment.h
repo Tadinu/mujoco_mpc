@@ -34,6 +34,7 @@ public:
     }
   }
 
+  std::string name() const { return name_; }
   std::vector<FabGeometricPrimitivePtr> obstacles() const { return obstacles_; }
 
   int spheres_num() const { return spheres_num_; }
@@ -41,8 +42,11 @@ public:
   int planes_num() const { return planes_num_; }
 
 protected:
+  std::string name_;
   std::vector<FabGeometricPrimitivePtr> obstacles_;
   int spheres_num_ = 0;
   int cuboids_num_ = 0;
   int planes_num_ = 0;
 };
+
+using FabEnvironmentPtr = std::shared_ptr<FabEnvironment>;

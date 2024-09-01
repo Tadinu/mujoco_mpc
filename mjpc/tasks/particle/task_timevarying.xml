@@ -3,7 +3,7 @@
   <!-- modified from: https://github.com/google-deepmind/dm_control/blob/main/dm_control/suite/point_mass.xml -->
   <include file="particle_modified.xml" />
 
-  <size memory="10K"/>
+  <size memory="1000K"/>
 
   <custom>
     <!-- agent -->

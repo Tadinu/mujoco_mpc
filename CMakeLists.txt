@@ -39,6 +39,7 @@ endif()
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 # ISPC
 include(AddISPCSrc)
+
 # IPOPT
 include(FindIPOPT)
 include(MpcOptions)

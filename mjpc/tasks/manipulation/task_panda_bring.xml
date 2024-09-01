@@ -1,8 +1,8 @@
 <mujoco model="Panda Bring">
   <include file="../common.xml"/>
 
-  <option timestep="0.01" cone="elliptic" integrator="implicit">
-    <flag multiccd="enable"/>
+  <option timestep="0.01" integrator="implicitfast" gravity="0 0 0">
+    <!--<flag multiccd="enable"/>-->
   </option>
   <size memory="1M" nuserdata="1"/>
 
@@ -11,7 +11,7 @@
     <numeric name="agent_planner" data="0" />
     <numeric name="agent_horizon" data="0.6" />
     <numeric name="agent_integrator" data="2" />
-    <numeric name="agent_timestep" data="0.005" />
+    <numeric name="agent_timestep" data="0.01" />
     <numeric name="agent_policy_width" data="0.0035" />
     <numeric name="sampling_trajectories" data="60"/>
     <numeric name="sampling_spline_points" data="5" />
@@ -22,12 +22,11 @@
 
   <keyframe>
     <key name="home" qpos="
-    0.612639 0.152204 0.0872751
-    0.0747279 0.691609 -0.36265 0.620144
-    0.530228 -0.0789289 0.0670311
-    -0.033621 0.706272 0.0335937 0.706344
-    0.01 0.01 0.01 -0.5 0.01 0.275015 -0.0942014
-    0.00129982 0.00201141"/>
+    0 0 0
+    1 0 0 0
+    0 0 0
+    1 0 0 0
+    0 0"/>
   </keyframe>
 
   <statistic extent="0.7" center="0.7 0 0.2"/>
@@ -73,9 +72,9 @@
     <site name="pedestal" pos="0.45 0 0"/>
     <geom name="pedestal" pos="0.45 0 0.005" type="cylinder" size=".025 .005" class="red_rgb_object/collision"/>
 
-    <body name="object">
+    <body name="object" pos="0.4 0.2 0.5">
       <freejoint name="red_rgb_object/"/>
-      <geom name="red_rgb_object/red_rgb_object_00_collision" class="red_rgb_object/collision" rgba="0 0 0 0" type="box" size="0.011 0.0151 0.021" pos="0 0 0"/>
+      <geom name="object" rgba="0 0 0 0" class="red_rgb_object/collision" type="box" size="0.01 0.015 0.02"/>
       <site name="0" pos="0.04 0.04 0.04" group="5"/>
       <site name="1" pos="-.04 0.04 0.04" group="5"/>
       <site name="2" pos="0.04 -.04 0.04" group="5"/>
@@ -85,9 +84,8 @@
       <site name="6" pos="0.04 -.04 -.04" group="5"/>
       <site name="7" pos="-.04 -.04 -.04" group="5"/>
     </body>
-    <body name="target">
-      <freejoint/>
-      <geom name="target/target_00_collision" pos="0.4 -0.1 0.35" rgba=".5 .5 .7 1" class="red_rgb_object/collision" type="box" size="0.01 0.015 0.02" contype="2" conaffinity="1"/>
+    <body name="object_mocap" mocap="true" pos="0.4 0.2 0.5">
+      <geom type="box" name="object_mocap" rgba="1 0 0 1" size="0.01 0.015 0.02"/>
       <site name="0t" pos="0.04 0.04 0.04" group="5"/>
       <site name="1t" pos="-.04 0.04 0.04" group="5"/>
       <site name="2t" pos="0.04 -.04 0.04" group="5"/>
@@ -110,8 +108,34 @@
   </worldbody>
 
   <contact>
-    <exclude body1="object" body2="target"/>
+    <exclude body1="object" body2="object_mocap"/>
+    <exclude body1="object" body2="link0"/>
+    <exclude body1="object" body2="link1"/>
+    <exclude body1="object" body2="link2"/>
+    <exclude body1="object" body2="link3"/>
+    <exclude body1="object" body2="link4"/>
+    <exclude body1="object" body2="link5"/>
+    <exclude body1="object" body2="link6"/>
+    <exclude body1="object" body2="link7"/>
+    <exclude body1="object" body2="hand"/>
+    <exclude body1="object" body2="left_finger"/>
+    <exclude body1="object" body2="right_finger"/>
+    <exclude body1="object_mocap" body2="link0"/>
+    <exclude body1="object_mocap" body2="link1"/>
+    <exclude body1="object_mocap" body2="link2"/>
+    <exclude body1="object_mocap" body2="link3"/>
+    <exclude body1="object_mocap" body2="link4"/>
+    <exclude body1="object_mocap" body2="link5"/>
+    <exclude body1="object_mocap" body2="link6"/>
+    <exclude body1="object_mocap" body2="link7"/>
+    <exclude body1="object_mocap" body2="hand"/>
+    <exclude body1="object_mocap" body2="left_finger"/>
+    <exclude body1="object_mocap" body2="right_finger"/>
   </contact>
+
+  <equality>
+    <weld body1="object_mocap" body2="object"/>
+  </equality>
 
   <sensor>
     <user name="Reach" dim="3" user="2 1 0 5 0.005"/>

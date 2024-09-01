@@ -18,6 +18,7 @@ public:
     static_obstacles_num = 2;
     dynamic_obstacles_num = 0;
     actuator_kv = 1.f;
+    first_joint_name_ = "joint1";
   }
   std::string Name() const override;
   std::string XmlPath() const override;
@@ -46,22 +47,22 @@ public:
   int GetPlaneConstraintsNum() const override { return 0; }
   int GetActionDim() const override { return 2; }
   std::vector<FabSubGoalPtr> GetSubGoals() const override {
-    // Static subgoals with static [desired_position]
+    // Static subgoals with static [desired_state.pos]
     static std::vector<FabSubGoalPtr> subgoals = {
-        std::make_shared<FabStaticSubGoal>(FabSubGoalConfig{.name = "subgoal0",
-                                                            .type = FabSubGoalType::STATIC,
-                                                            .is_primary_goal = true,
-                                                            .epsilon = 0.1,
-                                                            .indices = {1, 2},
-                                                            .weight = 1.0,
-                                                            .parent_link_name = "link0",
-                                                            .child_link_name = "link3",
-                                                            .desired_position = {1.0, 1.2}}),
-
+        std::make_shared<FabStaticSubGoal>(
+            FabSubGoalConfig{.name = "subgoal0",
+                             .type = FabSubGoalType::STATIC,
+                             .is_primary_goal = true,
+                             .epsilon = 0.1,
+                             .indices = {1, 2},
+                             .weight = 1.0,
+                             .parent_link_name = "link0",
+                             .child_link_name = "link3",
+                             .desired_state = {.pose = FabPose{.pos = {1.0, 1.2}}}}),
     };
-
-    const auto* goal_pos = GetGoalPos();
-    mju_copy(subgoals[0]->cfg_.desired_position.data(), goal_pos, 3);
+    auto& subgoal0_cfg = subgoals[0]->cfg_;
+    subgoal0_cfg.desired_state = GetGoalState();
+    subgoal0_cfg.desired_state.pose_offset = FabPose{.pos = {0., 0., 0.}, .rot = {0., 0., 0.}};
     return subgoals;
   }
 
@@ -72,39 +73,15 @@ public:
   // NOTES on mutex:
   // Access to model & data: already locked by [sim.mtx]
   // Access to task local data: lock on [task_data_mutex_]
-  int GetTargetObjectId() const override { return mj_name2id(model_, mjOBJ_GEOM, "target"); }
+  int GetTargetObjectId() const override { return QueryBodyId("target"); }
 
-  const mjtNum* QueryTargetPos() const {
-    if (model_) {
-      return &data_->geom_xpos[3 * GetTargetObjectId()];
-    }
-    return nullptr;
-  }
+  // Goals
+  void SetGoalPos(const double* pos) const { SetBodyMocapPos("target_mocap", pos); }
+  const mjtNum* GetGoalPos() const override { return QueryBodyMocapPos("target_mocap"); }
+  const mjtNum* GetGoalVel() const override { return QueryTargetVel(); }
+  const mjtNum* GetGoalAcc() const override { return QueryTargetAcc(); }
 
-  const mjtNum* QueryTargetVel() const {
-    if (model_) {
-      static double lvel[3] = {0};
-      auto target_id = GetTargetObjectId();
-#if 1
-      memcpy(lvel, &data_->cvel[6 * target_id + 3], sizeof(mjtNum) * 3);
-#else
-      mjtNum vel[6];
-      mj_objectVelocity(model_, data_, mjOBJ_BODY, target_id, vel, 0);
-      memcpy(lvel, &vel[3], sizeof(mjtNum) * 3);
-#endif
-      return &lvel[0];
-    }
-    return nullptr;
-  }
-
-  const mjtNum* GetStartPos() override { return QueryTargetPos(); }
-  const mjtNum* GetStartVel() override { return QueryTargetVel(); }
-  const mjtNum* GetGoalPos() const override { return QueryTargetPos(); }
-
-  bool QueryGoalReached() override { return false; }
   void QueryObstacleStatesX() override;
-  std::vector<double> QueryJointPos(int dof) const override;
-  std::vector<double> QueryJointVel(int dof) const override;
 
   class ResidualFn : public mjpc::BaseResidualFn {
   public:

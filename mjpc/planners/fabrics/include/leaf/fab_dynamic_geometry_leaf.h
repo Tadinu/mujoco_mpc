@@ -14,32 +14,33 @@
 
 /*
  * The FabGenericDynamicGeometryLeaf is a leaf to the tree of fabrics.
- * The geometry's geometry and metric are defined through the corresponding functions
- * to which the symbolic expression is passed as a string.
+ * The geometry's geometry and metric are defined through the corresponding symbolic expression functions
  *
- * In contrast to the GenericGeometry, the GenericDynamicGeometry has an additional differential map,
+ * In contrast to FabGenericGeometryLeaf, FabGenericDynamicGeometryLeaf has an additional differential map,
  * namely a RelativeDifferentialMap.
  */
 class FabGenericDynamicGeometryLeaf : public FabDynamicLeaf {
 public:
   FabGenericDynamicGeometryLeaf() = default;
 
-  FabGenericDynamicGeometryLeaf(FabVariablesPtr parent_vars, std::string leaf_name, const int dim = 1,
+  FabGenericDynamicGeometryLeaf(std::string leaf_name, FabVariablesPtr parent_vars, const int dim = 1,
                                 const int dim_ref = 1, const CaSX& forward_kinematics = CaSX::zeros(),
                                 const CaSXDict& reference_params = CaSXDict())
-      : FabDynamicLeaf(std::move(parent_vars), std::move(leaf_name), dim, dim_ref, forward_kinematics,
+      : FabDynamicLeaf(std::move(leaf_name), std::move(parent_vars), dim, dim_ref, forward_kinematics,
                        reference_params) {}
 
   void set_geometry(const FabConfigFunc& geometry) {
     const auto [h_geometry, var_names] = geometry(x_, xdot_, leaf_name_);
     parent_vars_->add_parameters(fab_core::parse_symbolic_casx(h_geometry, var_names));
-    geom_ = std::make_shared<FabGeometry>(FabGeometryArgs{{"h", h_geometry}, {"var", leaf_vars_}});
+    geom_ = std::make_shared<FabGeometry>(name() + "_geom",
+                                          FabGeometryArgs{{"h", h_geometry}, {"var", leaf_vars_}});
   }
 
   void set_finsler_structure(const FabConfigFunc& finsler_structure) {
     const auto [lag_geometry, var_names] = finsler_structure(x_, xdot_, leaf_name_);
     parent_vars_->add_parameters(fab_core::parse_symbolic_casx(lag_geometry, var_names));
-    lag_ = std::make_shared<FabLagrangian>(lag_geometry, FabLagrangianArgs{{"var", leaf_vars_}});
+    lag_ = std::make_shared<FabLagrangian>(name() + "_lag", lag_geometry,
+                                           FabLagrangianArgs{{"var", leaf_vars_}});
   }
 
   virtual FabDifferentialMapPtr geometry_map() const { return nullptr; }
@@ -52,9 +53,9 @@ public:
   FabDynamicObstacleLeaf(FabVariablesPtr parent_vars, const CaSX& fk, const std::string& obstacle_name,
                          const std::string& collision_link_name,
                          const CaSXDict& reference_params = CaSXDict())
-      : FabGenericDynamicGeometryLeaf(std::move(parent_vars),
-                                      obstacle_name + "_" + collision_link_name + "_leaf", 1 /*dim*/,
-                                      int(fk.size().first) /*dim_ref*/, fk, reference_params) {
+      : FabGenericDynamicGeometryLeaf(obstacle_name + "_" + collision_link_name + "_leaf",
+                                      std::move(parent_vars), 1 /*dim*/, int(fk.size().first) /*dim_ref*/, fk,
+                                      reference_params) {
     set_forward_map(obstacle_name, collision_link_name);
   }
 
@@ -72,12 +73,12 @@ private:
     parent_vars_->add_parameters(geom_params_);
 
     // Forward map
-    diffmap_ = std::make_shared<FabDifferentialMap>(forward_kinematics_, parent_vars_);
+    diffmap_ = std::make_shared<FabDifferentialMap>(name() + "_diffmap", forward_kinematics_, parent_vars_);
 
     // Geometry map
-    geom_map_ =
-        std::make_shared<FabSphereSphereMap>(relative_vars_, relative_vars_->position_var(),
-                                             CaSX::zeros(dim_ref_), radius_obstacle_var, radius_body_var);
+    geom_map_ = std::make_shared<FabSphereSphereMap>(name() + "_geom_map", relative_vars_,
+                                                     relative_vars_->position_var(), CaSX::zeros(dim_ref_),
+                                                     radius_obstacle_var, radius_body_var);
   }
 
 protected:

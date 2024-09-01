@@ -20,7 +20,6 @@
 #include <Eigen/Eigen>
 
 #include "mjpc/planners/planner.h"
-#include "mjpc/planners/rmp/include/util/rmp_util.h"
 #include "mjpc/task.h"
 #include "mjpc/tasks/manipulation/common.h"
 #include "mjpc/utilities.h"
@@ -28,7 +27,11 @@
 namespace mjpc::manipulation {
 class Bring : public Task {
 public:
-  Bring() : residual_(this, ModelValues()) { actuator_kv = 1.f; }
+  Bring() : residual_(this, ModelValues()) {
+    actuator_kv = 1.f;
+    first_joint_name_ = "joint1";
+    fabrics_control_mode_ = FabControlMode::ACC;
+  }
   std::string Name() const override;
   std::string XmlPath() const override;
   std::string URDFPath() const override;
@@ -44,13 +47,18 @@ public:
   std::vector<std::string> GetCollisionLinkNames() const override {
     // Ones in URDF, not XML
     // NOTE: In XML, link5 collisions, composed of 3 subparts, is not obvious to fetch
-    static std::vector<std::string> names = {"panda_hand", "panda_link3", "panda_link4"};
+    static std::vector<std::string> names = {
+        // "panda_hand", "panda_link3", "panda_link4" -> "panda_with_finger.urdf"
+        "panda_link9", "panda_link8", "panda_link4"};
     return names;
   }
   FabLinkCollisionProps GetCollisionLinkProps() const override {
     const auto& link_names = GetCollisionLinkNames();
-    static FabLinkCollisionProps props = {
-        {link_names[0], {0.02}}, {link_names[1], {0.02}}, {link_names[2], {0.02}}};
+    static FabLinkCollisionProps props = {{link_names[0], {0.02}},
+                                          {link_names[1], {0.02}},
+                                          {link_names[2], {0.02}},
+                                          {"panda_hand", {0.01}},
+                                          {"panda_link2", {0.02}}};
     return props;
   }
   FabSelfCollisionNamePairs GetSelfCollisionNamePairs() const override {
@@ -65,18 +73,17 @@ public:
 
   int GetActionDim() const override { return (GetSubGoals()[0]->child_link_name() == "panda_hand") ? 7 : 9; }
   std::vector<FabSubGoalPtr> GetSubGoals() const override {
-    // Static subgoals with static [desired_position]
+    // Static subgoals with static [desired_state.pos]
     static std::vector<FabSubGoalPtr> subgoals = {
         std::make_shared<FabStaticSubGoal>(FabSubGoalConfig{.name = "subgoal0",
                                                             .type = FabSubGoalType::STATIC,
                                                             .is_primary_goal = true,
-                                                            .epsilon = 0.05,
+                                                            .epsilon = 0.02,
                                                             .indices = {0, 1, 2},
-                                                            .weight = 0.7,
+                                                            .weight = 0.4,
                                                             .parent_link_name = "panda_link0",
-                                                            .child_link_name = "panda_hand",
-                                                            .desired_position = {0.6, 0., 0.4}}),
-
+                                                            .child_link_name = "panda_leftfinger"})};
+#if 0
         std::make_shared<FabStaticSubGoal>(
             FabSubGoalConfig{.name = "subgoal1",
                              .type = FabSubGoalType::STATIC,
@@ -86,7 +93,7 @@ public:
                              .weight = 6.0,
                              .parent_link_name = "panda_link7",
                              .child_link_name = "panda_hand",
-                             .desired_position = {6.55186038e-18, 0.00000000e+00, -1.07000000e-01}}),
+                             .desired_state.pos = {6.55186038e-18, 0.00000000e+00, -1.07000000e-01}}),
 
         std::make_shared<FabStaticJointSpaceSubGoal>(
             FabSubGoalConfig{.name = "subgoal2",
@@ -97,22 +104,24 @@ public:
                              .weight = 6.0,
                              .parent_link_name = "panda_link0",
                              .child_link_name = "panda_hand",
-                             .desired_position = {M_PI_4}})};
+                             .desired_state.pos = {M_PI_4}})};
 
-    const auto* goal_pos = GetGoalPos();
-    mju_copy(subgoals[0]->cfg_.desired_position.data(), goal_pos, 3);
-    mju_copy(subgoals[1]->cfg_.desired_position.data(), goal_pos, 3);
-#if 0
-    static const auto link0_id = mj_name2id(model_, mjOBJ_BODY, "link0");  // GetBaseBodyName() - "pand_"
+    static const auto link0_id = QueryBodyId("link0");  // GetBaseBodyName() - "pand_"
     static const mjtNum* link0_pos = &data_->xpos[3 * link0_id];
     FAB_PRINTDB(link0_id, link0_pos[0], link0_pos[1], link0_pos[2]);
-    mju_subFrom3(subgoals[0]->cfg_.desired_position.data(), link0_pos);
-    FAB_PRINTDB("Subgoal0 pos", subgoals[0]->cfg_.desired_position);
+    mju_subFrom3(subgoals[0]->cfg_.desired_state.pos.data(), link0_pos);
+    FAB_PRINTDB("Subgoal0 pos", subgoals[0]->cfg_.desired_state.pos);
 #endif
+    auto& subgoal0_cfg = subgoals[0]->cfg_;
+    if (!IsGoalFixed()) {
+      subgoal0_cfg.type = FabSubGoalType::DYNAMIC;
+    }
+    subgoal0_cfg.desired_state = GetGoalState();
+    subgoal0_cfg.desired_state.pose_offset = FabPose{.pos = {0., 0., 0.}, .rot = {0., 0., 0.}};
     return subgoals;
   }
 
-  bool IsGoalFixed() const override { return true; }
+  bool AreObstaclesFixed() const override { return true; }
   int GetDynamicObstaclesDimension() const override { return 3; }
   std::vector<FabJointLimit> GetJointLimits() const override {
     return {{-2.8973, 2.8973},   // panda_joint1
@@ -127,43 +136,25 @@ public:
   // NOTES on mutex:
   // Access to model & data: already locked by [sim.mtx]
   // Access to task local data: lock on [task_data_mutex_]
-  int GetTargetObjectId() const override { return mj_name2id(model_, mjOBJ_BODY, "target"); }
+  int GetTargetObjectId() const override { return QueryBodyId("object"); }
+  int GetTargetObjectGeomId() const override { return QueryGeomId("object"); }
 
-  const mjtNum* QueryTargetPos() const {
-    if (model_) {
-      return &data_->xipos[3 * GetTargetObjectId()];
-    }
-    return nullptr;
-  }
+  // Goals
+  bool IsGoalFixed() const override { return false; }
+  void SetGoalPos(const double* pos) const { SetBodyMocapPos("object_mocap", pos); }
+  const mjtNum* GetGoalPos() const override { return QueryBodyMocapPos("object_mocap"); }
+  const mjtNum* GetGoalVel() const override { return QueryTargetVel(); }
+  const mjtNum* GetGoalAcc() const override { return QueryTargetAcc(); }
 
-  const mjtNum* QueryTargetVel() const {
-    if (model_) {
-      static double lvel[3] = {0};
-      auto target_id = GetTargetObjectId();
-#if 1
-      memcpy(lvel, &data_->cvel[6 * target_id + 3], sizeof(mjtNum) * 3);
-#else
-      mjtNum vel[6];
-      mj_objectVelocity(model_, data_, mjOBJ_BODY, target_id, vel, 0);
-      memcpy(lvel, &vel[3], sizeof(mjtNum) * 3);
-#endif
-      return &lvel[0];
-    }
-    return nullptr;
-  }
-
-  const mjtNum* GetStartPos() override { return QueryTargetPos(); }
-  const mjtNum* GetStartVel() override { return QueryTargetVel(); }
-  const mjtNum* GetGoalPos() const override { return QueryTargetPos(); }
-
-  bool QueryGoalReached() override { return false; }
+  // Obstacles
+  virtual void MoveObstacles();
   void QueryObstacleStatesX() override {
     MJPC_LOCK_TASK_DATA_ACCESS;
     obstacle_statesX_.clear();
     const auto fQueryObstacle = [this](const std::string& obst_xml_name,
                                        const std::string& obst_collision_name) {
-      const auto obstacle_i_id = mj_name2id(model_, mjOBJ_BODY, obst_xml_name.c_str());
-      const auto obstacle_geom_i_id = mj_name2id(model_, mjOBJ_GEOM, obst_collision_name.c_str());
+      const auto obstacle_i_id = QueryBodyId(obst_xml_name.c_str());
+      const auto obstacle_geom_i_id = QueryGeomId(obst_collision_name.c_str());
       assert(obstacle_i_id >= 0);
       mjtNum* obstacle_i_size =
           (obstacle_geom_i_id >= 0) ? &model_->geom_size[3 * obstacle_geom_i_id] : nullptr;
@@ -176,13 +167,13 @@ public:
       mj_objectVelocity(model_, data_, mjOBJ_BODY, obstacle_i_id, obstacle_i_full_vel,
                         /*flg_local=*/0);
       mjtNum obstacle_i_lin_vel[StateX::dim];
-      memcpy(obstacle_i_lin_vel, &obstacle_i_full_vel[LIN_IDX], sizeof(mjtNum) * StateX::dim);
+      mju_copy(obstacle_i_lin_vel, &obstacle_i_full_vel[LIN_IDX], StateX::dim);
 
       mjtNum obstacle_i_full_acc[6];  // rot+lin
       mj_objectAcceleration(model_, data_, mjOBJ_BODY, obstacle_i_id, obstacle_i_full_acc,
                             /*flg_local=*/0);
       mjtNum obstacle_i_lin_acc[StateX::dim];
-      memcpy(obstacle_i_lin_acc, &obstacle_i_full_acc[LIN_IDX], sizeof(mjtNum) * StateX::dim);
+      mju_copy(obstacle_i_lin_acc, &obstacle_i_full_acc[LIN_IDX], StateX::dim);
 #else
       const auto obstacle_i_lin_idx = 6 * obstacle_i_id + LIN_IDX;
       mjtNum obstacle_i_lin_vel[StateX::dim];
@@ -203,11 +194,12 @@ public:
     // Env obstacles
     fQueryObstacle("obstacle_0", "obstacle_0");
     fQueryObstacle("obstacle_1", "obstacle_1");
+    fQueryObstacle("obstacle_2", "obstacle_2");
 
     // Body arm links as obstacles
     // NOTE: As observed, unclear why yet involving body links (as obstacles) disrupt the arm ik planning
     if (planner_ && planner_->tuning_on_) {
-      static const int prefix_len = std::string("panda_").size();
+      static const auto prefix_len = std::string("panda_").size();
       for (const auto& link_urdf_name : GetCollisionLinkNames()) {
         const auto link_xml_name = link_urdf_name.substr(prefix_len);
         // NOTE:
@@ -222,26 +214,6 @@ public:
         }
       }
     }
-  }
-
-  std::vector<double> QueryJointPos(int dof) const override {
-    if (model_ && data_) {
-      std::vector<double> qpos(dof, 0);
-      memcpy(qpos.data(), data_->qpos + model_->jnt_qposadr[mj_name2id(model_, mjOBJ_JOINT, "joint1")],
-             std::min(model_->nq, dof) * sizeof(double));
-      return qpos;
-    }
-    return {};
-  }
-
-  std::vector<double> QueryJointVel(int dof) const override {
-    if (model_ && data_) {
-      std::vector<double> qvel(dof, 0);
-      memcpy(qvel.data(), data_->qvel + model_->jnt_dofadr[mj_name2id(model_, mjOBJ_JOINT, "joint1")],
-             std::min(model_->nv, dof) * sizeof(double));
-      return qvel;
-    }
-    return {};
   }
 
   class ResidualFn : public mjpc::BaseResidualFn {

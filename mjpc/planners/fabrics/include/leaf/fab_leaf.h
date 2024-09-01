@@ -19,16 +19,16 @@ public:
   FabLeaf() = default;
   virtual ~FabLeaf() = default;
 
-  FabLeaf(FabVariablesPtr parent_vars, std::string leaf_name, const CaSX& fk = CaSX::zeros(),
+  FabLeaf(std::string leaf_name, FabVariablesPtr parent_vars, const CaSX& fk = CaSX::zeros(),
           const int dim = 1)
-      : parent_vars_(std::move(parent_vars)),
-        leaf_name_(std::move(leaf_name)),
+      : leaf_name_(std::move(leaf_name)),
+        parent_vars_(std::move(parent_vars)),
         x_(CASX_SYM(x_, dim)),
         xdot_(CASX_SYM(xdot_, dim)),
         leaf_vars_(
             std::make_shared<FabVariables>(CaSXDict{{LEAF_VAR_NAME(x_), x_}, {LEAF_VAR_NAME(xdot_), xdot_}})),
         forward_kinematics_(fk),
-        diffmap_(std::make_shared<FabDifferentialMap>(forward_kinematics_, parent_vars_)) {}
+        diffmap_(std::make_shared<FabDifferentialMap>(name() + "_diffmap", fk, parent_vars_)) {}
 
   void set_params(const CaSXDict& kwargs) {
     for (const auto& [key, _] : p_) {
@@ -73,48 +73,54 @@ public:
 
   void concretize() const {
     diffmap_->concretize();
-    geom_->concretize();
-    lag_->concretize();
+    if (geom_) {
+      geom_->concretize();
+    }
+    if (lag_) {
+      lag_->concretize();
+    }
   }
 
   CaSX get_parent_var_param(const std::string& var_name, const size_t dim) const {
     const auto parent_var_params = parent_vars_->parameters();
     return parent_var_params.contains(var_name) ? parent_var_params.at(var_name)
-                                                : CaSX::sym(var_name, casadi_int(dim));
+                                                : CaSX::sym(var_name, (casadi_int)dim);
   }
 
   CaSXDict evaluate(const FabCasadiArgMap& kwargs) {
     const auto res = diffmap_->forward(kwargs);
-    const auto x = res.at("phi");
+    auto&& x = res.at("phi");
     const auto J = res.at("J");
     const auto Jdot = res.at("Jdot");
-    const auto xdot = CaSX::dot(J, fab_core::get_variant_value<CaSX>(kwargs.at("qdot")));
+    auto&& xdot = CaSX::dot(J, fab_core::get_variant_value<CaSX>(kwargs.at("qdot")));
 #if 1
     return {{"x", x}, {"xdot", xdot}};
 #else
-    if (geom_.empty() || lag_->empty()) {
-      return CaSXDict();
+    if (!geom_ || !lag_) {
+      return {{"x", x}, {"xdot", xdot}};
     }
-    const auto state_variable_names = fab_core::get_names(geom_.vars()->state_variables());
-    const decltype(kwargs) task_space_arguments = {{state_variable_names[0], x},
-                                                   {state_variable_names[1], xdot}};
-    std::copy(kwargs.begin(), kwargs.end(), std::back_inserter(task_space_arguments));
-    const auto eval_geom = geom_.evaluate(task_space_arguments);
-    const auto h = eval_geom.at("h");
+    const auto state_variable_names = fab_core::get_map_keys(geom_->vars()->state_variables());
+    FabCasadiArgMap task_space_arguments = {{state_variable_names[0], x}, {state_variable_names[1], xdot}};
+    for (const auto& [arg_name, arg_value] : kwargs) {
+      task_space_arguments[arg_name] = fab_core::get_variant_value<CaSX>(arg_value);
+    }
+    const auto eval_geom = geom_->evaluate(task_space_arguments);
     const auto xddot = eval_geom.at("xddot");
 
+    auto pulled_geo = geom_->pull(*diffmap_);
+    pulled_geo->concretize();
+    const auto eval_pulled_geo = pulled_geo->evaluate(kwargs);
+    // const auto xddot_pulled = eval_pulled_geo.at("xddot");
+
     const auto eval_lag = lag_->evaluate(task_space_arguments);
-    const auto M = eval_geom.at("M");
-    const auto f = eval_geom.at("f");
-    const auto H = eval_geom.at("h");
+    // const auto H = eval_lag.at("h");
 
-    auto pulled_geo = geom_.pull(diffmap_);
-    pulled_geo.concretize();
-    const auto eval_pulled_geo = pulled_geo.evaluate(kwargs);
-    const auto h_pulled = eval_pulled_geo.at("h");
-    const auto xddot_pulled = eval_pulled_geo.at("xddot");
-
-    return {{"x", x}, {"xdot", xdot}, {"h", h}, {"M", M}, {"f", f}, {"h_pulled", h_pulled}};
+    return {{"x", x},
+            {"xdot", xdot},
+            {"h", eval_geom.at("h")},
+            {"M", eval_lag.at("M")},
+            {"f", eval_lag.at("f")},
+            {"h_pulled", eval_pulled_geo.at("h")}};
 #endif
   }
 

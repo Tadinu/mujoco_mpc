@@ -31,8 +31,8 @@ void PlanarRobot::QueryObstacleStatesX() {
     std::ostringstream obstacle_name;
     obstacle_name << "obstacle_" << i;
     const std::string obs_name = obstacle_name.str();
-    auto obstacle_i_id = mj_name2id(model_, mjOBJ_BODY, obs_name.c_str());
-    auto obstacle_geom_i_id = mj_name2id(model_, mjOBJ_GEOM, obs_name.c_str());
+    auto obstacle_i_id = QueryBodyId(obs_name.c_str());
+    auto obstacle_geom_i_id = QueryGeomId(obs_name.c_str());
     mjtNum* obstacle_mocap_i_pos = QueryBodyMocapPos(obs_name.c_str());
 
     mjtNum* obstacle_i_size = &model_->geom_size[3 * obstacle_geom_i_id];
@@ -69,26 +69,6 @@ void PlanarRobot::QueryObstacleStatesX() {
                .acc_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_lin_acc),
                .size_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_size)});
   }
-}
-
-std::vector<double> PlanarRobot::QueryJointPos(int dof) const {
-  if (model_ && data_) {
-    std::vector<double> qpos(dof, 0);
-    memcpy(qpos.data(), data_->qpos + model_->jnt_qposadr[mj_name2id(model_, mjOBJ_JOINT, "joint1")],
-           std::min(model_->nq, dof) * sizeof(double));
-    return qpos;
-  }
-  return {};
-}
-
-std::vector<double> PlanarRobot::QueryJointVel(int dof) const {
-  if (model_ && data_) {
-    std::vector<double> qvel(dof, 0);
-    memcpy(qvel.data(), data_->qvel + model_->jnt_dofadr[mj_name2id(model_, mjOBJ_JOINT, "joint1")],
-           std::min(model_->nv, dof) * sizeof(double));
-    return qvel;
-  }
-  return {};
 }
 
 }  // namespace mjpc

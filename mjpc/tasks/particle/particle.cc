@@ -17,15 +17,17 @@
 #include <string>
 #include <vector>
 
-// ISPC
-#include "rt_ispc.h"
-
-// MUJOCP
+// MUJOCO
 #include "mujoco/mujoco.h"
 
 // MJPC
 #include "mjpc/planners/rmp/include/planner/rmp_base_planner.h"
 #include "mjpc/planners/rmp/include/util/rmp_util.h"
+
+// ISPC
+#if RMP_IPC
+#include "rt_ispc.h"
+#endif
 
 namespace mjpc {
 std::string Particle::XmlPath() const { return GetModelPath("particle/task_timevarying.xml"); }
@@ -46,8 +48,8 @@ bool Particle::CheckBlocking(const double start[], const double end[]) {
   for (auto i = 0; i < GetTotalObstaclesNum(); ++i) {
     std::ostringstream obstacle_name;
     obstacle_name << "obstacle_" << i;
-    // auto obstacle_i_id = mj_name2id(model_, mjOBJ_BODY, obstacle_name.str().c_str());
-    auto obstacle_geom_i_id = mj_name2id(model_, mjOBJ_GEOM, obstacle_name.str().c_str());
+    // auto obstacle_i_id = QueryBodyId(obstacle_name.str().c_str());
+    auto obstacle_geom_i_id = QueryGeomId(obstacle_name.str().c_str());
     // Scale up obstacles size to make a contour around them by a larger margin, so safer
     mju_scl3(obstacle_i_size, &model_->geom_size[3 * obstacle_geom_i_id], RMP_BLOCKING_OBSTACLES_SIZE_SCALE);
 
@@ -94,7 +96,7 @@ bool Particle::CheckBlocking(const double start[], const double end[]) {
     for (auto i = 0; i < obstacles_id.size(); ++i) {
       std::ostringstream obstacle_name;
       obstacle_name << "obstacle_" << i;
-      obstacles_id[i] = mj_name2id(model_, mjOBJ_BODY, obstacle_name.str().c_str());
+      obstacles_id[i] = QueryBodyId(obstacle_name.str().c_str());
     }
     return obstacles_id;
   }();
@@ -143,8 +145,8 @@ void ResidualImpl(const mjModel* model, const mjData* data, const double goal[2]
 }  // namespace
 
 bool Particle::QueryGoalReached() {
-  return (rmp::vectorFromScalarArray<3>(GetParticlePos()) - rmp::vectorFromScalarArray<3>(GetGoalPos()))
-             .norm() < PARTICLE_GOAL_REACH_THRESHOLD;
+  return (rmp::vectorFromScalarArray<3>(GetRobotPos()) - rmp::vectorFromScalarArray<3>(GetGoalPos())).norm() <
+         PARTICLE_GOAL_REACH_THRESHOLD;
 }
 
 void Particle::QueryObstacleStatesX() {
@@ -154,13 +156,15 @@ void Particle::QueryObstacleStatesX() {
     std::ostringstream obstacle_name;
     obstacle_name << "obstacle_" << i;
     const std::string obs_name = obstacle_name.str();
-    auto obstacle_i_id = mj_name2id(model_, mjOBJ_BODY, obs_name.c_str());
-    auto obstacle_geom_i_id = mj_name2id(model_, mjOBJ_GEOM, obs_name.c_str());
-    mjtNum* obstacle_mocap_i_pos = QueryBodyMocapPos(obs_name.c_str());
+    auto obstacle_i_id = QueryBodyId(obs_name.c_str());
+    auto obstacle_geom_i_id = QueryGeomId(obs_name.c_str());
+
+    // const std::string obs_mocap_name = obstacle_name.str() + "_mocap";
+    // mjtNum* obstacle_mocap_i_pos = QueryBodyMocapPos(obs_mocap_name.c_str());
 
     mjtNum* obstacle_i_size = &model_->geom_size[3 * obstacle_geom_i_id];
     // mju_scl(obstacle_size, obstacle_size, 2.0, 3);
-    mjtNum* obstacle_i_pos = &data_->xpos[3 * obstacle_i_id];
+    const mjtNum* obstacle_i_pos = QueryBodyPos(obstacle_i_id);
     // mjtNum* obstacle_i_geom_pos = &data_->geom_xpos[3*obstacle_geom_i_id];
     // std::cout << obstacle_i_id << " " << obstacle_geom_i_id << std::endl;
     // std::cout<< "pos " << obs_name << ": " << obstacle_i_pos[0] << " - " << obstacle_i_pos[1] << " - " <<
@@ -168,8 +172,8 @@ void Particle::QueryObstacleStatesX() {
     // << " - " << obstacle_i_geom_pos[1] << " - " << obstacle_i_geom_pos[2] << std::endl; std::cout<<
     // "mocap_pos " << obs_name << ": " << obstacle_mocap_i_pos[0] << " - " << obstacle_mocap_i_pos[1] << " -
     // " << obstacle_mocap_i_pos[2] << std::endl;
-    mjtNum* obstacle_i_rot_mat = &data_->geom_xmat[9 * obstacle_geom_i_id];
-    mjtNum* obstacle_i_rot = &data_->xquat[4 * obstacle_i_id];
+    const mjtNum* obstacle_i_rot_mat = QueryBodyRotMat(obstacle_i_id);
+    const mjtNum* obstacle_i_quat = QueryBodyQuat(obstacle_i_id);
 
     static constexpr int LIN_IDX = 3;
 #if 0
@@ -185,16 +189,15 @@ void Particle::QueryObstacleStatesX() {
     mjtNum obstacle_i_lin_acc[StateX::dim];
     memcpy(obstacle_i_lin_acc, &obstacle_i_full_acc[LIN_IDX], sizeof(mjtNum) * StateX::dim);
 #else
-    const auto obstacle_i_lin_idx = 6 * obstacle_i_id + LIN_IDX;
-    mjtNum obstacle_i_lin_vel[StateX::dim];
-    mju_copy(obstacle_i_lin_vel, &data_->cvel[obstacle_i_lin_idx], StateX::dim);
+    mjtNum obstacle_i_lin_vel[StateX::dim] = {0};
+    mju_copy(obstacle_i_lin_vel, QueryBodyVel(obstacle_i_id), StateX::dim);
 
-    mjtNum obstacle_i_lin_acc[StateX::dim];
-    mju_copy(obstacle_i_lin_acc, &data_->cacc[obstacle_i_lin_idx], StateX::dim);
+    mjtNum obstacle_i_lin_acc[StateX::dim] = {0};
+    mju_copy(obstacle_i_lin_acc, QueryBodyAcc(obstacle_i_id), StateX::dim);
 #endif
     obstacle_statesX_.push_back(
         StateX{.pos_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_pos),
-               .rot_ = rmp::quatFromScalarArray<StateX::dim>(obstacle_i_rot).toRotationMatrix(),
+               .rot_ = rmp::quatFromScalarArray<StateX::dim>(obstacle_i_quat).toRotationMatrix(),
                .vel_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_lin_vel),
                .acc_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_lin_acc),
                .size_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_size)});
@@ -221,7 +224,7 @@ void Particle::TransitionLocked(mjModel* model, mjData* data) {
 void Particle::ModifyScene(const mjModel* model, const mjData* data, mjvScene* scene) const {
 #if RMP_DRAW_START_GOAL
   static constexpr float GREEN[] = {0.0, 1.0, 0.0, 1.0};
-  mjpc::AddConnector(scene, mjGEOM_LINE, 5, GetStartPos(), GetGoalPos(), GREEN);
+  mjpc::AddConnector(scene, mjGEOM_LINE, 5, QueryParticlePos(), GetGoalPos(), GREEN);
 #endif
 
 #if RMP_DRAW_BLOCKING_TRACE_RAYS

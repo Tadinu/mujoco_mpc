@@ -28,6 +28,9 @@
 #include "mjpc/planners/fabrics/include/fab_math_util.h"
 #include "mjpc/task.h"
 
+// NOTE: Dynamic goal is not yet working for [Particle]
+#define FAB_PARTICLE_DYNAMIC_GOAL_SUPPORTED (1)
+
 // Dynamical Movement Primitives: Learning Attractor Models for Motor Behaviors
 // https://ieeexplore.ieee.org/document/6797340
 // https://homes.cs.washington.edu/~todorov/courses/amath579/reading/DynamicPrimitives.pdf
@@ -40,6 +43,7 @@ public:
     static_obstacles_num = 0;
     dynamic_obstacles_num = 10;
     actuator_kv = 1.f;
+    first_joint_name_ = "root_x";
   }
   static double rand_val() { return FabRandom::rand<double>(-0.2, 0.2); }
 
@@ -62,24 +66,13 @@ public:
     static FabLinkCollisionProps props = {{GetCollisionLinkNames()[0], {0.01}}};
     return props;
   }
-  int GetActionDim() const override { return IsGoalFixed() ? 3 : 2; }
+  int GetActionDim() const override { return 3; }
   std::vector<FabSubGoalPtr> GetSubGoals() const override {
-    static const std::vector<int> indices = {0, 1};
-    // NOTE: [Particle] & [ParticleFixed] can be switched on-off at run-time,
+    // NOTE: Due to base_link's fk having Z-translation as constant
+    static const std::vector<int> indices = std::vector{0, 1};
+    // NOTE: [Particle] & [ParticleFixed] can be toggled by users at run-time,
     // so [GetSubGoals()] are defined separately
     static auto subgoals = std::vector<FabSubGoalPtr>{
-#if FAB_DYNAMIC_GOAL_SUPPORTED
-        std::make_shared<FabDynamicSubGoal>(FabSubGoalConfig{
-            .name = "subgoal0",
-            .type = FabSubGoalType::DYNAMIC,
-            .is_primary_goal = true,
-            .epsilon = 0.1,
-            .indices = indices,
-            .weight = 5.0,
-            .parent_link_name = GetBaseBodyName(),
-            .child_link_name = GetEndtipNames()[0],
-        })
-#else
         std::make_shared<FabStaticSubGoal>(FabSubGoalConfig{.name = "subgoal0",
                                                             .type = FabSubGoalType::STATIC,
                                                             .is_primary_goal = true,
@@ -87,60 +80,46 @@ public:
                                                             .indices = indices,
                                                             .weight = 5.0,
                                                             .parent_link_name = GetBaseBodyName(),
-                                                            .child_link_name = GetEndtipNames()[0]})
-#endif
-    };
+                                                            .child_link_name = GetEndtipNames()[0]})};
+    auto& subgoal0_cfg = subgoals[0]->cfg_;
+#if FAB_PARTICLE_DYNAMIC_GOAL_SUPPORTED
+    if (!IsGoalFixed()) {
+      subgoal0_cfg.type = FabSubGoalType::DYNAMIC;
+    }
+    auto& subgoal0_desired_state = subgoals[0]->cfg_.desired_state;
+    subgoal0_desired_state = GetGoalState();
+    if (subgoal0_desired_state.valid()) {
+      const auto& pos = subgoal0_desired_state.pose.pos;
+      const auto& vel = subgoal0_desired_state.linear_vel;
+      const auto& acc = subgoal0_desired_state.linear_acc;
+      subgoal0_desired_state.pose.pos = {pos[0], pos[1]};    // EXCLUDING pos[2]
+      subgoal0_desired_state.linear_vel = {vel[0], vel[1]};  // EXCLUDING vel[2]
+      subgoal0_desired_state.linear_acc = {acc[0], acc[1]};  // EXCLUDING vel[2]
+    }
+#else
     const auto* goal_pos = GetGoalPos();
     if (goal_pos) {
-      subgoals[0]->cfg_.desired_position = {goal_pos[0], goal_pos[1]};  // EXCLUDING goal[2]
+      subgoal0_cfg.desired_state.pose.pos = {goal_pos[0], goal_pos[1]};  // EXCLUDING goal_pos[2]
     }
+#endif
+    subgoal0_cfg.desired_state.pose_offset = FabPose{.pos = {0., 0., 0.}, .rot = {0., 0., 0.}};
     return subgoals;
   }
 
-  bool IsGoalFixed() const override { return !FAB_DYNAMIC_GOAL_SUPPORTED; }
+  bool IsGoalFixed() const override { return !FAB_PARTICLE_DYNAMIC_GOAL_SUPPORTED; }
   int GetDynamicObstaclesDimension() const override { return AreObstaclesFixed() ? 3 : 2; }
   int GetPlaneConstraintsNum() const override { return 1; }
 
   // NOTES on mutex:
   // Access to model & data: already locked by [sim.mtx]
   // Access to task local data: lock on [task_data_mutex_]
-  int GetTargetObjectId() const override { return mj_name2id(model_, mjOBJ_BODY, "rigidmass"); }
-  int GetTargetObjectGeomId() const override { return mj_name2id(model_, mjOBJ_GEOM, "rigidmass"); }
+  int GetTargetObjectId() const override { return QueryBodyId("rigidmass"); }
+  int GetTargetObjectGeomId() const override { return QueryGeomId("rigidmass"); }
 
-  mjtNum* GetParticlePos() { return const_cast<mjtNum*>(QueryParticlePos()); }
-  const mjtNum* QueryParticlePos() const {
-    if (model_) {
-#if 1
-      return &data_->xipos[3 * GetTargetObjectId()];
-#else
-      int site_start = mj_name2id(model_, mjOBJ_SITE, "tip");
-      return &data_->site_xpos[site_start];
-#endif
-    }
-    return nullptr;
-  }
-
-  const mjtNum* QueryParticleVel() const {
-    if (model_) {
-      static double lvel[3] = {0};
-      auto rigidmass_id = GetTargetObjectId();
-#if 1
-      memcpy(lvel, &data_->cvel[6 * rigidmass_id + 3], sizeof(mjtNum) * 3);
-#else
-      mjtNum vel[6];
-      mj_objectVelocity(model_, data_, mjOBJ_BODY, rigidmass_id, vel, 0);
-      memcpy(lvel, &vel[3], sizeof(mjtNum) * 3);
-#endif
-      return &lvel[0];
-    }
-    return nullptr;
-  }
-
-  const mjtNum* GetStartPos() override { return QueryParticlePos(); }
-  const mjtNum* GetStartVel() override { return QueryParticleVel(); }
-
-  void SetGoalPos(const double* pos) const { SetBodyMocapPos("goal", pos); }
-  const mjtNum* GetGoalPos() const override { return QueryBodyMocapPos("goal"); }
+  void SetGoalPos(const double* pos) const { SetBodyMocapPos("goal_mocap", pos); }
+  const mjtNum* GetGoalPos() const override { return QueryBodyMocapPos("goal_mocap"); }
+  const mjtNum* GetGoalVel() const override { return QueryBodyVel(QueryBodyId("goal")); }
+  const mjtNum* GetGoalAcc() const override { return QueryBodyAcc(QueryBodyId("goal")); }
 
   static constexpr float PARTICLE_GOAL_REACH_THRESHOLD = 0.01;
   bool QueryGoalReached() override;
@@ -191,15 +170,15 @@ public:
       const auto cos_pos_i = mju_cos(phase_i);
       double obstacle_curve_pos[3] = {0.05 * log(i + 1) * sin_pos_i, 0.05 * log(i + 1) * cos_pos_i, 0.01};
       std::ostringstream obstacle_name;
-      obstacle_name << "obstacle_" << (i - 1);
+      obstacle_name << "obstacle_" << (i - 1) << "_mocap";
       SetBodyMocapPos(obstacle_name.str().c_str(), obstacle_curve_pos);
     }
   }
 
   virtual void RandomizeObstacles() {
-    for (auto i = 1; i < (GetTotalObstaclesNum() + 1); ++i) {
+    for (auto i = 0; i < GetTotalObstaclesNum(); ++i) {
       std::ostringstream obstacle_name;
-      obstacle_name << "obstacle_" << (i - 1);
+      obstacle_name << "obstacle_" << i << "_mocap";
       SetBodyMocapPos(obstacle_name.str().c_str(), (double[]){rand_val(), rand_val(), 0.01});
     }
   }
@@ -231,7 +210,7 @@ public:
   bool IsGoalFixed() const override { return true; }
   std::vector<FabSubGoalPtr> GetSubGoals() const override {
     static const std::vector<int> indices = {0, 1};
-    // [Particle] & [ParticleFixed] can be switched on-off
+    // [Particle] & [ParticleFixed] can be toggled by users at runtime
     static auto subgoals = std::vector<FabSubGoalPtr>{
         std::make_shared<FabStaticSubGoal>(FabSubGoalConfig{.name = "subgoal0",
                                                             .type = FabSubGoalType::STATIC,
@@ -243,8 +222,9 @@ public:
                                                             .child_link_name = GetEndtipNames()[0]})};
     const auto* goal_pos = GetGoalPos();
     if (goal_pos) {
-      subgoals[0]->cfg_.desired_position = {goal_pos[0], goal_pos[1]};  // EXCLUDING goal[2]
+      subgoals[0]->cfg_.desired_state.pose.pos = {goal_pos[0], goal_pos[1]};  // EXCLUDING goal_pos[2]
     }
+    subgoals[0]->cfg_.desired_state.pose_offset = FabPose{.pos = {0., 0., 0.}, .rot = {0., 0., 0.}};
     return subgoals;
   }
 

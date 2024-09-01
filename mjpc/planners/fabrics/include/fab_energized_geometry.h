@@ -20,7 +20,8 @@ public:
   FabWeightedSpec() = default;
   ~FabWeightedSpec() override = default;
 
-  explicit FabWeightedSpec(const FabWeightedSpecArgs& kwargs) {
+  explicit FabWeightedSpec(std::string name, const FabWeightedSpecArgs& kwargs)
+      : FabSpectralSemiSprays(std::move(name)) {
     // [x_ref_name_, xdot_ref_name_, xddot_ref_name_]
     if (kwargs.contains("ref_names")) {
       auto ref_names = *fab_core::get_arg_value<std::vector<std::string>>(kwargs, "ref_names");
@@ -33,6 +34,7 @@ public:
     // [le_]
     if (kwargs.contains("le")) {
       le_ = *fab_core::get_arg_value<decltype(le_)>(kwargs, "le");
+      le_->vars()->print_self();
     }
 
     // [h_, M_, refTrajs_]
@@ -66,6 +68,7 @@ public:
     auto spec = std::make_shared<FabSpectralSemiSprays>(FabSpectralSemiSprays::operator+(b));
     auto all_le = std::make_shared<FabLagrangian>(*le_ + *b.le_);
     *this = FabWeightedSpec(
+        name() + "_" + b.name(),
         {{"le", std::move(all_le)}, {"ref_names", spec->ref_names()}, {"s", std::move(spec)}});
     return *this;
   }
@@ -74,15 +77,19 @@ protected:
   FabGeometryPtr pull(const FabDifferentialMap& dm) const override {
     auto spec = FabSpectralSemiSprays::pull(dm);
     auto le_pulled = le_->pull_back<FabLagrangian>(dm);
-    return std::make_shared<FabWeightedSpec>(FabWeightedSpecArgs{
-        {"s", std::move(spec)}, {"le", std::move(le_pulled)}, {"ref_names", ref_names()}});
+    return std::make_shared<FabWeightedSpec>(
+        name() + "_pulled",
+        FabWeightedSpecArgs{
+            {"s", std::move(spec)}, {"le", std::move(le_pulled)}, {"ref_names", ref_names()}});
   }
 
   FabGeometryPtr dynamic_pull(const FabDynamicDifferentialMap& dm) const override {
     auto spec = FabSpectralSemiSprays::dynamic_pull(dm);
     auto le_pulled = le_->dynamic_pull_back<FabLagrangian>(dm);
-    return std::make_shared<FabWeightedSpec>(FabWeightedSpecArgs{
-        {"s", std::move(spec)}, {"le", std::move(le_pulled)}, {"ref_names", dm.ref_names()}});
+    return std::make_shared<FabWeightedSpec>(
+        name() + "_dyn_pulled",
+        FabWeightedSpecArgs{
+            {"s", std::move(spec)}, {"le", std::move(le_pulled)}, {"ref_names", dm.ref_names()}});
   }
 
 public:
@@ -105,7 +112,7 @@ public:
     }
 
     func_ = std::make_shared<FabCasadiFunction>(
-        "func_", std::move(vars),
+        name_ + "_func", std::move(vars),
         CaSXDict{{"M", this->M()}, {"f", this->f()}, {"xddot", xddot_}, {"alpha", alpha_}});
   }
 

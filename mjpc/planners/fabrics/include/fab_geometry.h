@@ -17,7 +17,8 @@ public:
   using FabGeometryArgs =
       FabNamedMap<CaSX, FabVariablesPtr, FabGeometryPtr, FabTrajectories, std::vector<std::string>>;
 
-  explicit FabGeometry(const FabGeometryArgs& kwargs) {
+  explicit FabGeometry(std::string name) : name_(std::move(name)) {}
+  explicit FabGeometry(std::string name, const FabGeometryArgs& kwargs) : FabGeometry(std::move(name)) {
     // [h_, vars_]
     if (kwargs.contains("x")) {
       assert(kwargs.contains("xdot"));
@@ -40,6 +41,7 @@ public:
     }
   }
 
+  std::string name() const { return name_; }
   virtual CaSX x() const { return vars_->position_var(); }
   virtual CaSX xdot() const { return vars_->velocity_var(); }
   virtual CaSX xddot() const { return xddot_; }
@@ -68,7 +70,6 @@ public:
     return *this;
   }
 
-protected:
   virtual FabGeometryPtr pull(const FabDifferentialMap& dm) const {
     const auto h_pulled = CaSX::mtimes(CaSX::pinv(dm.J()), h_ + dm.Jdotqdot());
     const auto h_pulled_subst_x = CaSX::substitute(h_pulled, x(), dm.phi());
@@ -88,14 +89,17 @@ protected:
       // refTrajs.push_back(traj.pull(dm));
     }
     return std::make_shared<FabGeometry>(
-        FabGeometryArgs{{"h", h_pulled_subst_x_xdot}, {"var", std::move(new_vars)}, {"refTrajs", refTrajs}});
+        name() + "_pulled",
+        FabGeometryArgs{
+            {"h", h_pulled_subst_x_xdot}, {"var", std::move(new_vars)}, {"refTrajs", std::move(refTrajs)}});
   }
 
   virtual FabGeometryPtr dynamic_pull(const FabDynamicDifferentialMap& dm) const {
     const auto h_pulled = h_ - dm.xddot_ref();
     const auto h_pulled_subst_x = CaSX::substitute(h_pulled, x(), dm.phi());
     const auto h_pulled_subst_x_xdot = CaSX::substitute(h_pulled_subst_x, xdot(), dm.phidot());
-    return std::make_shared<FabGeometry>(FabGeometryArgs{{"h", h_pulled_subst_x_xdot}, {"var", dm.vars()}});
+    return std::make_shared<FabGeometry>(name() + "_dyn_pulled",
+                                         FabGeometryArgs{{"h", h_pulled_subst_x_xdot}, {"var", dm.vars()}});
   }
 
 public:
@@ -121,8 +125,8 @@ public:
       vars += refTraj;
     }
 
-    func_ =
-        std::make_shared<FabCasadiFunction>("func_", std::move(vars), CaSXDict{{"h", h_}, {"xddot", xddot_}});
+    func_ = std::make_shared<FabCasadiFunction>(name_ + "_func", std::move(vars),
+                                                CaSXDict{{"h", h_}, {"xddot", xddot_}});
   }
 
   virtual CaSXDict evaluate(const FabCasadiArgMap& kwargs) const {
@@ -140,11 +144,11 @@ public:
     const auto rand_xdot2 = alpha * rand_xdot;
     const auto h = evaluate({{"x_obst_dynamic", rand_x}, {"xdot_obst_dynamic", rand_xdot}})["h"];
     const auto h2 = evaluate({{"x_obst_dynamic", rand_x}, {"xdot_obst_dynamic", rand_xdot2}})["h"];
-    // return (h * pow(alpha, 2)) == h2;
-    return false;
+    return CaSX::is_equal((h * pow(alpha, 2)), h2);
   }
 
 protected:
+  std::string name_;
   std::string x_ref_name_ = "x_ref";
   std::string xdot_ref_name_ = "xdot_ref";
   std::string xddot_ref_name_ = "xddot_ref";

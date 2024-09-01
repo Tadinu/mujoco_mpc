@@ -241,9 +241,11 @@ protected:
   void create_collision_metric() {
     const CaSX q = CaSX::sym("q", robot_->dof());
     CaSX distance_to_obstacles = 10000;
+    static constexpr bool position_only = true;
     for (const auto& link_name : task_->GetCollisionLinkNames()) {
-      const CaSX fk = robot_->fk()->casadi(q, link_name, task_->GetBaseBodyName(),
-                                           fab_math::CASX_TRANSF_IDENTITY, true /*position_only*/);
+      const CaSX fk =
+          robot_->fk()->casadi(q, link_name, task_->GetBaseBodyName(), fab_math::CASX_TRANSF_IDENTITY,
+                               fab_math::CASX_TRANSF_IDENTITY, position_only);
 
       for (const auto& obst : task_->GetObstacleStatesX()) {
         std::vector obst_pos(3, 0.);

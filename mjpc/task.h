@@ -24,9 +24,11 @@
 #include <vector>
 
 #include "mjpc/norm.h"
+#include "mjpc/planners/fabrics/include/fab_common.h"
 #include "mjpc/planners/fabrics/include/fab_config.h"
 #include "mjpc/planners/fabrics/include/fab_goal.h"
 #include "mjpc/planners/rmp/include/core/rmp_state.h"
+#include "mjpc/planners/rmp/include/util/rmp_util.h"
 
 namespace mjpc {
 // tolerance for risk-neutral cost
@@ -132,8 +134,12 @@ public:
   virtual std::string XmlPath() const = 0;
   virtual std::string URDFPath() const { return {}; }
   virtual std::string GetBaseBodyName() const { return {}; }
-  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */ return {}; }
-  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */ return {}; }
+  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */
+    return {};
+  }
+  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */
+    return {};
+  }
   virtual FabSelfCollisionNamePairs GetSelfCollisionNamePairs() const {
     /* Ones in URDF, not XML */
     return {};
@@ -145,6 +151,10 @@ public:
   virtual int GetActionDim() const { return 0; }
   virtual int GetTargetObjectId() const { return -1; }
   virtual int GetTargetObjectGeomId() const { return -1; }
+  const mjtNum* QueryTargetPos() const { return QueryBodyPos(GetTargetObjectId()); }
+  const mjtNum* QueryTargetVel() const { return QueryBodyVel(GetTargetObjectId()); }
+  const mjtNum* QueryTargetAcc() const { return QueryBodyAcc(GetTargetObjectId()); }
+
   virtual bool CheckBlocking(const double start[], const double end[]) { return false; }
 
   // model
@@ -153,25 +163,45 @@ public:
   Planner* planner_ = nullptr;
   mjvScene* scene_ = nullptr;
 
-  virtual const mjtNum* GetStartPos() { return nullptr; }
-  virtual const mjtNum* GetStartVel() { return nullptr; }
+  virtual const mjtNum* GetRobotPos() const { return QueryTargetPos(); }
+  virtual const mjtNum* GetRobotVel() const { return QueryTargetVel(); }
+  virtual const mjtNum* GetRobotAcc() const { return QueryTargetAcc(); }
   virtual const mjtNum* GetGoalPos() const { return nullptr; }
+  virtual const mjtNum* GetGoalVel() const { return nullptr; }
+  virtual const mjtNum* GetGoalAcc() const { return nullptr; }
+
+  // Joint
+  int QueryJointId(const char* joint_name) const {
+    return model_ ? mj_name2id(model_, mjOBJ_JOINT, joint_name) : -1;
+  }
+
+  int QueryJointPosAddress(const char* joint_name) const {
+    int joint_id = QueryJointId(joint_name);
+    return (model_ && (joint_id >= 0) && (joint_id < model_->njnt)) ? model_->jnt_qposadr[joint_id] : 0;
+  }
+
+  int QueryJointDofAddress(const char* joint_name) const {
+    int joint_id = QueryJointId(joint_name);
+    return (model_ && (joint_id >= 0) && (joint_id < model_->njnt)) ? model_->jnt_dofadr[joint_id] : 0;
+  }
 
   // NOTE: model_->nq,nv are actuated joints/controls configured in MJ model
   // dof: full dof of the robot
-  virtual std::vector<double> QueryJointPos(int dof) const {
+  std::vector<double> QueryJointPos(int dof) const {
     if (model_ && data_) {
       std::vector<double> qpos(dof, 0);
-      memcpy(qpos.data(), &data_->qpos[0], std::min(model_->nq, dof) * sizeof(double));
+      mju_copy(qpos.data(), data_->qpos + QueryJointPosAddress(first_joint_name_.c_str()),
+               std::min(model_->nq, dof));
       return qpos;
     }
     return {};
   }
 
-  virtual std::vector<double> QueryJointVel(int dof) const {
+  std::vector<double> QueryJointVel(int dof) const {
     if (model_ && data_) {
       std::vector<double> qvel(dof, 0);
-      memcpy(qvel.data(), &data_->qvel[0], std::min(model_->nv, dof) * sizeof(double));
+      mju_copy(qvel.data(), data_->qvel + QueryJointDofAddress(first_joint_name_.c_str()),
+               std::min(model_->nv, dof));
       return qvel;
     }
     return {};
@@ -180,10 +210,79 @@ public:
   void SetPlanner(Planner* planner) { planner_ = planner; }
   Planner* Planner() const { return planner_; }
 
+  // Body
+  int QueryBodyId(const char* body_name) const {
+    return model_ ? mj_name2id(model_, mjOBJ_BODY, body_name) : -1;
+  }
+
+  const mjtNum* QueryBodyQuat(int body_id, bool inertia_com = true) const {
+    if (model_) {
+      if (inertia_com) {
+        static mjtNum quat[4];
+        mju_mat2Quat(quat, &data_->ximat[9 * body_id]);
+        return &quat[0];
+      } else {
+        return &data_->xquat[4 * body_id];
+      }
+    }
+    return nullptr;
+  }
+
+  const mjtNum* QueryBodyRotMat(int body_id, bool inertia_com = true) const {
+    if (model_) {
+      if (inertia_com) {
+        return &data_->ximat[9 * body_id];
+      } else {
+        static mjtNum mat[9];
+        mju_quat2Mat(mat, &data_->xquat[4 * body_id]);
+        return &mat[0];
+      }
+    }
+    return nullptr;
+  }
+
+  const mjtNum* QueryBodyPos(int body_id, bool inertia_com = true) const {
+    if (model_) {
+      return inertia_com ? &data_->xipos[3 * body_id] : &data_->xpos[3 * body_id];
+    }
+    return nullptr;
+  }
+
+  mjtNum* QueryBodyVel(int body_id, bool linear = true) const {
+    if (data_) {
+      static double lvel[3] = {0};
+#if 1
+      mju_copy3(lvel, linear ? &data_->cvel[6 * body_id + 3] : &data_->cvel[6 * body_id]);
+#else
+      mjtNum vel[6];
+      mj_objectVelocity(model_, data_, mjOBJ_BODY, body_id, vel, 0);
+      mju_copy3(lvel, linear ? &vel[3] : &vel[0]);
+#endif
+      return &lvel[0];
+    }
+    return nullptr;
+  }
+
+  mjtNum* QueryBodyAcc(int body_id, bool linear = true) const {
+    if (data_) {
+      static double lacc[3] = {0};
+#if 1
+      mju_copy3(lacc, linear ? &data_->cacc[6 * body_id + 3] : &data_->cacc[6 * body_id]);
+#else
+      mjtNum acc[6];
+      mj_objectAcceleration(model_, data_, mjOBJ_BODY, body_id, acc, 0);
+      mju_copy3(lacc, linear ? &acc[3] : &acc[0]);
+#endif
+      return &lacc[0];
+    }
+    return nullptr;
+  }
+
+  // Body mocap
   int GetBodyMocapId(const char* body_name) const {
     if (model_) {
-      int goal = mj_name2id(model_, mjOBJ_BODY, body_name);
-      return model_->body_mocapid[goal];
+      int body_id = QueryBodyId(body_name);
+      return (body_id >= 0) ? model_->body_mocapid[body_id] : -1;
     }
     return -1;
   }
@@ -192,8 +291,7 @@ public:
     if (data_) {
       int bodyMocapId = GetBodyMocapId(body_name);
       mju_copy3(&data_->mocap_pos[3 * bodyMocapId], pos);
-      data_->mocap_pos[3 * bodyMocapId + 2] = 0.01;
-      // std::cout << body_name << ":" << bodyMocapId << " " << pos[0] << " " << pos[1] << std::endl;
+      //  std::cout << body_name << ":" << bodyMocapId << " " << pos[0] << " " << pos[1] << std::endl;
     }
   }
 
@@ -203,6 +301,11 @@ public:
       return &data_->mocap_pos[3 * bodyMocapId];
     }
     return nullptr;
+  }
+
+  // Geom
+  int QueryGeomId(const char* geom_name) const {
+    return model_ ? mj_name2id(model_, mjOBJ_GEOM, geom_name) : -1;
   }
 
   void SetGeomColor(uint geom_id, const float* rgba) const {
@@ -235,19 +338,43 @@ public:
   std::vector<mjtNum> ray_ends;
   bool last_goal_reached_ = false;
 
-  // RMP/Fabrics
+  // RMP/Fabrics --
   using StateX = rmp::State<3>;
   std::vector<StateX> obstacle_statesX_;
 
   // mutex which should be held on changes to data queried from mjdata
   mutable std::mutex task_data_mutex_;
 
-  // - Actuator
+  // - Actuator/Joint
   float actuator_kv = 1.f;
+  std::string first_joint_name_;
+  FabControlMode fabrics_control_mode_ = FabControlMode::VEL;
+  FabControlMode GetFabricsControlMode() const { return fabrics_control_mode_; }
 
   // - Goal
+  FabDynamicsState goal_state_ =
+      FabDynamicsState{.default_lin = std::vector(3, 0.), .default_ang = std::vector(3, 0.)};
   virtual bool IsGoalFixed() const { return true; }
-  virtual bool QueryGoalReached() { return false; }
+  virtual bool QueryGoalReached() {
+    return (rmp::vectorFromScalarArray<3>(GetRobotPos()) - rmp::vectorFromScalarArray<3>(GetGoalPos()))
+               .norm() < 0.005;
+  }
+  virtual void QueryGoalState() {
+    MJPC_LOCK_TASK_DATA_ACCESS;
+    goal_state_.reset();
+    mju_copy3(goal_state_.pose.pos.data(), GetGoalPos());
+    mju_copy3(goal_state_.linear_vel.data(), GetGoalVel());
+    mju_copy3(goal_state_.linear_acc.data(), GetGoalAcc());
+  }
+
+  FabDynamicsState GetGoalState() const {
+    FabDynamicsState goal_state;
+    {
+      MJPC_LOCK_TASK_DATA_ACCESS;
+      goal_state = goal_state_;
+    }
+    return goal_state;
+  }
 
   // - Obstacles
   virtual bool AreObstaclesFixed() const { return (GetDynamicObstaclesNum() == 0); }

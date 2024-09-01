@@ -44,7 +44,7 @@ template <class TPolicy, typename TGeometry,
           typename = std::enable_if_t<
               std::is_base_of<RMPBaseGeometry<TGeometry::K, TGeometry::D>, TGeometry>::value>>
 class TrapezoidalIntegrator {
- public:
+public:
   using VectorX = typename TGeometry::VectorX;
   using MatrixX = typename TGeometry::MatrixX;
   using VectorQ = typename TGeometry::VectorQ;
@@ -90,9 +90,9 @@ class TrapezoidalIntegrator {
     const StateQ current_stateQ = {.pos_ = current_pos_, .vel_ = current_vel_};
     const StateX current_stateX = geometry.convertToX(current_stateQ);
 #else
-    current_pos_ = vectorFromScalarArray<TGeometry::D>(task_->GetStartPos());
+    current_pos_ = vectorFromScalarArray<TGeometry::D>(task_->GetRobotPos());
     // NOTE: Taking the real vel from task worsen the accuracy => Stay with the predictive one
-    // current_vel_ = vectorFromScalarArray<TGeometry::D>(task_->GetStartVel());
+    // current_vel_ = vectorFromScalarArray<TGeometry::D>(task_->GetRobotVel());
     const StateQ current_stateX = {.pos_ = current_pos_, .vel_ = geometry.convertPosToX(current_vel_)};
 #endif
 
@@ -177,7 +177,7 @@ class TrapezoidalIntegrator {
     acc = last_acc_;
   }
 
- private:
+private:
   bool done_ = false;
   double distance_ = 0.0;
   VectorQ current_pos_ = VectorQ::Zero();

@@ -17,6 +17,9 @@ set(MJPC_INSTALL_PUBLIC 0)
 # Eigen3
 find_package(Eigen3 REQUIRED)
 include_directories(SYSTEM ${EIGEN3_INCLUDE_DIR})
+if(${CMAKE_CXX_STANDARD} EQUAL "20")
+    add_compile_definitions(EIGEN_HAS_STD_RESULT_OF=0)
+endif()
 
 # CasADI
 find_package(casadi REQUIRED)
@@ -131,6 +134,8 @@ set(LIB_MJPC_HEADERS
         planners/fabrics/include/fab_robot.h
         planners/fabrics/include/fab_speed_control.h
         planners/fabrics/include/fab_param_tuner.h
+        planners/fabrics/include/casadi_gen/fab_task_panda_dynamic_func.h
+        planners/fabrics/include/casadi_gen/fab_task_panda_dynamic_python_func.h
         urdf_parser/include/common.h
         urdf_parser/include/geometry.h
         urdf_parser/include/joint.h
@@ -205,6 +210,7 @@ add_library(
         planners/fabrics/src/fab_core_util.cpp
         planners/fabrics/src/fab_math_util.cpp
         planners/fabrics/src/fab_planner.cpp
+        planners/fabrics/src/fab_casadi_function.cpp
         urdf_parser/common.cpp
         urdf_parser/geometry.cpp
         urdf_parser/joint.cpp

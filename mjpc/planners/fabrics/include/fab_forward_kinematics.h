@@ -16,7 +16,9 @@ class FabForwardKinematics {
 public:
   virtual CaSX casadi(const CaSX& q, const FabVariant<int, std::string>& child_link,
                       const FabVariant<int, std::string>& parent_link = {},
-                      const CaSX& link_transf = fab_math::CASX_TRANSF_IDENTITY, bool position_only = false) {
+                      const CaSX& link_transf = fab_math::CASX_TRANSF_IDENTITY,
+                      const CaSX& link_transf_offset = fab_math::CASX_TRANSF_IDENTITY,
+                      bool position_only = false) {
     return {};
   }
 
@@ -76,7 +78,8 @@ public:
 
   // Returns the forward kinematics as a casadi function
   CaSX get_robot_fk(const std::string& base_name, const std::string& endtip_name, const CaSX& q,
-                    const CaSX& link_transf = fab_math::CASX_TRANSF_IDENTITY) {
+                    const CaSX& link_transf = fab_math::CASX_TRANSF_IDENTITY,
+                    const CaSX& link_trasnf_offset = fab_math::CASX_TRANSF_IDENTITY) {
     const auto joint_list = urdf_model_.get_joints(urdf_model_.root_link->name, endtip_name);
     auto T_fk = fab_math::CASX_TRANSF_IDENTITY;
     for (const auto& joint : joint_list) {
@@ -120,12 +123,14 @@ public:
           break;
       }
     }
-    return CaSX::mtimes(T_fk, link_transf);
+    return CaSX::mtimes(T_fk, link_transf) + link_trasnf_offset;
   }
 
   CaSX casadi(const CaSX& q, const FabVariant<int, std::string>& child_link,
               const FabVariant<int, std::string>& parent_link = {},
-              const CaSX& link_transf = fab_math::CASX_TRANSF_IDENTITY, bool position_only = false) override {
+              const CaSX& link_transf = fab_math::CASX_TRANSF_IDENTITY,
+              const CaSX& link_transf_offset = fab_math::CASX_TRANSF_IDENTITY,
+              bool position_only = false) override {
     auto parent_link_name = fab_core::get_variant_value<std::string>(parent_link);
     if (parent_link_name.empty()) {
       parent_link_name = base_link_name_;
@@ -159,9 +164,14 @@ public:
     }
 
     if (position_only) {
-      fk = fab_core::get_casx2(fk, {0, 3}, 3);
+      fk = fab_core::get_casx2(fk, {0, 3}, 3) + (link_transf_offset.is_zero()
+                                                     ? CaSX::zeros(3)
+                                                     : fab_core::get_casx2(link_transf_offset, {0, 3}, 3));
+    } else {
+      fk += link_transf_offset;
     }
-    FAB_PRINTDB("URDFFK casadi", parent_link_name, child_link_name, fk);
+    FAB_PRINT("URDFFK casadi", parent_link_name, child_link_name, q, fk);
+    FAB_PRINT("FK Offset:", link_transf_offset);
     return fk;
   }
 
