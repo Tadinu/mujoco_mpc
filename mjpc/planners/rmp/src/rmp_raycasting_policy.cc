@@ -4,15 +4,17 @@
 #include <cmath>
 
 // ISPC
+#if RMP_IPC
 #include "rt_ispc.h"
+#endif
 
 // MuJoCo
 #include "mujoco/mujoco.h"
 
 // MJPC
-#include "mjpc/utilities.h"
 #include "mjpc/planners/rmp/include/core/rmp_space.h"
 #include "mjpc/planners/rmp/include/planner/rmp_base_planner.h"
+#include "mjpc/utilities.h"
 
 /**
  * Generates a value between 0 and 1 according to the halton sequence
@@ -45,8 +47,7 @@ TFloat alpha_freespace(const TFloat d, const TFloat eta_fsp) {
  * @return
  */
 template <typename TFloat>
-TFloat alpha_repulsive(const TFloat d, const TFloat eta_repulsive,
-                       const TFloat v_repulsive,
+TFloat alpha_repulsive(const TFloat d, const TFloat eta_repulsive, const TFloat v_repulsive,
                        const TFloat linear = 0.0) {
   return eta_repulsive * (exp(-d / v_repulsive)) + (linear * 1 / d);
 }
@@ -61,9 +62,7 @@ TFloat alpha_repulsive(const TFloat d, const TFloat eta_repulsive,
  * @return
  */
 template <typename TFloat>
-TFloat alpha_damp(const TFloat d, const TFloat eta_damp,
-                  const TFloat v_damp,
-                  const TFloat epsilon_damp) {
+TFloat alpha_damp(const TFloat d, const TFloat eta_damp, const TFloat v_damp, const TFloat epsilon_damp) {
   return eta_damp / (d / v_damp + epsilon_damp);
 }
 
@@ -94,8 +93,7 @@ TFloat obstacle_weight(const TFloat distance, const TFloat radius) {
  ****** Ray tracing kernel code (parts adapted from nvblox)
  ********************************************************************/
 template <typename TFloat>
-std::pair<TFloat, TFloat> get_angles(const TFloat u,
-                                     const TFloat v) {
+std::pair<TFloat, TFloat> get_angles(const TFloat u, const TFloat v) {
   // Convert uniform sample idx/dimx and idy/dimy to uniform sample on sphere
   float phi = acos(1 - 2 * u);
   float theta = 2.0f * M_PI * v;
@@ -104,9 +102,9 @@ std::pair<TFloat, TFloat> get_angles(const TFloat u,
 
 template <class TSpace>
 std::pair<mjtNum, typename rmp::RaycastingPolicy<TSpace>::Vector>
-rmp::RaycastingPolicy<TSpace>::raycastKernel(int ray_id,
-                                             const Vector& ray_start, int target_geomtype,
-                                             const mjtNum* target_pos, const mjtNum* target_rot, const mjtNum* target_size) {
+rmp::RaycastingPolicy<TSpace>::raycastKernel(int ray_id, const Vector& ray_start, int target_geomtype,
+                                             const mjtNum* target_pos, const mjtNum* target_rot,
+                                             const mjtNum* target_size) {
   // Generate halton sequence and get angles
   const auto u = halton_seq<double>(ray_id, 2);
   const auto v = halton_seq<double>(ray_id, 3);
@@ -116,26 +114,18 @@ rmp::RaycastingPolicy<TSpace>::raycastKernel(int ray_id,
 
 #if RMP_COLLISION_USE_3D_TRACE_RAYS
   // Convert to direction, of which the meaning itself is already an unit vector
-  const mjtNum unit_direction[3] = {
-    sin(phi) * cos(theta),
-    sin(phi) * sin(theta),
-    cos(phi)
-  };
+  const mjtNum unit_direction[3] = {sin(phi) * cos(theta), sin(phi) * sin(theta), cos(phi)};
 #else
-  const mjtNum unit_direction[3] = {
-      (ray_id % 2 == 0) ? sin(phi) : cos(phi),
-      (ray_id % 3 == 0) ? cos(phi) : sin(phi),
-      0.0
-  };
+  const mjtNum unit_direction[3] = {(ray_id % 2 == 0) ? sin(phi) : cos(phi),
+                                    (ray_id % 3 == 0) ? cos(phi) : sin(phi), 0.0};
 #endif
   // https://omaraflak.medium.com/ray-tracing-from-scratch-in-python-41670e6a96f9
 #if RMP_ISPC
-  const mjtNum distance = ispc::raySphere(target_pos, target_size[0] * target_size[0],
-                                          ray_start.data(), unit_direction);
+  const mjtNum distance =
+      ispc::raySphere(target_pos, target_size[0] * target_size[0], ray_start.data(), unit_direction);
 #else
-  const mjtNum distance = mju_rayGeom(target_pos, target_rot, target_size,
-                                      ray_start.data(), unit_direction,
-                                      target_geomtype);
+  const mjtNum distance =
+      mju_rayGeom(target_pos, target_rot, target_size, ray_start.data(), unit_direction, target_geomtype);
 #endif
   Vector ray_unit_direction;
   mju_copy3(ray_unit_direction.data(), unit_direction);
@@ -153,12 +143,12 @@ void rmp::RaycastingPolicy<TSpace>::startEval(const PState& agent_state,
     Vector ray_direction = Vector::Zero();
     // Get shortest distance to obstacles
     for (const auto& obstacle : obstacle_states) {
-      const auto _ = raycastKernel(i, agent_state.pos_, mjGEOM_SPHERE,
-                                   obstacle.pos_.data(), obstacle.rot_.data(), obstacle.size_.data());
+      const auto _ = raycastKernel(i, agent_state.pos_, mjGEOM_SPHERE, obstacle.pos_.data(),
+                                   obstacle.rot_.data(), obstacle.size_.data());
       const auto distance = _.first;
       if ((distance != -1) && (distance < distance_min)) {
         distance_min = distance;
-        ray_direction = _.second; // This is already guaranteed a unit direction vector
+        ray_direction = _.second;  // This is already guaranteed a unit direction vector
       }
     }
 
@@ -182,24 +172,24 @@ void rmp::RaycastingPolicy<TSpace>::startEval(const PState& agent_state,
 
       // Simple RMP obstacle policy
       const Vector f_repulsive =
-          alpha_repulsive(distance_min, parameters_.eta_repulsive, parameters_.v_repulsive, 0.0) *
-          delta_d;
+          alpha_repulsive(distance_min, parameters_.eta_repulsive, parameters_.v_repulsive, 0.0) * delta_d;
       // A directionally-scaled projection of [agent_state.vel_] onto [ray_direction],
       // scaled by a factor that vanishes as [agent_state.vel_] moves toward the half space:
       // Haway = {v | delta_d.transpose() * v >= 0}, as orthogonal to or pointing away from the obstacle
       const Vector p_obs = fmax(0.0, double(-agent_state.vel_.transpose() * delta_d)) *
                            (delta_d * delta_d.transpose()) * agent_state.vel_;
       // Original: -alpha_damp
-      const Vector f_damp = alpha_damp(distance_min, parameters_.eta_damp,
-                                       parameters_.v_damp, parameters_.epsilon_damp) * p_obs;
+      const Vector f_damp =
+          alpha_damp(distance_min, parameters_.eta_damp, parameters_.v_damp, parameters_.epsilon_damp) *
+          p_obs;
       f_obs = f_repulsive + f_damp;
 
       // Obstacle metric
       if (parameters_.metric) {
         // Directionally (f_obs) stretched metric
         const Vector f_norm_metric = this->soft_norm(f_obs, parameters_.alpha);
-        // This metric smoothly transitions from [f_norm_metric], stretching along a desired acceleration vector [f_obs],
-        // and an uniformed metric [softmax], while being modulated by [parameters_.alpha]
+        // This metric smoothly transitions from [f_norm_metric], stretching along a desired acceleration
+        // vector [f_obs], and an uniformed metric [softmax], while being modulated by [parameters_.alpha]
         const auto A_stretch_metric = f_norm_metric * f_norm_metric.transpose();
         A_metric = obstacle_weight(distance_min, parameters_.radius) * A_stretch_metric;
       } else {
@@ -209,12 +199,12 @@ void rmp::RaycastingPolicy<TSpace>::startEval(const PState& agent_state,
       // [metric_sum, metric_x_force_sum_]
 #pragma omp critical
       {
-        //A[0] = A[0] / float(blockdim * dimy);  // scale with number of rays
+        // A[0] = A[0] / float(blockdim * dimy);  // scale with number of rays
         metric_sum_.push_back(A_metric);
         metric_x_force_sum_.push_back(A_metric * f_obs);
       }
-    } // End if distance_min is valid
-  } // End rayshooting loop
+    }  // End if distance_min is valid
+  }  // End rayshooting loop
 }
 
 /**
@@ -223,8 +213,7 @@ void rmp::RaycastingPolicy<TSpace>::startEval(const PState& agent_state,
  * @return
  */
 template <>
-rmp::RaycastingPolicy<rmp::Space<2>>::PValue
-rmp::RaycastingPolicy<rmp::Space<2>>::evaluateAt(
+rmp::RaycastingPolicy<rmp::Space<2>>::PValue rmp::RaycastingPolicy<rmp::Space<2>>::evaluateAt(
     const PState& state, const std::vector<PState>&) {
   throw std::logic_error("Not implemented");
 }
@@ -235,8 +224,7 @@ rmp::RaycastingPolicy<rmp::Space<2>>::evaluateAt(
  * @return
  */
 template <>
-rmp::RaycastingPolicy<rmp::CylindricalSpace>::PValue
-rmp::RaycastingPolicy<rmp::CylindricalSpace>::evaluateAt(
+rmp::RaycastingPolicy<rmp::CylindricalSpace>::PValue rmp::RaycastingPolicy<rmp::CylindricalSpace>::evaluateAt(
     const PState& agent_state, const std::vector<PState>& obstacle_states) {
   if (!async_eval_started_) {
     startEval(agent_state, obstacle_states);
@@ -274,11 +262,8 @@ void rmp::RaycastingPolicy<TSpace>::abortEvaluateAsync() {
   async_eval_started_ = false;
 }
 
-template
-void rmp::RaycastingPolicy<rmp::Space<2>>::abortEvaluateAsync();
+template void rmp::RaycastingPolicy<rmp::Space<2>>::abortEvaluateAsync();
 
-template
-void rmp::RaycastingPolicy<rmp::CylindricalSpace>::abortEvaluateAsync();
+template void rmp::RaycastingPolicy<rmp::CylindricalSpace>::abortEvaluateAsync();
 
-template
-void rmp::RaycastingPolicy<rmp::Space<3>>::abortEvaluateAsync();
+template void rmp::RaycastingPolicy<rmp::Space<3>>::abortEvaluateAsync();

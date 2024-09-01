@@ -316,6 +316,11 @@ static std::vector<T> tokenize(const std::string& text, const std::string& delim
 #endif
 }
 
+static std::string task_function_name(const std::string& task_name, bool is_goal_fixed, bool are_obst_fixed) {
+  return task_name + (is_goal_fixed ? "_static" : "_dynamic") + "_goal" +
+         (are_obst_fixed ? "_static" : "_dynamic") + "_obst";
+}
+
 // -----------------------------------------------------------------------------------------------------------
 // CASADI UTILS ==
 //

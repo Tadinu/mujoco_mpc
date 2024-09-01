@@ -22,6 +22,7 @@ public:
   void print_self() const {
     const auto self_size = size();
     const auto vars_size = all_vars().size();
+    FAB_PRINT("----------");
     FAB_PRINT("TOTAL SIZE", self_size, "VARS SIZE", vars_size);
     assert(self_size == vars_size);
     FAB_PRINT("STATE VARS --");
@@ -108,9 +109,6 @@ public:
       } else if constexpr (std::is_same_v<T, CaSX>) {
         if (variants1.contains(other_key)) {
           if (!CaSX::is_equal(variants1[other_key], other_val)) {
-            if (other_key == "radius_body_base_link") {
-              FAB_PRINTDB(other_key, variants1[other_key], other_val);
-            }
             std::string new_key = other_key;
             int counter = 0;
             do {

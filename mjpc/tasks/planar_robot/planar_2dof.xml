@@ -25,15 +25,25 @@
             </body>
         </body>
 
-        <body name="obstacle_0" mocap="true" pos="0.0 -0.9 0.3" quat="1 0 0 0">
-            <geom type="sphere" name="obstacle_0" size=".1" rgba="1 0 0 .5"/>
+        <body name="obstacle_0" pos="0.0 -0.9 0.3">
+            <geom type="sphere" name="obstacle_0" size=".1" rgba="0 0 0 0"/>
         </body>
-        <body name="obstacle_1" mocap="true" pos="0.0 1.2 1.4" quat="1 0 0 0">
-            <geom type="sphere" name="obstacle_1" size=".3" rgba="1 0 0 .5"/>
+        <body name="obstacle_0_mocap" mocap="true" pos="0.0 -0.9 0.3">
+            <geom type="sphere" name="obstacle_0_mocap" size=".1" rgba="1 0 0 .5"/>
         </body>
 
-        <body name="target" mocap="true" pos="0.0 0. 0.3" quat="1 0 0 0">
-            <geom type="sphere" name="target" size=".01" rgba="1 0 0 .5"/>
+        <body name="obstacle_1" pos="0.0 1.2 1.4">
+            <geom type="sphere" name="obstacle_1" size=".3" rgba="0 0 0 0"/>
+        </body>
+        <body name="obstacle_1_mocap" mocap="true" pos="0.0 1.2 1.4">
+            <geom type="sphere" name="obstacle_1_mocap" size=".3" rgba="1 0 0 .5"/>
+        </body>
+
+        <body name="target" pos="0.0 0. 0.3" quat="1 0 0 0">
+            <geom type="sphere" name="target" size=".01" rgba="0 0 0 0"/>
+        </body>
+        <body name="target_mocap" mocap="true" pos="0.0 0. 0.3">
+            <geom type="sphere" name="target_mocap" size=".01" rgba="1 0 0 .5"/>
         </body>
     </worldbody>
 

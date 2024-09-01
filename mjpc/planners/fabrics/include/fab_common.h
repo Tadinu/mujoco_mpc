@@ -47,15 +47,14 @@ static constexpr auto FAB_EPS = 1e-6;
 #define FAB_DRAW_TRAJECTORY (1)
 #define FAB_OBSTACLE_SIZE_SCALE (1)
 
-// NOTE: Dynamic goal is not yet working
-#define FAB_DYNAMIC_GOAL_SUPPORTED (0)
-
 #define FAB_RANDOM_DETERMINISTIC (0)
 
 using FabSharedMutexLock = std::shared_lock<std::shared_mutex>;
 using FabMutexLock = std::lock_guard<std::mutex>;
 
 using FabLinkCollisionProps = std::map<std::string, std::vector<double> /*size or radius*/>;
+
+enum class FabControlMode : uint8_t { VEL, ACC };
 
 struct FabError : public std::runtime_error {
   explicit FabError(const std::string& error_msg) : std::runtime_error(error_msg), message_(error_msg) {}

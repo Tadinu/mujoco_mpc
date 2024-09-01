@@ -12,9 +12,8 @@
 #include "mjpc/planners/fabrics/include/fab_variables.h"
 #include "mjpc/planners/fabrics/include/leaf/fab_dynamic_leaf.h"
 
-/* The GenericAttractor is a leaf to the tree of fabrics.
- * The attractor's potential and metric are defined through the corresponding functions to which the symbolic
- * expression is passed as a string.
+/* FabGenericDynamicAttractorLeaf is a leaf to the tree of fabrics.
+ * The attractor's potential and metric are defined through the corresponding symbolic expression functions
  */
 class FabGenericDynamicAttractorLeaf : public FabDynamicLeaf {
 public:
@@ -22,25 +21,28 @@ public:
 
   FabGenericDynamicAttractorLeaf(FabVariablesPtr root_variables, const CaSX& fk_goal,
                                  const std::string& attractor_name)
-      : FabDynamicLeaf(std::move(root_variables), attractor_name + "_leaf", fk_goal.size().first,
+      : FabDynamicLeaf(attractor_name + "_leaf", std::move(root_variables), fk_goal.size().first,
                        fk_goal.size().first, fk_goal) {
     set_forward_map(attractor_name);
   }
 
   void set_potential(const FabConfigFunc& potential) override {
     const auto [x_potential, var_names] = potential(x_rel_, xdot_rel_, leaf_name_);
-    parent_vars_->add_parameters(fab_core::parse_symbolic_casx(x_potential, var_names));
+    // TODO: Check if needed to add params to [parent_vars_]
+    // parent_vars_->add_parameters(fab_core::parse_symbolic_casx(x_potential, var_names));
     const CaSX psi = weight_var_ * x_potential;
     CaSX h_psi = CaSX::gradient(psi, x_rel_);
-    geom_ = std::make_shared<FabGeometry>(FabGeometryArgs{{"h", std::move(h_psi)}, {"var", relative_vars_}});
+    geom_ = std::make_shared<FabGeometry>(name() + "_geom",
+                                          FabGeometryArgs{{"h", std::move(h_psi)}, {"var", relative_vars_}});
   }
 
   void set_metric(const FabConfigFunc& metric) override {
     const auto [attractor_metric, var_names] = metric(x_rel_, xdot_rel_, leaf_name_);
     // TODO: Check if needed to add params to [parent_vars_]
-    parent_vars_->add_parameters(fab_core::parse_symbolic_casx(attractor_metric, var_names));
+    // parent_vars_->add_parameters(fab_core::parse_symbolic_casx(attractor_metric, var_names));
     const auto lagrangian_psi = CaSX::dot(xdot_rel_, CaSX::mtimes(attractor_metric, xdot_rel_));
-    lag_ = std::make_shared<FabLagrangian>(lagrangian_psi, FabLagrangianArgs{{"var", relative_vars_}});
+    lag_ = std::make_shared<FabLagrangian>(name() + "_lag", lagrangian_psi,
+                                           FabLagrangianArgs{{"var", relative_vars_}});
   }
 
   FabDifferentialMapPtr map() const override { return forward_map_; }
@@ -49,19 +51,16 @@ private:
   void set_forward_map(const std::string& goal_name) {
     auto reference_name = "x_" + goal_name;
     auto weight_name = "weight_" + goal_name;
-    const auto goal_dimension = forward_kinematics_.size().first;
     const auto& parent_params = parent_vars_->parameters();
-    reference_var_ = parent_params.contains(reference_name) ? parent_params.at(reference_name)
-                                                            : CaSX::sym(reference_name, goal_dimension);
 
     weight_var_ =
         parent_params.contains(weight_name) ? parent_params.at(weight_name) : CaSX::sym(weight_name, 1);
 
-    geom_params_ = {{std::move(reference_name), reference_var_}, {std::move(weight_name), weight_var_}};
-    leaf_vars_->add_parameters(geom_params_);
+    geom_params_ = {{std::move(weight_name), weight_var_}};
     parent_vars_->add_parameters(geom_params_);
+    // NOTE: Not working for [Particle]'s dynamic goal yet
     forward_map_ =
-        std::make_shared<FabParameterizedGoalMap>(parent_vars_, forward_kinematics_, reference_var_);
+        std::make_shared<FabDifferentialMap>(name() + "_diffmap", forward_kinematics_, parent_vars_);
   }
 
 protected:

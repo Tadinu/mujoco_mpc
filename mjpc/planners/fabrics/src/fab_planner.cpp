@@ -40,7 +40,8 @@ void FabPlanner::InitTaskFabrics() {
   config_ = tuning_on_ ? FabPlannerConfig::get_symbolic_config() : task_->GetFabricsConfig();
 
   // 2- Robot, resetting [vars_, geometry_, target_velocity_] here-in!
-  init_robot(dim_action_, task_->URDFPath(), task_->GetBaseBodyName(), task_->GetEndtipNames(), config_);
+  init_robot("robot", dim_action_, task_->URDFPath(), task_->GetBaseBodyName(), task_->GetEndtipNames(),
+             config_);
 
   // 3- Goal
   FabGoalComposition goal;
@@ -55,7 +56,7 @@ void FabPlanner::InitTaskFabrics() {
                  task_->GetPlaneConstraintsNum(), task_->GetDynamicObstaclesDimension());
 
   // 5- Concretize, calculating [xddot] + composing [cafunc_] based on it
-  concretize(FAB_USE_ACTUATOR_VELOCITY ? FabControlMode::VEL : FabControlMode::ACC, 0.01);
+  concretize(task_->GetFabricsControlMode(), 0.01);
 
   // 6- Param tuner (NOTE: always inited at last for using a fully-inited FabPlanner)
   if (tuning_on_) {
@@ -72,14 +73,25 @@ void FabPlanner::SetGoalArguments() {
   for (auto i = 0; i < sub_goals.size(); ++i) {
     const auto& sub_goal = sub_goals[i];
     const auto i_str = std::to_string(i);
-    arguments_.insert_or_assign("x_goal_" + i_str, sub_goal->cfg_.desired_position);
+    const auto& desired_goal_state = sub_goal->cfg_.desired_state;
+    const bool valid_goal_state = desired_goal_state.valid();
+    const auto& pos = valid_goal_state ? desired_goal_state.pose.pos : desired_goal_state.default_lin;
+    const auto& vel = valid_goal_state ? desired_goal_state.linear_vel : desired_goal_state.default_lin;
+    const auto& acc = valid_goal_state ? desired_goal_state.linear_acc : desired_goal_state.default_lin;
+    if (task_->IsGoalFixed()) {
+      arguments_.insert_or_assign("x_goal_" + i_str, pos);
+    } else {
+      arguments_.insert_or_assign("x_ref_goal_" + i_str + "_leaf", pos);
+      arguments_.insert_or_assign("xdot_ref_goal_" + i_str + "_leaf", vel);
+      arguments_.insert_or_assign("xddot_ref_goal_" + i_str + "_leaf", acc);
+    }
     arguments_.insert_or_assign("weight_goal_" + i_str, sub_goal->cfg_.weight);
   }
 }
 
 void FabPlanner::SetConstraintArguments() {
   for (auto i = 0; i < task_->GetPlaneConstraintsNum(); ++i) {
-    arguments_.insert_or_assign("constraint_" + std::to_string(i), std::vector<double>{0, 0, 1, 0.0});
+    arguments_["constraint_" + std::to_string(i)] = std::vector<double>{0, 0, 1, 0};
   }
 }
 
@@ -160,7 +172,7 @@ void FabPlanner::SetTuningArguments(const FabParamWeightDict& params) {
       arguments_[fconstraint_prop_name("k_plane_fin_", link_name, i)] = fetch_param("k_plane_fin");
       arguments_[fconstraint_prop_name("exp_plane_fin_", link_name, i)] = fetch_param("exp_plane_fin");
     }  // End plane constraints
-  }  // End collision link names
+  }    // End collision link names
 
   // Sundries
   arguments_["base_inertia"] = fetch_param("base_inertia");
@@ -236,7 +248,7 @@ void FabPlanner::Plan(const FabParamDict& params) {
   // [Radius collision bodies]
   SetCollisionArguments();
 
-  // [Obstacles' size & pos, vel, etc.]
+  // [Obstacles' size & pos, linear_vel, etc.]
   SetObstacleArguments();
 
   /// [Scalar tuned coeffecients]

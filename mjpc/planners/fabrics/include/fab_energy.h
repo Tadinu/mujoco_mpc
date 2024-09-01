@@ -22,7 +22,8 @@ class FabLagrangian : public FabGeometry {
 public:
   FabLagrangian() = default;
 
-  FabLagrangian(const CaSX& lag, const FabLagrangianArgs& kwargs) : l_(lag) {
+  FabLagrangian(std::string name, const CaSX& lag, const FabLagrangianArgs& kwargs)
+      : FabGeometry(std::move(name)), l_(lag) {
     // [x_ref_name_, xdot_ref_name_, xddot_ref_name_]
     if (kwargs.contains("ref_names")) {
       const auto ref_names = *fab_core::get_arg_value<std::vector<std::string>>(kwargs, "ref_names");
@@ -52,8 +53,9 @@ public:
       J_ref_ = *fab_core::get_arg_value<decltype(J_ref_)>(kwargs, "J_ref");
       FAB_PRINT("Casadi pseudo inverse is used in Lagrangian");
       const auto J_ref_transpose = J_ref_.T();
-      J_ref_inv_ = CaSX::mtimes(J_ref_transpose, CaSX::inv(CaSX::mtimes(J_ref_, J_ref_transpose) +
-                                                           fab_math::CASX_IDENTITY(x_ref().size().first) * FAB_EPS));
+      J_ref_inv_ =
+          CaSX::mtimes(J_ref_transpose, CaSX::inv(CaSX::mtimes(J_ref_, J_ref_transpose) +
+                                                  fab_math::CASX_IDENTITY(x_ref().size().first) * FAB_EPS));
     }
 
     // [S_, H_]
@@ -104,19 +106,12 @@ public:
       all_ref_names = ref_names();
     }
 
-    // [ref_arguments]
-    FabNamedMap<std::vector<std::string>, CaSX> all_ref_arguments;
-    if (!all_ref_names.empty()) {
-      all_ref_arguments = {{"ref_names", all_ref_names}, {"J_ref", J_ref}};
-    }
-
-    return FabLagrangian(
-        l_ + b.l_,
-        {{"spec", std::make_shared<FabSpectralSemiSprays>(*s_ + *b.s_)},
-         {"hamiltonian", h_ + b.h_},
-         {"var", std::move(all_vars)},
-         {"ref_names", fab_core::get_variant_value<std::vector<std::string>>(all_ref_arguments["ref_names"])},
-         {"J_ref", fab_core::get_variant_value<CaSX>(all_ref_arguments["J_ref"])}});
+    return FabLagrangian(name() + "_" + b.name(), l_ + b.l_,
+                         {{"spec", std::make_shared<FabSpectralSemiSprays>(*s_ + *b.s_)},
+                          {"hamiltonian", h_ + b.h_},
+                          {"var", std::move(all_vars)},
+                          {"ref_names", std::move(all_ref_names)},
+                          {"J_ref", std::move(J_ref)}});
   }
 
   FabLagrangian& operator+=(const FabLagrangian& b) {
@@ -153,7 +148,7 @@ public:
     const auto f = CaSX::mtimes(F.T(), xdot()) + f_e + f_rel;
     h_ = CaSX::dot(dL_dxdot, xdot()) - l_ + en_rel;
     s_ = std::make_shared<FabSpectralSemiSprays>(
-        M, FabSpecArgs{{"f", f}, {"var", vars_}, {"refTrajs", refTrajs_}});
+        name() + "_spec", M, FabSpecArgs{{"f", f}, {"var", vars_}, {"refTrajs", refTrajs_}});
   }
 
   void concretize(int8_t ref_sign = 1) override {
@@ -167,7 +162,7 @@ public:
       vars += refTraj;
     }
 
-    func_ = std::make_shared<FabCasadiFunction>("func_", std::move(vars), CaSXDict{{"h", h_}});
+    func_ = std::make_shared<FabCasadiFunction>(name() + "_func", std::move(vars), CaSXDict{{"h", h_}});
   }
 
 protected:
@@ -190,11 +185,12 @@ protected:
     }
     if (is_dynamic()) {
       return std::make_shared<FabLagrangian>(
-          l_subst2,
+          name() + "_pulled", l_subst2,
           FabLagrangianArgs{{"var", std::move(new_vars)}, {"J_ref", dm.J()}, {"ref_names", ref_names()}});
     } else {
       return std::make_shared<FabLagrangian>(
-          l_subst2, FabLagrangianArgs{{"var", std::move(new_vars)}, {"ref_names", ref_names()}});
+          name() + "_pulled", l_subst2,
+          FabLagrangianArgs{{"var", std::move(new_vars)}, {"ref_names", ref_names()}});
     }
   }
 
@@ -204,7 +200,8 @@ protected:
     const auto l_pulled_subst_x = CaSX::substitute(l_pulled, x(), dm.phi());
     const auto l_pulled_subst_x_xdot = CaSX::substitute(l_pulled_subst_x, xdot(), dm.phidot());
     return std::make_shared<FabLagrangian>(
-        l_pulled_subst_x_xdot, FabLagrangianArgs{{"var", dm.vars()}, {"ref_names", dm.ref_names()}});
+        name() + "_dyn_pulled", l_pulled_subst_x_xdot,
+        FabLagrangianArgs{{"var", dm.vars()}, {"ref_names", dm.ref_names()}});
   }
 
 public:
@@ -233,14 +230,14 @@ using FabLagrangianPtr = std::shared_ptr<FabLagrangian>;
 class FabFinslerStructure : public FabLagrangian {
   FabFinslerStructure() = default;
 
-  FabFinslerStructure(const CaSX& lg,
+  FabFinslerStructure(std::string name, const CaSX& lg,
                       const FabNamedMap<CaSX, FabVariablesPtr, FabTrajectories, FabSpectralSemiSpraysPtr,
                                         std::vector<std::string>>& kwargs)
-      : FabLagrangian(0.5 * pow(lg, 2), kwargs), lg_(lg) {}
+      : FabLagrangian(std::move(name), 0.5 * CaSX::pow(lg, 2), kwargs), lg_(lg) {}
 
   void concretize() {
     FabLagrangian::concretize();
-    func_lg_ = std::make_shared<FabCasadiFunction>("func_lg_", *this->vars_, CaSXDict{{"Lg", lg_}});
+    func_lg_ = std::make_shared<FabCasadiFunction>(name() + "_func_lg", *this->vars_, CaSXDict{{"Lg", lg_}});
   }
 
   CaSXDict evaluate(const FabCasadiArgMap& kwargs) const override {
@@ -249,7 +246,7 @@ class FabFinslerStructure : public FabLagrangian {
       return {{"M", parent_eval["M"]},
               {"f", parent_eval["f"]},
               {"h", parent_eval["h"]},
-              {"lg", func_lg_->evaluate(kwargs)["lg"]}};
+              {"lg", func_lg_->evaluate(kwargs)["Lg"]}};
     }
     throw FabError::customized("FabGeometry evaluation failed", "Function not defined");
   }
@@ -266,8 +263,9 @@ using FabFinslerStructurePtr = std::shared_ptr<FabFinslerStructure>;
 //
 class FabExecutionLagrangian : public FabLagrangian {
 public:
-  explicit FabExecutionLagrangian(const FabVariablesPtr& vars)
-      : FabLagrangian(CaSX::dot(vars->velocity_var(), vars->velocity_var()), {{"var", vars}}) {}
+  explicit FabExecutionLagrangian(std::string name, const FabVariablesPtr& vars)
+      : FabLagrangian(std::move(name), CaSX::dot(vars->velocity_var(), vars->velocity_var()),
+                      {{"var", vars}}) {}
 };
 
 using FabExecutionLagrangianPtr = std::shared_ptr<FabExecutionLagrangian>;
