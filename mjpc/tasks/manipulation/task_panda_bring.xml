@@ -1,11 +1,16 @@
 <mujoco model="Panda Bring">
   <include file="../common.xml"/>
 
+  <compiler angle="radian" meshdir="assets" autolimits="true"/>
+
   <option timestep="0.01" cone="elliptic" integrator="implicit">
     <flag multiccd="enable"/>
   </option>
   <size memory="1M" nuserdata="1"/>
 
+  <asset>
+    <mesh file="mug.obj" scale="0.01 0.01 0.01"/>
+  </asset>
   <custom>
     <numeric name="task_transition" data="1" />
     <numeric name="agent_planner" data="0" />
@@ -22,6 +27,7 @@
 
   <keyframe>
     <key name="home" qpos="
+    0.8 0 0.3 0.707 0.707 0 0
     0.612639 0.152204 0.0872751
     0.0747279 0.691609 -0.36265 0.620144
     0.530228 -0.0789289 0.0670311
@@ -72,6 +78,11 @@
     <site name="reset" pos="0.2 0 0.3"/>
     <site name="pedestal" pos="0.45 0 0"/>
     <geom name="pedestal" pos="0.45 0 0.005" type="cylinder" size=".025 .005" class="red_rgb_object/collision"/>
+
+    <body name="mug" pos="0.8 0 0.3" quat="0.707 0.707 0 0">
+      <freejoint name="mug_joint"/>
+      <geom name="mug" type="mesh" mesh="mug" class="red_rgb_object/collision"/>
+    </body>
 
     <body name="object">
       <freejoint name="red_rgb_object/"/>

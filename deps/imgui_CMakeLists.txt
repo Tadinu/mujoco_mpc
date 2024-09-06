@@ -22,7 +22,12 @@ set(IMGUI_BACKEND_OPENGL_MOCK "OFF" CACHE BOOL "Enable openGL_mock backend")
 
 if("${IMGUI_BACKEND_OPENGL3_GLFW}")
 
-  set(SRCS imgui.cpp imgui_draw.cpp imgui_widgets.cpp imgui_demo.cpp backends/imgui_impl_glfw.cpp backends/imgui_impl_opengl3.cpp)
+  set(SRCS imgui.cpp
+           imgui_draw.cpp
+           imgui_tables.cpp
+           imgui_widgets.cpp
+           imgui_demo.cpp
+           backends/imgui_impl_glfw.cpp backends/imgui_impl_opengl3.cpp)
 
   add_library(imgui ${SRCS})
 

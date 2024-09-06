@@ -97,32 +97,24 @@ void Clamp(double* x, const double* bounds, int n) {
   }
 }
 
-int ReinterpretAsInt(double value) {
-  return *std::launder(reinterpret_cast<const int*>(&value));
-}
+int ReinterpretAsInt(double value) { return *std::launder(reinterpret_cast<const int*>(&value)); }
 
-double ReinterpretAsDouble(int64_t value) {
-  return *std::launder(reinterpret_cast<const double*>(&value));
-}
+double ReinterpretAsDouble(int64_t value) { return *std::launder(reinterpret_cast<const double*>(&value)); }
 
-absl::flat_hash_map<std::string, std::vector<std::string>>
-ResidualSelectionLists(const mjModel* m) {
+absl::flat_hash_map<std::string, std::vector<std::string>> ResidualSelectionLists(const mjModel* m) {
   absl::flat_hash_map<std::string, std::vector<std::string>> result;
   for (int i = 0; i < m->ntext; i++) {
-    if (!absl::StartsWith(std::string_view(m->names + m->name_textadr[i]),
-                          "residual_list_")) {
+    if (!absl::StartsWith(std::string_view(m->names + m->name_textadr[i]), "residual_list_")) {
       continue;
     }
     std::string name = &m->names[m->name_textadr[i]];
     std::string_view options(m->text_data + m->text_adr[i]);
-    result[absl::StripPrefix(name, "residual_list_")] =
-        absl::StrSplit(options, '|');
+    result[absl::StripPrefix(name, "residual_list_")] = absl::StrSplit(options, '|');
   }
   return result;
 }
 
-std::string ResidualSelection(const mjModel* m, std::string_view name,
-                              double residual_parameter) {
+std::string ResidualSelection(const mjModel* m, std::string_view name, double residual_parameter) {
   std::string list_name = absl::StrCat("residual_list_", name);
 
   // we're using a double field to store an integer - reinterpret as an int
@@ -142,14 +134,12 @@ std::string ResidualSelection(const mjModel* m, std::string_view name,
   return "";
 }
 
-double ResidualParameterFromSelection(const mjModel* m, std::string_view name,
-                                      const std::string_view value) {
+double ResidualParameterFromSelection(const mjModel* m, std::string_view name, const std::string_view value) {
   std::string list_name = absl::StrCat("residual_list_", name);
   for (int i = 0; i < m->ntext; i++) {
     if (list_name == &m->names[m->name_textadr[i]]) {
       int64_t list_index = 0;
-      std::string_view options(m->text_data + m->text_adr[i],
-                               m->text_size[i] - 1);
+      std::string_view options(m->text_data + m->text_adr[i], m->text_size[i] - 1);
       std::vector<std::string> values = absl::StrSplit(options, '|');
       for (std::string_view v : absl::StrSplit(options, '|')) {
         if (v == value) {
@@ -163,8 +153,7 @@ double ResidualParameterFromSelection(const mjModel* m, std::string_view name,
 }
 
 // get sensor data using string
-double* SensorByName(const mjModel* m, const mjData* d,
-                     const std::string& name) {
+double* SensorByName(const mjModel* m, const mjData* d, const std::string& name) {
   int id = mj_name2id(m, mjOBJ_SENSOR, name.c_str());
   if (id == -1) {
     std::cerr << "sensor \"" << name << "\" not found.\n";
@@ -176,8 +165,7 @@ double* SensorByName(const mjModel* m, const mjData* d,
 
 // get default residual parameter data using string
 double DefaultParameterValue(const mjModel* model, std::string_view name) {
-  int id =
-      mj_name2id(model, mjOBJ_NUMERIC, absl::StrCat("residual_", name).c_str());
+  int id = mj_name2id(model, mjOBJ_NUMERIC, absl::StrCat("residual_", name).c_str());
   if (id == -1) {
     mju_error_s("Parameter '%s' not found", std::string(name).c_str());
     return 0;
@@ -187,8 +175,7 @@ double DefaultParameterValue(const mjModel* model, std::string_view name) {
 
 // get index to residual parameter data using string
 int ParameterIndex(const mjModel* model, std::string_view name) {
-  int id =
-      mj_name2id(model, mjOBJ_NUMERIC, absl::StrCat("residual_", name).c_str());
+  int id = mj_name2id(model, mjOBJ_NUMERIC, absl::StrCat("residual_", name).c_str());
 
   if (id == -1) {
     mju_error_s("Parameter '%s' not found", std::string(name).c_str());
@@ -247,8 +234,7 @@ void CheckSensorDim(const mjModel* model, int residual_size) {
 }
 
 // get traces from sensors
-void GetTraces(double* traces, const mjModel* m, const mjData* d,
-               int num_trace) {
+void GetTraces(double* traces, const mjModel* m, const mjData* d, int num_trace) {
   if (num_trace > kMaxTraces) {
     mju_error("Number of traces should be less than 100\n");
   }
@@ -267,8 +253,7 @@ void GetTraces(double* traces, const mjModel* m, const mjData* d,
 }
 
 // get keyframe `qpos` data using string
-double* KeyQPosByName(const mjModel* m, const mjData* d,
-                      const std::string& name) {
+double* KeyQPosByName(const mjModel* m, const mjData* d, const std::string& name) {
   int id = mj_name2id(m, mjOBJ_KEY, name.c_str());
   if (id == -1) {
     return nullptr;
@@ -283,8 +268,8 @@ void LinearRange(double* t, double t_step, double t0, int N) {
 }
 
 // zero-order interpolation
-void ZeroInterpolation(double* output, double x, const std::vector<double>& xs,
-                       const double* ys, int dim, int length) {
+void ZeroInterpolation(double* output, double x, const std::vector<double>& xs, const double* ys, int dim,
+                       int length) {
   // bounds
   int bounds[2];
   FindInterval(bounds, xs, x, length);
@@ -294,9 +279,8 @@ void ZeroInterpolation(double* output, double x, const std::vector<double>& xs,
 }
 
 // linear interpolation
-void LinearInterpolation(double* output, double x,
-                         const std::vector<double>& xs, const double* ys,
-                         int dim, int length) {
+void LinearInterpolation(double* output, double x, const std::vector<double>& xs, const double* ys, int dim,
+                         int length) {
   // bounds
   int bounds[2];
   FindInterval(bounds, xs, x, length);
@@ -316,8 +300,7 @@ void LinearInterpolation(double* output, double x,
 }
 
 // coefficients for cubic interpolation
-void CubicCoefficients(double* coefficients, double x,
-                       const std::vector<double>& xs, int T) {
+void CubicCoefficients(double* coefficients, double x, const std::vector<double>& xs, int T) {
   // find interval
   int bounds[2];
   FindInterval(bounds, xs, x, T);
@@ -335,50 +318,45 @@ void CubicCoefficients(double* coefficients, double x,
 
   // coefficients
   coefficients[0] = 2.0 * t * t * t - 3.0 * t * t + 1.0;
-  coefficients[1] =
-      (t * t * t - 2.0 * t * t + t) * (xs[bounds[1]] - xs[bounds[0]]);
+  coefficients[1] = (t * t * t - 2.0 * t * t + t) * (xs[bounds[1]] - xs[bounds[0]]);
   coefficients[2] = -2.0 * t * t * t + 3 * t * t;
   coefficients[3] = (t * t * t - t * t) * (xs[bounds[1]] - xs[bounds[0]]);
 }
 
 // finite-difference vector
-double FiniteDifferenceSlope(double x, const std::vector<double>& xs,
-                             const double* ys, int dim, int length, int i) {
+double FiniteDifferenceSlope(double x, const std::vector<double>& xs, const double* ys, int dim, int length,
+                             int i) {
   // find interval
   int bounds[2];
   FindInterval(bounds, xs, x, length);
   // lower out of bounds
   if (bounds[0] == 0 && bounds[1] == 0) {
     if (length > 2) {
-      return (ys[dim * (bounds[1] + 1) + i] - ys[dim * bounds[1] + i]) /
-             (xs[bounds[1] + 1] - xs[bounds[1]]);
+      return (ys[dim * (bounds[1] + 1) + i] - ys[dim * bounds[1] + i]) / (xs[bounds[1] + 1] - xs[bounds[1]]);
     } else {
       return 0.0;
     }
     // upper out of bounds
   } else if (bounds[0] == length - 1 && bounds[1] == length - 1) {
     if (length > 2) {
-      return (ys[dim * bounds[0] + i] - ys[dim * (bounds[0] - 1) + i]) /
-             (xs[bounds[0]] - xs[bounds[0] - 1]);
+      return (ys[dim * bounds[0] + i] - ys[dim * (bounds[0] - 1) + i]) / (xs[bounds[0]] - xs[bounds[0] - 1]);
     } else {
       return 0.0;
     }
     // bounds
   } else if (bounds[0] == 0) {
-    return (ys[dim * bounds[1] + i] - ys[dim * bounds[0] + i]) /
-           (xs[bounds[1]] - xs[bounds[0]]);
+    return (ys[dim * bounds[1] + i] - ys[dim * bounds[0] + i]) / (xs[bounds[1]] - xs[bounds[0]]);
     // interval
   } else {
-    return 0.5 * (ys[dim * bounds[1] + i] - ys[dim * bounds[0] + i]) /
-               (xs[bounds[1]] - xs[bounds[0]]) +
+    return 0.5 * (ys[dim * bounds[1] + i] - ys[dim * bounds[0] + i]) / (xs[bounds[1]] - xs[bounds[0]]) +
            0.5 * (ys[dim * bounds[0] + i] - ys[dim * (bounds[0] - 1) + i]) /
                (xs[bounds[0]] - xs[bounds[0] - 1]);
   }
 }
 
 // cubic polynominal interpolation
-void CubicInterpolation(double* output, double x, const std::vector<double>& xs,
-                        const double* ys, int dim, int length) {
+void CubicInterpolation(double* output, double x, const std::vector<double>& xs, const double* ys, int dim,
+                        int length) {
   // find interval
   int bounds[2];
   FindInterval(bounds, xs, x, length);
@@ -398,8 +376,7 @@ void CubicInterpolation(double* output, double x, const std::vector<double>& xs,
     double m1 = FiniteDifferenceSlope(xs[bounds[1]], xs, ys, dim, length, i);
     double p1 = ys[bounds[1] * dim + i];
     // polynominal
-    output[i] = coefficients[0] * p0 + coefficients[1] * m0 +
-                coefficients[2] * p1 + coefficients[3] * m1;
+    output[i] = coefficients[0] * p0 + coefficients[1] * m0 + coefficients[2] * p1 + coefficients[3] * m1;
   }
 }
 
@@ -425,8 +402,7 @@ std::string GetExecutableDir() {
         // realpath is too small, grow and retry
         buf_size *= 2;
       } else {
-        std::cerr << "failed to retrieve executable path: " << GetLastError()
-                  << "\n";
+        std::cerr << "failed to retrieve executable path: " << GetLastError() << "\n";
         return "";
       }
     }
@@ -473,8 +449,7 @@ std::string GetExecutableDir() {
           return path;
         }
 
-        std::cerr << "error while resolving executable path: "
-                  << std::strerror(errno) << '\n';
+        std::cerr << "error while resolving executable path: " << std::strerror(errno) << '\n';
         return "";
       } else {
         // realpath is too small, grow and retry
@@ -509,9 +484,7 @@ static std::string GetTasksDir() {
 }
 
 // convenience function for paths
-std::string GetModelPath(std::string_view path) {
-  return absl::StrCat(GetTasksDir(), "/", path);
-}
+std::string GetModelPath(std::string_view path) { return absl::StrCat(GetTasksDir(), "/", path); }
 
 // dx = (x2 - x1) / h
 void Diff(mjtNum* dx, const mjtNum* x1, const mjtNum* x2, mjtNum h, int n) {
@@ -522,8 +495,7 @@ void Diff(mjtNum* dx, const mjtNum* x1, const mjtNum* x2, mjtNum h, int n) {
 }
 
 // finite-difference two state vectors ds = (s2 - s1) / h
-void StateDiff(const mjModel* m, mjtNum* ds, const mjtNum* s1, const mjtNum* s2,
-               mjtNum h) {
+void StateDiff(const mjModel* m, mjtNum* ds, const mjtNum* s1, const mjtNum* s2, mjtNum h) {
   int nq = m->nq, nv = m->nv, na = m->na;
 
   if (nq == nv) {
@@ -535,9 +507,8 @@ void StateDiff(const mjModel* m, mjtNum* ds, const mjtNum* s1, const mjtNum* s2,
 }
 
 // return global height of nearest group 0 geom under given position
-mjtNum Ground(const mjModel* model, const mjData* data, const mjtNum pos[3],
-              const mjtByte* geomgroup) {
-  mjtNum down[3] = {0, 0, -1};                      // aim ray straight down
+mjtNum Ground(const mjModel* model, const mjData* data, const mjtNum pos[3], const mjtByte* geomgroup) {
+  mjtNum down[3] = {0, 0, -1};      // aim ray straight down
   const mjtNum height_offset = .5;  // add some height in case of penetration
   const mjtByte flg_static = 1;     // include static geoms
   const int bodyexclude = -1;       // don't exclude any bodies
@@ -545,8 +516,7 @@ mjtNum Ground(const mjModel* model, const mjData* data, const mjtNum pos[3],
   mjtNum query[3] = {pos[0], pos[1], pos[2] + height_offset};
   const mjtByte default_geomgroup[6] = {1, 0, 0, 0, 0, 0};
   const mjtByte* query_geomgroup = geomgroup ? geomgroup : default_geomgroup;
-  mjtNum dist = mj_ray(model, data, query, down, query_geomgroup, flg_static,
-                       bodyexclude, &geomid);
+  mjtNum dist = mj_ray(model, data, query, down, query_geomgroup, flg_static, bodyexclude, &geomid);
 
   if (dist < 0) {  // SHOULD NOT OCCUR
     mju_error("no group 0 geom detected by raycast");
@@ -556,10 +526,8 @@ mjtNum Ground(const mjModel* model, const mjData* data, const mjtNum pos[3],
 }
 
 // find frame that best matches 4 feet, z points to body
-void FootFrame(double feet_pos[3], double feet_mat[9], double feet_quat[4],
-               const double body[3], const double foot0[3],
-               const double foot1[3], const double foot2[3],
-               const double foot3[3]) {
+void FootFrame(double feet_pos[3], double feet_mat[9], double feet_quat[4], const double body[3],
+               const double foot0[3], const double foot1[3], const double foot2[3], const double foot3[3]) {
   // average foot pos
   double pos[3];
   for (int i = 0; i < 3; i++) {
@@ -620,28 +588,24 @@ void ProjectToSegment(double x[3], const double p0[3], const double p1[3]) {
 
 // default cost colors
 const float CostColors[20][3]{
-    {1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.3, 0.3, 1.0}, {1.0, 1.0, 0.0},
-    {0.0, 1.0, 1.0}, {1.0, 0.5, 0.5}, {0.5, 1.0, 0.5}, {0.5, 0.5, 1.0},
-    {1.0, 1.0, 0.5}, {0.5, 1.0, 1.0}, {1.0, 0.0, 0.0}, {0.0, 1.0, 0.0},
-    {0.3, 0.3, 1.0}, {1.0, 1.0, 0.0}, {0.0, 1.0, 1.0}, {1.0, 0.5, 0.5},
-    {0.5, 1.0, 0.5}, {0.5, 0.5, 1.0}, {1.0, 1.0, 0.5}, {0.5, 1.0, 1.0},
+    {1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.3, 0.3, 1.0}, {1.0, 1.0, 0.0}, {0.0, 1.0, 1.0},
+    {1.0, 0.5, 0.5}, {0.5, 1.0, 0.5}, {0.5, 0.5, 1.0}, {1.0, 1.0, 0.5}, {0.5, 1.0, 1.0},
+    {1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.3, 0.3, 1.0}, {1.0, 1.0, 0.0}, {0.0, 1.0, 1.0},
+    {1.0, 0.5, 0.5}, {0.5, 1.0, 0.5}, {0.5, 0.5, 1.0}, {1.0, 1.0, 0.5}, {0.5, 1.0, 1.0},
 };
 
 // plots - vertical line
-void PlotVertical(mjvFigure* fig, double time, double min_value,
-                  double max_value, int N, int index) {
+void PlotVertical(mjvFigure* fig, double time, double min_value, double max_value, int N, int index) {
   for (int i = 0; i < N; i++) {
     fig->linedata[index][2 * i] = time;
-    fig->linedata[index][2 * i + 1] =
-        min_value + i / (N - 1) * (max_value - min_value);
+    fig->linedata[index][2 * i + 1] = min_value + i / (N - 1) * (max_value - min_value);
   }
   fig->linepnt[index] = N;
 }
 
 // plots - update data
-void PlotUpdateData(mjvFigure* fig, double* bounds, double x, double y,
-                    int length, int index, int x_update, int y_update,
-                    double x_bound_lower) {
+void PlotUpdateData(mjvFigure* fig, double* bounds, double x, double y, int length, int index, int x_update,
+                    int y_update, double x_bound_lower) {
   int pnt = mjMIN(length, fig->linepnt[index] + 1);
 
   // shift previous data
@@ -691,8 +655,7 @@ void PlotResetData(mjvFigure* fig, int length, int index) {
 }
 
 // plots - horizontal line
-void PlotHorizontal(mjvFigure* fig, const double* xs, double y, int length,
-                    int index) {
+void PlotHorizontal(mjvFigure* fig, const double* xs, double y, int length, int index) {
   for (int i = 0; i < length; i++) {
     fig->linedata[index][2 * i] = xs[i];
     fig->linedata[index][2 * i + 1] = y;
@@ -701,9 +664,8 @@ void PlotHorizontal(mjvFigure* fig, const double* xs, double y, int length,
 }
 
 // plots - set data
-void PlotData(mjvFigure* fig, double* bounds, const double* xs,
-              const double* ys, int dim, int dim_limit, int length,
-              int start_index, double x_bound_lower) {
+void PlotData(mjvFigure* fig, double* bounds, const double* xs, const double* ys, int dim, int dim_limit,
+              int length, int start_index, double x_bound_lower) {
   for (int j = 0; j < dim_limit; j++) {
     for (int t = 0; t < length; t++) {
       // set data
@@ -724,25 +686,126 @@ void PlotData(mjvFigure* fig, double* bounds, const double* xs,
   }
 }
 
+// add body to scene
+void AddBody(mjModel* model, mjData* data, mjtGeom type, const mjtNum size[3], const mjtNum pos[3],
+             const float rgba[4], mjString* mesh_name, mjString* mat) {
+  mjSpec* spec = GetGlobalModelSpec();
+  // add body
+  mjsBody* newbody = mjs_addBody(mjs_findBody(spec, "world"), nullptr);
+
+  // add geom
+  mjsGeom* geom = mjs_addGeom(newbody, nullptr);
+  static std::string geom_name = "dyn_obj";
+  geom->name = (mjString*)&geom_name;
+  geom->type = type;
+
+  // set size (for XYZ scaling)
+  if (size) {
+    switch ((mjtGeom)type) {
+      case mjGEOM_SPHERE:
+        mju_fill(geom->size, size[0], 3);
+        break;
+
+      case mjGEOM_CAPSULE:
+      case mjGEOM_CYLINDER:
+        geom->size[0] = (float)size[0];
+        geom->size[1] = (float)size[0];
+        geom->size[2] = (float)size[1];
+        break;
+
+      case mjGEOM_MESH:
+        if (mesh_name) {
+          geom->meshname = mesh_name;
+        }
+        break;
+
+      default:
+        mju_copy(geom->size, size, 3);
+    }
+  } else {
+    mju_fill(geom->pos, 0.1, 3);
+  }
+
+  // set pos
+  if (pos) {
+    mju_copy(geom->pos, pos, 3);
+  } else {
+    mju_zero(geom->pos, 3);
+  }
+
+  // set mat
+  if (mat) {
+    geom->material = mat;
+  }
+
+  // set rgba
+  if (rgba) {
+    memcpy(geom->rgba, rgba, 4 * sizeof(float));
+  } else {
+    geom->rgba[0] = 0.5;
+    geom->rgba[1] = 0.5;
+    geom->rgba[2] = 0.5;
+    geom->rgba[3] = 1;
+  }
+
+  // set properties
+  newbody->pos[0] = 2;
+  geom->size[0] = .3;
+
+  // compile new model
+  mj_recompile(spec, nullptr, model, data);
+}
+
 // add geom to scene
-void AddGeom(mjvScene* scene, mjtGeom type, const mjtNum size[3],
-             const mjtNum pos[3], const mjtNum mat[9], const float rgba[4]) {
+void AddGeom(mjvScene* scene, mjtGeom type, const mjtNum size[3], const mjtNum pos[3], const mjtNum mat[9],
+             const float rgba[4]) {
   // if no available geoms, return
   if (scene->ngeom >= scene->maxgeom) return;
 
   // add geom
   mjtNum mat_world[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
-  mjv_initGeom(&scene->geoms[scene->ngeom], type, size, pos,
-               mat ? mat : mat_world, rgba);
+  mjv_initGeom(&scene->geoms[scene->ngeom], type, size, pos, mat ? mat : mat_world, rgba);
   scene->geoms[scene->ngeom].category = mjCAT_DECOR;
 
   // increment ngeom
   scene->ngeom += 1;
 }
 
+void AddGeomWithTriangles(mjvScene* scene, const mjtNum v0s[], const mjtNum v1s[], const mjtNum v2s[],
+                          int32_t vnum, const float rgba[4]) {
+  mjvGeom* geom = nullptr;
+  for (auto i = 0; i < vnum; ++i) {
+    const auto v_i = i * 3;
+    AddTriangle(scene, geom, &v0s[v_i], &v1s[v_i + 1], &v2s[v_i + 2], rgba);
+  }
+}
+
+void AddTriangle(mjvScene* scene, mjvGeom*& geom, const mjtNum v0[3], const mjtNum v1[3], const mjtNum v2[3],
+                 const float rgba[4]) {
+  // Ref [engine_vis_visualize.c]
+  if (scene->ngeom >= scene->maxgeom) {
+    std::cout << "Max no of geoms reached: " << scene->maxgeom << std::endl;
+    return;
+  } else {
+    geom = scene->geoms + scene->ngeom;
+    memset(geom, 0, sizeof(mjvGeom));
+    mjv_initGeom(geom, mjGEOM_NONE, nullptr, nullptr, nullptr, nullptr);
+    geom->objtype = mjOBJ_GEOM;
+    geom->objid = scene->ngeom;
+    geom->category = mjCAT_DECOR;
+  }
+  mjtNum e1[3] = {v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]};
+  mjtNum e2[3] = {v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2]};
+  mjtNum normal[3];
+  mju_cross(normal, e1, e2);
+  mjtNum lengths[3] = {mju_normalize3(e1), mju_normalize3(e2), mju_normalize3(normal)};
+  mjtNum xmat[9] = {e1[0], e2[0], normal[0], e1[1], e2[1], normal[1], e1[2], e2[2], normal[2]};
+  mjv_initGeom(geom, mjGEOM_TRIANGLE, lengths, v0, xmat, rgba);
+  scene->ngeom++;
+}
+
 // add connector geom to scene
-void AddConnector(mjvScene* scene, mjtGeom type, mjtNum width,
-                  const mjtNum from[3], const mjtNum to[3],
+void AddConnector(mjvScene* scene, mjtGeom type, mjtNum width, const mjtNum from[3], const mjtNum to[3],
                   const float rgba[4]) {
   // if no available geoms, return
   if (scene->ngeom >= scene->maxgeom) return;
@@ -751,8 +814,7 @@ void AddConnector(mjvScene* scene, mjtGeom type, mjtNum width,
   mjv_initGeom(&scene->geoms[scene->ngeom], type,
                /*size=*/nullptr, /*pos=*/nullptr, /*mat=*/nullptr, rgba);
   scene->geoms[scene->ngeom].category = mjCAT_DECOR;
-  mjv_makeConnector(&scene->geoms[scene->ngeom], type, width, from[0], from[1],
-                    from[2], to[0], to[1], to[2]);
+  mjv_makeConnector(&scene->geoms[scene->ngeom], type, width, from[0], from[1], from[2], to[0], to[1], to[2]);
 
   // increment ngeom
   scene->ngeom += 1;
@@ -760,9 +822,7 @@ void AddConnector(mjvScene* scene, mjtGeom type, mjtNum width,
 
 // number of available hardware threads
 #if defined(__APPLE__) || defined(_WIN32)
-int NumAvailableHardwareThreads(void) {
-  return std::thread::hardware_concurrency();
-}
+int NumAvailableHardwareThreads(void) { return std::thread::hardware_concurrency(); }
 #else
 int NumAvailableHardwareThreads(void) {
   // start by assuming a maximum of 128 hardware threads and keep growing until
@@ -800,8 +860,7 @@ bool CheckWarnings(mjData* data) {
 
 // compute vector with log-based scaling between min and max values
 void LogScale(double* values, double max_value, double min_value, int steps) {
-  double step =
-      (std::log(max_value) - std::log(min_value)) / std::max((steps - 1), 1);
+  double step = (std::log(max_value) - std::log(min_value)) / std::max((steps - 1), 1);
   for (int i = 0; i < steps; i++) {
     values[i] = std::exp(std::log(min_value) + i * step);
   }
@@ -813,9 +872,7 @@ void LogScale(double* values, double max_value, double min_value, int steps) {
 namespace {  // private functions in an anonymous namespace
 
 // 2d vector dot-product
-mjtNum mju_dot2(const mjtNum vec1[2], const mjtNum vec2[2]) {
-  return vec1[0] * vec2[0] + vec1[1] * vec2[1];
-}
+mjtNum mju_dot2(const mjtNum vec1[2], const mjtNum vec2[2]) { return vec1[0] * vec2[0] + vec1[1] * vec2[1]; }
 
 // 2d vector squared distance
 mjtNum mju_sqrdist2(const mjtNum vec1[2], const mjtNum vec2[2]) {
@@ -824,11 +881,9 @@ mjtNum mju_sqrdist2(const mjtNum vec1[2], const mjtNum vec2[2]) {
 }
 
 // returns true if edge to candidate is to the right of edge to next
-bool IsEdgeOutside(const mjtNum current[2], const mjtNum next[2],
-                   const mjtNum candidate[2]) {
+bool IsEdgeOutside(const mjtNum current[2], const mjtNum next[2], const mjtNum candidate[2]) {
   mjtNum current_edge[2] = {next[0] - current[0], next[1] - current[1]};
-  mjtNum candidate_edge[2] = {candidate[0] - current[0],
-                              candidate[1] - current[1]};
+  mjtNum candidate_edge[2] = {candidate[0] - current[0], candidate[1] - current[1]};
   mjtNum rotated_edge[2] = {current_edge[1], -current_edge[0]};
   mjtNum projection = mju_dot2(candidate_edge, rotated_edge);
 
@@ -847,8 +902,7 @@ bool IsEdgeOutside(const mjtNum current[2], const mjtNum next[2],
 }
 
 // returns 2D point on line segment from v0 to v1 that is nearest to query point
-void ProjectToSegment2D(mjtNum res[2], const mjtNum query[2],
-                        const mjtNum v0[2], const mjtNum v1[2]) {
+void ProjectToSegment2D(mjtNum res[2], const mjtNum query[2], const mjtNum v0[2], const mjtNum v1[2]) {
   mjtNum axis[2] = {v1[0] - v0[0], v1[1] - v0[1]};
   mjtNum length = mju_sqrt(mju_dot2(axis, axis));
   axis[0] /= length;
@@ -863,8 +917,8 @@ void ProjectToSegment2D(mjtNum res[2], const mjtNum query[2],
 }  // namespace
 
 // returns point in 2D convex hull that is nearest to query
-void NearestInHull(mjtNum res[2], const mjtNum query[2], const mjtNum* points,
-                   const int* hull, int num_hull) {
+void NearestInHull(mjtNum res[2], const mjtNum query[2], const mjtNum* points, const int* hull,
+                   int num_hull) {
   int outside = 0;      // assume query point is inside the hull
   mjtNum best_sqrdist;  // smallest squared distance so far
   for (int i = 0; i < num_hull; i++) {
@@ -934,8 +988,7 @@ int Hull2D(int* hull, int num_points, const mjtNum* points) {
     int next = -1;
     for (int candidate = 0; candidate < num_points; candidate++) {
       if ((next == -1) ||
-          IsEdgeOutside(points + 2 * hull[num_hull - 1], points + 2 * next,
-                        points + 2 * candidate)) {
+          IsEdgeOutside(points + 2 * hull[num_hull - 1], points + 2 * next, points + 2 * candidate)) {
         next = candidate;
       }
     }
@@ -963,8 +1016,8 @@ void FiniteDifferenceGradient::Resize(int dim) {
 }
 
 // compute finite-difference gradient
-void FiniteDifferenceGradient::Compute(
-    std::function<double(const double* x)> func, const double* input, int dim) {
+void FiniteDifferenceGradient::Compute(std::function<double(const double* x)> func, const double* input,
+                                       int dim) {
   // resize
   Resize(dim);
 
@@ -991,8 +1044,7 @@ void FiniteDifferenceGradient::Compute(
 }
 
 // finite-difference Jacobian constructor
-FiniteDifferenceJacobian::FiniteDifferenceJacobian(int num_output,
-                                                   int num_input) {
+FiniteDifferenceJacobian::FiniteDifferenceJacobian(int num_output, int num_input) {
   // resize
   Resize(num_output, num_input);
 }
@@ -1000,19 +1052,16 @@ FiniteDifferenceJacobian::FiniteDifferenceJacobian(int num_output,
 // finite-difference Jacobian memory resize
 void FiniteDifferenceJacobian::Resize(int num_output, int num_input) {
   // resize
-  if (jacobian.size() != num_output * num_input)
-    jacobian.resize(num_output * num_input);
-  if (jacobian_transpose.size() != num_output * num_input)
-    jacobian_transpose.resize(num_output * num_input);
+  if (jacobian.size() != num_output * num_input) jacobian.resize(num_output * num_input);
+  if (jacobian_transpose.size() != num_output * num_input) jacobian_transpose.resize(num_output * num_input);
   if (output.size() != num_output) output.resize(num_output);
   if (output_nominal.size() != num_output) output_nominal.resize(num_output);
   if (workspace_.size() != num_input) workspace_.resize(num_input);
 }
 
 // compute Jacobian
-void FiniteDifferenceJacobian::Compute(
-    std::function<void(double* output, const double* input)> func,
-    const double* input, int num_output, int num_input) {
+void FiniteDifferenceJacobian::Compute(std::function<void(double* output, const double* input)> func,
+                                       const double* input, int num_output, int num_input) {
   // resize
   Resize(num_output, num_input);
 
@@ -1041,8 +1090,7 @@ void FiniteDifferenceJacobian::Compute(
   }
 
   // transpose
-  mju_transpose(jacobian.data(), jacobian_transpose.data(), num_input,
-                num_output);
+  mju_transpose(jacobian.data(), jacobian_transpose.data(), num_input, num_output);
 }
 
 // finite-difference Hessian constructor
@@ -1061,8 +1109,8 @@ void FiniteDifferenceHessian::Resize(int dim) {
 }
 
 // compute finite-difference Hessian
-void FiniteDifferenceHessian::Compute(
-    std::function<double(const double* x)> func, const double* input, int dim) {
+void FiniteDifferenceHessian::Compute(std::function<double(const double* x)> func, const double* input,
+                                      int dim) {
   // resize
   Resize(dim);
 
@@ -1111,8 +1159,8 @@ void FiniteDifferenceHessian::Compute(
 
 // set scaled block (size: rb x cb) in mat (size: rm x cm) given mat upper row
 // and left column indices (ri, ci)
-void SetBlockInMatrix(double* mat, const double* block, double scale, int rm,
-                      int cm, int rb, int cb, int ri, int ci) {
+void SetBlockInMatrix(double* mat, const double* block, double scale, int rm, int cm, int rb, int cb, int ri,
+                      int ci) {
   // loop over block rows
   for (int i = 0; i < rb; i++) {
     // loop over block columns
@@ -1124,8 +1172,8 @@ void SetBlockInMatrix(double* mat, const double* block, double scale, int rm,
 
 // set scaled block (size: rb x cb) in mat (size: rm x cm) given mat upper row
 // and left column indices (ri, ci)
-void AddBlockInMatrix(double* mat, const double* block, double scale, int rm,
-                      int cm, int rb, int cb, int ri, int ci) {
+void AddBlockInMatrix(double* mat, const double* block, double scale, int rm, int cm, int rb, int cb, int ri,
+                      int ci) {
   // loop over block rows
   for (int i = 0; i < rb; i++) {
     // loop over block columns
@@ -1137,8 +1185,7 @@ void AddBlockInMatrix(double* mat, const double* block, double scale, int rm,
 
 // get block (size: rb x cb) from mat (size: rm x cm) given mat upper row
 // and left column indices (ri, ci)
-void BlockFromMatrix(double* block, const double* mat, int rb, int cb, int rm,
-                     int cm, int ri, int ci) {
+void BlockFromMatrix(double* block, const double* mat, int rb, int cb, int rm, int cm, int ri, int ci) {
   // loop over block rows
   for (int i = 0; i < rb; i++) {
     double* block_cols = block + i * cb;
@@ -1148,8 +1195,7 @@ void BlockFromMatrix(double* block, const double* mat, int rb, int cb, int rm,
 }
 
 // differentiate mju_subQuat wrt qa, qb
-void DifferentiateSubQuat(double jaca[9], double jacb[9], const double qa[4],
-                          const double qb[4]) {
+void DifferentiateSubQuat(double jaca[9], double jacb[9], const double qa[4], const double qb[4]) {
   // compute 3D velocity
   double axis[3];
   mju_subQuat(axis, qa, qb);
@@ -1189,8 +1235,7 @@ void DifferentiateSubQuat(double jaca[9], double jacb[9], const double qa[4],
 
 // differentiate velocity by finite-differencing two positions wrt to qpos1,
 // qpos2
-void DifferentiateDifferentiatePos(double* jac1, double* jac2,
-                                   const mjModel* model, double dt,
+void DifferentiateDifferentiatePos(double* jac1, double* jac2, const mjModel* model, double dt,
                                    const double* qpos1, const double* qpos2) {
   // mjtNum neg[4], dif[4];
 
@@ -1229,8 +1274,7 @@ void DifferentiateDifferentiatePos(double* jac1, double* jac2,
           DifferentiateSubQuat(NULL, jac1_blk, qpos2 + padr, qpos1 + padr);
 
           // set block in Jacobian
-          SetBlockInMatrix(jac1, jac1_blk, 1.0 / dt, model->nv, model->nv, 3, 3,
-                           vadr, vadr);
+          SetBlockInMatrix(jac1, jac1_blk, 1.0 / dt, model->nv, model->nv, 3, 3, vadr, vadr);
         }
 
         if (jac2) {
@@ -1239,8 +1283,7 @@ void DifferentiateDifferentiatePos(double* jac1, double* jac2,
           DifferentiateSubQuat(jac2_blk, NULL, qpos2 + padr, qpos1 + padr);
 
           // set block in Jacobian
-          SetBlockInMatrix(jac2, jac2_blk, 1.0 / dt, model->nv, model->nv, 3, 3,
-                           vadr, vadr);
+          SetBlockInMatrix(jac2, jac2_blk, 1.0 / dt, model->nv, model->nv, 3, 3, vadr, vadr);
         }
 
         break;
@@ -1279,17 +1322,14 @@ int BandMatrixNonZeros(int ntotal, int nband) {
 
 // get duration since time point
 double GetDuration(std::chrono::steady_clock::time_point time) {
-  return std::chrono::duration_cast<std::chrono::microseconds>(
-             std::chrono::steady_clock::now() - time)
+  return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - time)
       .count();
 }
 
 // copy symmetric band matrix block by block
-void SymmetricBandMatrixCopy(double* res, const double* mat, int dblock,
-                             int nblock, int ntotal, int num_blocks,
-                             int res_start_row, int res_start_col,
-                             int mat_start_row, int mat_start_col,
-                             double* scratch) {
+void SymmetricBandMatrixCopy(double* res, const double* mat, int dblock, int nblock, int ntotal,
+                             int num_blocks, int res_start_row, int res_start_col, int mat_start_row,
+                             int mat_start_col, double* scratch) {
   // check for no blocks to copy
   if (num_blocks == 0) return;
 
@@ -1304,19 +1344,16 @@ void SymmetricBandMatrixCopy(double* res, const double* mat, int dblock,
 
     for (int j = i; j < i + num_cols; j++) {
       // get block from A
-      BlockFromMatrix(tmp1, mat, dblock, dblock, ntotal, ntotal,
-                      (i + mat_start_row) * dblock,
+      BlockFromMatrix(tmp1, mat, dblock, dblock, ntotal, ntotal, (i + mat_start_row) * dblock,
                       (j + mat_start_col) * dblock);
 
       // set block in matrix
-      AddBlockInMatrix(res, tmp1, 1.0, ntotal, ntotal, dblock, dblock,
-                       (i + res_start_row) * dblock,
+      AddBlockInMatrix(res, tmp1, 1.0, ntotal, ntotal, dblock, dblock, (i + res_start_row) * dblock,
                        (j + res_start_col) * dblock);
 
       if (j > i) {
         mju_transpose(tmp2, tmp1, dblock, dblock);
-        AddBlockInMatrix(res, tmp2, 1.0, ntotal, ntotal, dblock, dblock,
-                         (j + res_start_col) * dblock,
+        AddBlockInMatrix(res, tmp2, 1.0, ntotal, ntotal, dblock, dblock, (j + res_start_col) * dblock,
                          (i + res_start_row) * dblock);
       }
     }
@@ -1325,8 +1362,7 @@ void SymmetricBandMatrixCopy(double* res, const double* mat, int dblock,
 
 // zero block (size: rb x cb) in mat (size: rm x cm) given mat upper row
 // and left column indices (ri, ci)
-void ZeroBlockInMatrix(double* mat, int rm, int cm, int rb, int cb, int ri,
-                       int ci) {
+void ZeroBlockInMatrix(double* mat, int rm, int cm, int rb, int cb, int ri, int ci) {
   // loop over block rows
   for (int i = 0; i < rb; i++) {
     // loop over block columns
@@ -1345,9 +1381,7 @@ void DenseToBlockBand(double* res, int dim, int dblock, int nblock) {
   for (int i = 0; i < num_blocks; i++) {
     for (int j = i + nblock; j < num_blocks; j++) {
       ZeroBlockInMatrix(res, dim, dim, dblock, dblock, i * dblock, j * dblock);
-      if (j > i)
-        ZeroBlockInMatrix(res, dim, dim, dblock, dblock, j * dblock,
-                          i * dblock);
+      if (j > i) ZeroBlockInMatrix(res, dim, dim, dblock, dblock, j * dblock, i * dblock);
     }
   }
 }
@@ -1416,9 +1450,8 @@ void Inverse3(double* res, const double* mat) {
 // condition matrix: res = mat11 - mat10 * mat00 \ mat10^T; return rank of
 // mat00
 // TODO(taylor): thread
-void ConditionMatrix(double* res, const double* mat, double* mat00,
-                     double* mat10, double* mat11, double* tmp0, double* tmp1,
-                     int n, int n0, int n1, double* bandfactor, int nband) {
+void ConditionMatrix(double* res, const double* mat, double* mat00, double* mat10, double* mat11,
+                     double* tmp0, double* tmp1, int n, int n0, int n1, double* bandfactor, int nband) {
   // unpack mat
   BlockFromMatrix(mat00, mat, n0, n0, n, n, 0, 0);
   BlockFromMatrix(mat10, mat, n1, n0, n, n, n0, 0);
@@ -1433,8 +1466,7 @@ void ConditionMatrix(double* res, const double* mat, double* mat00,
 
     // tmp0 = mat00 \ mat01 = (mat00^-1 mat01)^T
     for (int i = 0; i < n1; i++) {
-      mju_cholSolveBand(tmp0 + n0 * i, bandfactor, mat10 + n0 * i, n0, nband,
-                        0);
+      mju_cholSolveBand(tmp0 + n0 * i, bandfactor, mat10 + n0 * i, n0, nband, 0);
     }
   } else {
     // factorize mat00
@@ -1456,15 +1488,13 @@ void ConditionMatrix(double* res, const double* mat, double* mat00,
 // principal eigenvector of 4x4 matrix
 // QUEST algorithm from "Three-Axis Attitude Determination from Vector
 // Observations"
-void PrincipalEigenVector4(double* res, const double* mat,
-                           double eigenvalue_init) {
+void PrincipalEigenVector4(double* res, const double* mat, double eigenvalue_init) {
   // Z = mat[0:3, 3]
   double Z[3] = {mat[3], mat[7], mat[11]};
 
   // S = mat[0:3, 0:3] + mat[3, 3] * I
-  double S[9] = {mat[0] + mat[15], mat[1],           mat[2],
-                 mat[4],           mat[5] + mat[15], mat[6],
-                 mat[8],           mat[9],           mat[10] + mat[15]};
+  double S[9] = {mat[0] + mat[15], mat[1], mat[2], mat[4],           mat[5] + mat[15],
+                 mat[6],           mat[8], mat[9], mat[10] + mat[15]};
 
   // delta = det(S)
   double delta = Determinant3(S);
@@ -1543,8 +1573,8 @@ void PrincipalEigenVector4(double* res, const double* mat,
 }
 
 // set scaled symmetric block matrix in band matrix
-void SetBlockInBand(double* band, const double* block, double scale, int ntotal,
-                    int nband, int nblock, int shift, int row_skip, bool add) {
+void SetBlockInBand(double* band, const double* block, double scale, int ntotal, int nband, int nblock,
+                    int shift, int row_skip, bool add) {
   // loop over block rows
   for (int i = row_skip; i < nblock; i++) {
     // width of block lower triangle row

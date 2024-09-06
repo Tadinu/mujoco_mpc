@@ -49,7 +49,7 @@ public:
 
   // constructor
   Agent() : planners_(mjpc::LoadPlanners()), estimators_(mjpc::LoadEstimators()) {}
-  explicit Agent(const mjModel* model, std::shared_ptr<Task> task);
+  explicit Agent(const mjModel* model, const mjData* data, std::shared_ptr<Task> task);
 
   // destructor
   ~Agent() {
@@ -59,7 +59,7 @@ public:
   // ----- methods ----- //
 
   // initialize data, settings, planners, states
-  void Initialize(const mjModel* model);
+  void Initialize(const mjModel* model, const mjData* data);
 
   // allocate memory
   void Allocate();
@@ -181,8 +181,9 @@ public:
   bool estimator_enabled = false;
 
 private:
-  // model
+  // model, data
   mjModel* model_ = nullptr;
+  mjData* data_ = nullptr;
 
   UniqueMjModel model_override_ = {nullptr, mj_deleteModel};
 

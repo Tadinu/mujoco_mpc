@@ -94,6 +94,8 @@ public:
   std::unique_ptr<AbstractResidualFn> Residual() const;
 
   // ----- methods ----- //
+  virtual void Initialize() {}
+
   // calls Residual on the pointer returned from InternalResidual(), while
   // holding a lock
   void Residual(const mjModel* model, const mjData* data, double* residual) const;

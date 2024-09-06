@@ -14,20 +14,20 @@
 
 #include "mjpc/testspeed.h"
 
+#include <mujoco/mujoco.h>
+
 #include <chrono>
 #include <cmath>
 #include <iostream>
 #include <string>
 #include <vector>
 
-#include <mujoco/mujoco.h>
-
 #include "mjpc/agent.h"
 #include "mjpc/states/state.h"
 #include "mjpc/task.h"
+#include "mjpc/tasks/tasks.h"
 #include "mjpc/threadpool.h"
 #include "mjpc/utilities.h"
-#include "mjpc/tasks/tasks.h"
 
 namespace mjpc {
 
@@ -42,8 +42,7 @@ void residual_callback(const mjModel* model, mjData* data, int stage) {
 
 // Run synchronous planning, print timing info,return 0 if nothing failed.
 double SynchronousPlanningCost(std::string task_name, int planner_thread_count,
-                               int steps_per_planning_iteration,
-                               double total_time) {
+                               int steps_per_planning_iteration, double total_time) {
   std::cout << "Test MJPC Speed\n";
   std::cout << " MuJoCo version " << mj_versionString() << "\n";
   if (mjVERSION_HEADER != mj_version()) {
@@ -55,8 +54,7 @@ double SynchronousPlanningCost(std::string task_name, int planner_thread_count,
   agent.SetTaskList(GetTasks());
   agent.gui_task_id = agent.GetTaskIdByName(task_name);
   if (agent.gui_task_id == -1) {
-    std::cerr << "Invalid --task flag: '" << task_name
-              << "'. Valid values:\n";
+    std::cerr << "Invalid --task flag: '" << task_name << "'. Valid values:\n";
     std::cerr << agent.GetTaskNames();
     return -1;
   }
@@ -77,7 +75,7 @@ double SynchronousPlanningCost(std::string task_name, int planner_thread_count,
 
   // the planner and its initial configuration is set in the XML
   agent.estimator_enabled = false;
-  agent.Initialize(model);
+  agent.Initialize(model, data);
   agent.Allocate();
   agent.Reset(data->ctrl);
   agent.plan_enabled = true;
@@ -97,30 +95,29 @@ double SynchronousPlanningCost(std::string task_name, int planner_thread_count,
     agent.ActiveTask()->Transition(model, data);
     agent.state.Set(model, data);
 
-    agent.ActivePlanner().ActionFromPolicy(
-        data->ctrl, agent.state.state().data(),
-        agent.state.time(), /*use_previous=*/false);
+    agent.ActivePlanner().ActionFromPolicy(data->ctrl, agent.state.state().data(), agent.state.time(),
+                                           /*use_previous=*/false);
     mj_step(model, data);
     double cost = agent.ActiveTask()->CostValue(data->sensordata);
     total_cost += cost;
 
-    if (i % steps_per_planning_iteration == 0) { agent.PlanIteration(&pool); }
+    if (i % steps_per_planning_iteration == 0) {
+      agent.PlanIteration(&pool);
+    }
 
     if (floor(data->time) > current_time) {
       current_time++;
       std::cout << "sim time: " << current_time << ", cost: " << cost << "\n";
     }
   }
-  auto wall_run_time = std::chrono::duration_cast<std::chrono::microseconds>(
-                            std::chrono::steady_clock::now() - loop_start)
-                            .count() /
-                        1e6;
-  std::cout << "Total wall time ("
-            << (int)ceil(total_steps / steps_per_planning_iteration)
-            << " planning steps): " << wall_run_time << " s ("
-            << total_time / wall_run_time << "x realtime)\n";
-  std::cout << "Average cost per step (lower is better): "
-            << total_cost / total_steps << "\n";
+  auto wall_run_time =
+      std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - loop_start)
+          .count() /
+      1e6;
+  std::cout << "Total wall time (" << (int)ceil(total_steps / steps_per_planning_iteration)
+            << " planning steps): " << wall_run_time << " s (" << total_time / wall_run_time
+            << "x realtime)\n";
+  std::cout << "Average cost per step (lower is better): " << total_cost / total_steps << "\n";
 
   mj_deleteData(data);
   mj_deleteModel(model);

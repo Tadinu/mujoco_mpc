@@ -19,6 +19,7 @@
 
 #include <Eigen/Eigen>
 
+#include "mjpc/ddg/include/ddg_body.h"
 #include "mjpc/planners/planner.h"
 #include "mjpc/planners/rmp/include/util/rmp_util.h"
 #include "mjpc/task.h"
@@ -251,6 +252,21 @@ public:
     ModelValues model_vals_;
   };
 
+  void Initialize() override {
+    mug_ = std::make_shared<DDGBody>();
+
+#if 0
+    // TODO: mj-recompile not working yet
+    static bool dynamic_obj_required = true;
+    if (dynamic_obj_required) {
+      static constexpr float BLUE[] = {0.0, 0.0, 1.0, 1.0};
+      static const std::string mesh_name = "mug";
+      mjpc::AddBody(model_, data_, mjGEOM_MESH, (double[]){1.0}, (double[]){0, 0, 5}, BLUE,
+                    (mjString*)&mesh_name);
+      dynamic_obj_required = false;
+    }
+#endif
+  }
   void TransitionLocked(mjModel* model, mjData* data) override;
   void ResetLocked(const mjModel* model) override;
 
@@ -266,6 +282,45 @@ public:
     double pinch_pos[3];
     mju_copy(pinch_pos, &data_->site_xpos[3 * mj_name2id(model, mjOBJ_SITE, "pinch")], 3);
     mjpc::AddGeom(scene, mjGEOM_SPHERE, (mjtNum[]){0.02}, pinch_pos, /*mat=*/nullptr, BLUE);
+
+    // DDG Body
+    const auto& mug_geom = mug_->geometry;
+    const auto mug_id = mj_name2id(model_, mjOBJ_BODY, "mug");
+    mjtNum mug_pos[3];
+    mju_copy3(mug_pos, &data_->xipos[3 * mug_id]);
+    mjtNum mug_quat[4];
+    mju_copy4(mug_quat, &data_->xquat[4 * mug_id]);
+
+#if 0
+    std::cout << mug_pos[0] << "-" << mug_pos[1] << "-" << mug_pos[2] << "-" << mug_quat[0] << "-"
+              << mug_quat[1] << "-" << mug_quat[2] << "-" << mug_quat[3] << std::endl;
+#endif
+    mug_->transform(mug_pos, mug_quat, 0.01);
+
+#if 0
+    static bool t = false;
+    for (auto i = 0; i < mug_->mesh->nVertices(); ++i) {
+      const auto& vpos = mug_geom->inputVertexPositions[i];
+      const auto& vcolor = mug_->K_colors[i];
+      mjpc::AddGeom(scene, mjGEOM_SPHERE, (mjtNum[]){0.001}, (mjtNum[]){vpos[0], vpos[1], vpos[2]},
+                    /*mat=*/nullptr, (float[]){float(vcolor[0]), float(vcolor[1]), float(vcolor[2]), 1.0});
+    }
+#else
+    for (const auto& v : mug_->mesh->vertices()) {
+      // const auto ew = mug_geom->vertexNormalEquallyWeighted(v);
+      // const auto tw = mug_geom->vertexNormalAngleWeighted(v);
+      // const auto si = mug_geom->vertexNormalSphereInscribed(v);
+      // const auto an = mug_geom->vertexNormalAreaWeighted(v);
+      // const auto hn = mug_geom->vertexNormalMeanCurvature(v);
+      const auto kn = mug_geom->vertexNormalGaussianCurvature(v);
+
+      const auto pos = mug_geom->inputVertexPositions[v];
+      const Eigen::Vector3<double> curPos = {pos.x, pos.y, pos.z};
+      const Eigen::Vector3<double> curVel = {kn.x, kn.y, kn.z};
+      const Eigen::Vector3<double> curVelEnd = curPos + curVel * 0.1;
+      mjpc::AddConnector(scene, mjGEOM_ARROW, 0.001, curPos.data(), curVelEnd.data(), BLUE);
+    }
+#endif
   }
 
 protected:
@@ -279,6 +334,7 @@ protected:
 private:
   ResidualFn residual_;
   bool is_static = false;
+  DDGBodyPtr mug_ = nullptr;
 };
 }  // namespace mjpc::manipulation
 

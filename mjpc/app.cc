@@ -221,7 +221,7 @@ void PhysicsLoop(mj::Simulate& sim) {
       mjData* dnew = nullptr;
       if (mnew) dnew = mj_makeData(mnew);
       if (dnew) {
-        sim.agent->Initialize(mnew);
+        sim.agent->Initialize(mnew, dnew);
         sim.agent->plot_enabled = absl::GetFlag(FLAGS_show_plot);
         sim.agent->plan_enabled = absl::GetFlag(FLAGS_planner_enabled);
         sim.agent->tune_enabled = absl::GetFlag(FLAGS_tuner_enabled);
@@ -420,7 +420,7 @@ MjpcApp::MjpcApp(std::vector<std::shared_ptr<mjpc::Task>> tasks, int task_id) {
 
   // agent
   sim->agent->estimator_enabled = absl::GetFlag(FLAGS_estimator_enabled);
-  sim->agent->Initialize(m);
+  sim->agent->Initialize(m, d);
   sim->agent->Allocate();
   sim->agent->Reset();
   sim->agent->PlotInitialize();

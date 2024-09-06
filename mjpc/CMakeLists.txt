@@ -205,6 +205,9 @@ add_library(
         planners/fabrics/src/fab_core_util.cpp
         planners/fabrics/src/fab_math_util.cpp
         planners/fabrics/src/fab_planner.cpp
+        ddg/ddg_colormap.cpp
+        ddg/include/ddg_colormap.h
+        ddg/include/ddg_body.h
         urdf_parser/common.cpp
         urdf_parser/geometry.cpp
         urdf_parser/joint.cpp
@@ -246,9 +249,9 @@ target_link_libraries(
         casadi
         ${Ipopt_LIBRARIES}
         geometry-central
-        imgui
         glfw
         glad
+        imgui
 )
 target_include_directories(libmjpc
         PUBLIC

@@ -58,9 +58,9 @@ const int kMaxActionPlots = 25;
 
 }  // namespace
 
-Agent::Agent(const mjModel* model, std::shared_ptr<Task> task) : Agent::Agent() {
+Agent::Agent(const mjModel* model, const mjData* data, std::shared_ptr<Task> task) : Agent::Agent() {
   SetTaskList({std::move(task)});
-  Initialize(model);
+  Initialize(model, data);
   Allocate();
   Reset();
   PlotInitialize();
@@ -68,12 +68,16 @@ Agent::Agent(const mjModel* model, std::shared_ptr<Task> task) : Agent::Agent() 
 }
 
 // initialize data, settings, planners, state
-void Agent::Initialize(const mjModel* model) {
+void Agent::Initialize(const mjModel* model, const mjData* data) {
   // ----- model ----- //
   mjModel* old_model = model_;
-  model_ = mj_copyModel(nullptr, model);  // agent's copy of model
+  mjData* old_data = data_;
+  // agent's copy of model, data
+  model_ = mj_copyModel(nullptr, model);
+  data_ = mj_copyData(nullptr, model, data);
   for (auto& task : tasks_) {
     task->model_ = model_;
+    task->data_ = data_;
   }
 
   // check for limits on all actuators
@@ -89,25 +93,26 @@ void Agent::Initialize(const mjModel* model) {
   }
 
   // planner
-  planner_ = GetNumberOrDefault(0, model, "agent_planner");
+  planner_ = GetNumberOrDefault(0, model_, "agent_planner");
 
   // estimator
-  estimator_ = estimator_enabled ? GetNumberOrDefault(0, model, "estimator") : 0;
+  estimator_ = estimator_enabled ? GetNumberOrDefault(0, model_, "estimator") : 0;
 
   // integrator
-  integrator_ = GetNumberOrDefault(model->opt.integrator, model, "agent_integrator");
+  integrator_ = GetNumberOrDefault(model_->opt.integrator, model_, "agent_integrator");
 
   // planning horizon
-  horizon_ = GetNumberOrDefault(0.5, model, "agent_horizon");
+  horizon_ = GetNumberOrDefault(0.5, model_, "agent_horizon");
 
   // time step
-  timestep_ = GetNumberOrDefault(1.0e-2, model, "agent_timestep");
+  timestep_ = GetNumberOrDefault(1.0e-2, model_, "agent_timestep");
 
   // planning steps
   steps_ = mju_max(mju_min(horizon_ / timestep_ + 1, kMaxTrajectoryHorizon), 1);
 
   active_task_id_ = gui_task_id;
-  ActiveTask()->Reset(model);
+  ActiveTask()->Initialize();
+  ActiveTask()->Reset(model_);
 
   // initialize planner
   for (const auto& planner : planners_) {
@@ -115,7 +120,7 @@ void Agent::Initialize(const mjModel* model) {
   }
 
   // initialize state
-  state.Initialize(model);
+  state.Initialize(model_);
 
   // initialize estimator
   if (reset_estimator && estimator_enabled) {
@@ -157,6 +162,9 @@ void Agent::Initialize(const mjModel* model) {
   // the new one.
   if (old_model) {
     mj_deleteModel(old_model);
+  }
+  if (old_data) {
+    mj_deleteData(old_data);
   }
 }
 
@@ -231,6 +239,7 @@ Agent::LoadModelResult Agent::LoadModel() const {
   } else {
     // otherwise use the task's model
     std::string filename = tasks_[gui_task_id]->XmlPath();
+    std::cout << "Agent::LoadModel() " << filename << std::endl;
     // make sure filename is not empty
     if (filename.empty()) {
       return {};
