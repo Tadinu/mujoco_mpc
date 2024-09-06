@@ -237,7 +237,6 @@ target_link_libraries(
         absl::log
         absl::random_random
         absl::span
-        glfw
         lodepng
         Eigen3::Eigen
         mujoco::mujoco
@@ -246,6 +245,10 @@ target_link_libraries(
         OpenMP::OpenMP_CXX
         casadi
         ${Ipopt_LIBRARIES}
+        geometry-central
+        imgui
+        glfw
+        glad
 )
 target_include_directories(libmjpc
         PUBLIC

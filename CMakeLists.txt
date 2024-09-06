@@ -224,5 +224,8 @@ endif()
 set(MJPC_COMPILE_OPTIONS "${AVX_COMPILE_OPTIONS}" "${EXTRA_COMPILE_OPTIONS}")
 set(MJPC_LINK_OPTIONS "${EXTRA_LINK_OPTIONS}")
 
+add_subdirectory(deps/geometry-central)
+add_subdirectory(deps/glad)
+add_subdirectory(deps/imgui)
 add_subdirectory(mjpc)
 
