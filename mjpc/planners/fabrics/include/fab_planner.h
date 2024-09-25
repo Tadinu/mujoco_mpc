@@ -485,8 +485,8 @@ public:
     }
 
     // Self-collision link-pairs
-    for (const auto& [link_name_key, link_pair] : self_collision_pairs) {
-      for (const auto& link_name : link_pair) {
+    for (const auto& [link_name_key, link_list] : self_collision_pairs) {
+      for (const auto& link_name : link_list) {
         add_spherical_self_collision_geometry(link_name, link_name_key);
       }
     }
@@ -515,13 +515,13 @@ public:
     if (FabSubGoalType::STATIC_JOINT_SPACE == subgoal_type) {
       return fab_core::get_casx(vars_->position_var(), subgoal_indices);
     } else {
-      static constexpr bool position_only = true;
-      const auto fk_child =
-          get_forward_kinematics(sub_goal->child_link_name(), sub_goal->desired_pose_offset(), position_only);
+      static constexpr bool goal_position_only = true;
+      const auto fk_child = get_forward_kinematics(sub_goal->child_link_name(),
+                                                   sub_goal->desired_pose_offset(), goal_position_only);
       CaSX fk_parent;
       try {
         fk_parent = get_forward_kinematics(sub_goal->parent_link_name(), sub_goal->desired_pose_offset(),
-                                           position_only);
+                                           goal_position_only);
       } catch (const FabError& e) {
         fk_parent = CaSX::zeros(3);
       }
@@ -536,29 +536,29 @@ public:
   void set_goal_component(const FabGoalComposition& goal) {
     const auto sub_goals = goal.sub_goals();
     for (auto i = 0; i < sub_goals.size(); ++i) {
-      const auto& sub_goal = sub_goals[i];
-      const auto fk_sub_goal = get_differential_map(sub_goal);
-      if (fab_core::is_casx_sparse(fk_sub_goal)) {
-        throw FabError(fk_sub_goal.get_str() + "must not be sparse");
+      const auto& subgoal = sub_goals[i];
+      const auto fk_subgoal_pose = get_differential_map(subgoal);
+      if (fab_core::is_casx_sparse(fk_subgoal_pose)) {
+        throw FabError(fk_subgoal_pose.get_str() + "must not be sparse");
       }
 
       // [Goal attractor leaf]
       const auto goal_name = "goal_" + std::to_string(i);
       std::unique_ptr<FabLeaf> attractor = nullptr;
-      if (FabSubGoalType::DYNAMIC == sub_goal->type()) {
-        attractor = std::make_unique<FabGenericDynamicAttractorLeaf>(vars_, fk_sub_goal, goal_name);
+      if (FabSubGoalType::DYNAMIC == subgoal->type()) {
+        attractor = std::make_unique<FabGenericDynamicAttractorLeaf>(vars_, fk_subgoal_pose, goal_name);
       } else {
 #if 1
         // TODO: This seems to be redundant since the param will be overwritten any way in
         // FabGenericAttractorLeaf::set_forward_map()
         const auto x_goal_name = "x_" + goal_name;
-        vars_->add_parameter(x_goal_name, CaSX::sym(x_goal_name, sub_goal->dimension()));
+        vars_->add_parameter(x_goal_name, CaSX::sym(x_goal_name, subgoal->dimension()));
 #endif
-        attractor = std::make_unique<FabGenericAttractorLeaf>(vars_, fk_sub_goal, goal_name);
+        attractor = std::make_unique<FabGenericAttractorLeaf>(vars_, fk_subgoal_pose, goal_name);
       }
       attractor->set_potential(config_->attractor_potential);
       attractor->set_metric(config_->attractor_metric);
-      add_leaf(attractor.get(), sub_goal->is_primary_goal());
+      add_leaf(attractor.get(), subgoal->is_primary_goal());
     }
   }
 
@@ -738,7 +738,7 @@ public:
     const auto& subgoal_0_pose = subgoal_0_cfg.desired_state.pose;
     const auto& subgoal_0_position = subgoal_0_pose.pos;
 
-    const auto& subgoal_0_pose_offset = subgoal_0_cfg.desired_state.pose;
+    const auto& subgoal_0_pose_offset = subgoal_0_cfg.desired_state.pose_offset;
     const CaSX fk = robot_->fk()->casadi(q, subgoal_0_cfg.child_link_name, task_->GetBaseBodyName(),
                                          fab_math::CASX_TRANSF_IDENTITY,
                                          fab_math::transform(urdf::Vector3(subgoal_0_pose_offset.pos),
@@ -786,12 +786,14 @@ public:
     }
 
     // APPLY ACTION: COPY [action_] -> [action]
+#if FAB_DRAW_TRAJECTORY
     const mjtNum* target_pos = task_->QueryTargetPos();
     if (target_pos) {
       trajectory_->trace.push_back(target_pos[0]);
       trajectory_->trace.push_back(target_pos[1]);
       trajectory_->trace.push_back(target_pos[2]);
     }
+#endif
     FAB_PRINTDB("ACTION", action_);
 #if FAB_USE_ACTUATOR_VELOCITY
     mju_scl(action, action_.data(), task_->actuator_kv, int(action_.size()));

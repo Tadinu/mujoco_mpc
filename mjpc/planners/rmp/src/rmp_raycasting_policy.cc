@@ -219,6 +219,16 @@ rmp::RaycastingPolicy<rmp::Space<2>>::PValue rmp::RaycastingPolicy<rmp::Space<2>
 }
 
 /**
+ * @param state
+ * @return
+ */
+template <>
+rmp::RaycastingPolicy<rmp::Space<3>>::PValue rmp::RaycastingPolicy<rmp::Space<3>>::evaluateAt(
+    const PState& state, const std::vector<PState>&) {
+  throw std::logic_error("Not implemented yet");
+}
+
+/**
  * Blocking call to evaluate at state.
  * @param state
  * @return
@@ -267,3 +277,15 @@ template void rmp::RaycastingPolicy<rmp::Space<2>>::abortEvaluateAsync();
 template void rmp::RaycastingPolicy<rmp::CylindricalSpace>::abortEvaluateAsync();
 
 template void rmp::RaycastingPolicy<rmp::Space<3>>::abortEvaluateAsync();
+
+template void rmp::RaycastingPolicy<rmp::Space<2>>::startEval(
+    const rmp::RaycastingPolicy<rmp::Space<2>>::PState& agent_state,
+    const std::vector<PState>& obstacle_states);
+
+template void rmp::RaycastingPolicy<rmp::CylindricalSpace>::startEval(
+    const rmp::RaycastingPolicy<rmp::CylindricalSpace>::PState& agent_state,
+    const std::vector<PState>& obstacle_states);
+
+template void rmp::RaycastingPolicy<rmp::Space<3>>::startEval(
+    const rmp::RaycastingPolicy<rmp::Space<3>>::PState& agent_state,
+    const std::vector<PState>& obstacle_states);

@@ -49,25 +49,31 @@ public:
     // NOTE: In XML, link5 collisions, composed of 3 subparts, is not obvious to fetch
     static std::vector<std::string> names = {
         // "panda_hand", "panda_link3", "panda_link4" -> "panda_with_finger.urdf"
-        "panda_link9", "panda_link8", "panda_link4"};
+        "panda_link0", "panda_link1", "panda_link2", "panda_link3", "panda_link4",
+        "panda_link5", "panda_link6", "panda_link7", "panda_hand"};  // -> "panda_for_fk.urdf"
     return names;
   }
   FabLinkCollisionProps GetCollisionLinkProps() const override {
-    const auto& link_names = GetCollisionLinkNames();
-    static FabLinkCollisionProps props = {{link_names[0], {0.02}},
-                                          {link_names[1], {0.02}},
-                                          {link_names[2], {0.02}},
-                                          {"panda_hand", {0.01}},
-                                          {"panda_link2", {0.02}}};
+    static FabLinkCollisionProps props = {
+        {"panda_link2", {QueryGeomSizeMax("link2_c")}},
+        {"panda_link3", {QueryGeomSizeMax("link3_c")}},
+        {"panda_link4", {QueryGeomSizeMax("link4_c")}},
+        {"panda_link5", {QueryGeomSizeMax({"link5_c0", "link5_c1", "link5_c2"})}},
+        {"panda_link6", {QueryGeomSizeMax("link6_c")}},
+        {"panda_link7", {QueryGeomSizeMax("link7_c")}},
+        {"panda_hand", {QueryGeomSizeMax("hand_c")}}};
     return props;
   }
   FabSelfCollisionNamePairs GetSelfCollisionNamePairs() const override {
     // Ones in URDF, not XML
-    return {{"panda_hand", {"panda_link2", "panda_link4"}}};
+    return {{"panda_hand",
+             {"panda_link0", "panda_link1", "panda_link2", "panda_link3", "panda_link4", "panda_link5",
+              "panda_link6", "panda_link7"}}};
   }
-  int GetStaticObstaclesNum() const override { return 3; }
+  int GetStaticObstaclesNum() const override { return AreObstaclesFixed() ? 3 : 0; }
   int GetDynamicObstaclesNum() const override {
-    return (planner_ && planner_->tuning_on_) ? static_cast<int>(GetCollisionLinkNames().size()) : 0;
+    return (planner_ && planner_->tuning_on_) ? static_cast<int>(GetCollisionLinkNames().size())
+                                              : (AreObstaclesFixed() ? 0 : 3);
   }
   int GetPlaneConstraintsNum() const override { return 1; }
 
@@ -117,11 +123,16 @@ public:
       subgoal0_cfg.type = FabSubGoalType::DYNAMIC;
     }
     subgoal0_cfg.desired_state = GetGoalState();
-    subgoal0_cfg.desired_state.pose_offset = FabPose{.pos = {0., 0., 0.}, .rot = {0., 0., 0.}};
+    if (subgoal0_cfg.desired_state.pose.empty()) {
+      subgoal0_cfg.desired_state.reset();
+    }
+    // Take goal's rot as the desired_state's rot offset
+    subgoal0_cfg.desired_state.pose_offset =
+        FabPose{.pos = {0., 0., 0.}, .rot = subgoal0_cfg.desired_state.pose.rot};
     return subgoals;
   }
 
-  bool AreObstaclesFixed() const override { return true; }
+  bool AreObstaclesFixed() const override { return false; }
   int GetDynamicObstaclesDimension() const override { return 3; }
   std::vector<FabJointLimit> GetJointLimits() const override {
     return {{-2.8973, 2.8973},   // panda_joint1
@@ -142,7 +153,9 @@ public:
   // Goals
   bool IsGoalFixed() const override { return false; }
   void SetGoalPos(const double* pos) const { SetBodyMocapPos("object_mocap", pos); }
+  void SetGoalQuat(const double* quat) const { SetBodyMocapQuat("object_mocap", quat); }
   const mjtNum* GetGoalPos() const override { return QueryBodyMocapPos("object_mocap"); }
+  const mjtNum* GetGoalQuat() const override { return QueryBodyMocapQuat("object_mocap"); }
   const mjtNum* GetGoalVel() const override { return QueryTargetVel(); }
   const mjtNum* GetGoalAcc() const override { return QueryTargetAcc(); }
 

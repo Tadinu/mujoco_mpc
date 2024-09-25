@@ -17,6 +17,7 @@
 
 #include <mujoco/mujoco.h>
 
+#include <algorithm>
 #include <array>
 #include <memory>
 #include <mutex>
@@ -134,12 +135,8 @@ public:
   virtual std::string XmlPath() const = 0;
   virtual std::string URDFPath() const { return {}; }
   virtual std::string GetBaseBodyName() const { return {}; }
-  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */
-    return {};
-  }
-  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */
-    return {};
-  }
+  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */ return {}; }
+  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */ return {}; }
   virtual FabSelfCollisionNamePairs GetSelfCollisionNamePairs() const {
     /* Ones in URDF, not XML */
     return {};
@@ -167,6 +164,7 @@ public:
   virtual const mjtNum* GetRobotVel() const { return QueryTargetVel(); }
   virtual const mjtNum* GetRobotAcc() const { return QueryTargetAcc(); }
   virtual const mjtNum* GetGoalPos() const { return nullptr; }
+  virtual const mjtNum* GetGoalQuat() const { return nullptr; }
   virtual const mjtNum* GetGoalVel() const { return nullptr; }
   virtual const mjtNum* GetGoalAcc() const { return nullptr; }
 
@@ -303,9 +301,47 @@ public:
     return nullptr;
   }
 
+  void SetBodyMocapQuat(const char* body_name, const double* quat) const {
+    if (data_) {
+      int bodyMocapId = GetBodyMocapId(body_name);
+      mju_copy3(&data_->mocap_quat[4 * bodyMocapId], quat);
+    }
+  }
+
+  mjtNum* QueryBodyMocapQuat(const char* body_name) const {
+    if (data_) {
+      int bodyMocapId = GetBodyMocapId(body_name);
+      return &data_->mocap_quat[4 * bodyMocapId];
+    }
+    return nullptr;
+  }
+
   // Geom
   int QueryGeomId(const char* geom_name) const {
     return model_ ? mj_name2id(model_, mjOBJ_GEOM, geom_name) : -1;
+  }
+
+  std::vector<double> QueryGeomSize(const char* geom_name) const {
+    std::vector<double> size(3, 0.0);
+    int geom_id = QueryGeomId(geom_name);
+    if (geom_id > -1) {
+      mju_copy3(size.data(), &model_->geom_size[3 * geom_id]);
+    }
+    return size;
+  }
+
+  double QueryGeomSizeMax(const char* geom_name) const {
+    const auto size = QueryGeomSize(geom_name);
+    return std::max({size[0], size[1], size[2]});
+  }
+
+  double QueryGeomSizeMax(const std::vector<const char*>& geom_name_list) const {
+    double max = 0.;
+    for (const auto& geom_name : geom_name_list) {
+      const auto size = QueryGeomSize(geom_name);
+      max = std::max(max, std::max({size[0], size[1], size[2]}));
+    }
+    return max;
   }
 
   void SetGeomColor(uint geom_id, const float* rgba) const {
@@ -359,10 +395,37 @@ public:
     return (rmp::vectorFromScalarArray<3>(GetRobotPos()) - rmp::vectorFromScalarArray<3>(GetGoalPos()))
                .norm() < 0.005;
   }
+
+  Eigen::Vector3d rotMatrixToEulerAngles(Eigen::Matrix3d& R) {
+    float sy = mju_sqrt(R(0, 0) * R(0, 0) + R(1, 0) * R(1, 0));
+    bool singular = sy < 1e-6;
+    float x, y, z;
+    if (!singular) {
+      x = mju_atan2(R(2, 1), R(2, 2));
+      y = mju_atan2(-R(2, 0), sy);
+      z = mju_atan2(R(1, 0), R(0, 0));
+    } else {
+      x = mju_atan2(-R(1, 2), R(1, 1));
+      y = mju_atan2(-R(2, 0), sy);
+      z = 0;
+    }
+    return {x, y, z};
+  }
+
   virtual void QueryGoalState() {
     MJPC_LOCK_TASK_DATA_ACCESS;
     goal_state_.reset();
     mju_copy3(goal_state_.pose.pos.data(), GetGoalPos());
+#if 0
+    mjtNum mat[9];
+    mju_quat2Mat(mat, GetGoalQuat());
+    Eigen::Matrix3d emat;
+    mju_copy(emat.data(), mat, 9 * sizeof(double));
+    const auto erot = rotMatrixToEulerAngles(emat);
+    mjtNum rot[3];
+    mju_copy3(rot, erot.data());
+    mju_copy3(goal_state_.pose.rot.data(), rot);
+#endif
     mju_copy3(goal_state_.linear_vel.data(), GetGoalVel());
     mju_copy3(goal_state_.linear_acc.data(), GetGoalAcc());
   }

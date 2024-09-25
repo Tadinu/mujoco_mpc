@@ -12,7 +12,7 @@ enum class FabSubGoalTrajectoryType : uint8_t { ANALYTIC, SPLINE };
 
 struct FabPose {
   std::vector<double> pos;
-  std::vector<double> rot;
+  std::vector<double> rot;  // rpy
   bool empty() const { return pos.empty() && rot.empty(); }
 };
 

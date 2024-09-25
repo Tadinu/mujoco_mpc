@@ -42,7 +42,9 @@ public:
         base_link_name_(std::move(base_link_name)),
         endtip_names_(std::move(endtip_names)),
         base_type_(base_type) {
-    assert(read_urdf());
+    if (false == read_urdf()) {
+      FAB_PRINT("[FabURDFForwardKinematics] failed reading MODEL", urdf_file_);
+    }
     n_ = urdf_model_.get_dof();
     q_ca_ = CaSX::sym("q", n_);
     if (FabRobotBaseType::DIFF_DRIVE == base_type) {
@@ -79,8 +81,9 @@ public:
   // Returns the forward kinematics as a casadi function
   CaSX get_robot_fk(const std::string& base_name, const std::string& endtip_name, const CaSX& q,
                     const CaSX& link_transf = fab_math::CASX_TRANSF_IDENTITY,
-                    const CaSX& link_trasnf_offset = fab_math::CASX_TRANSF_IDENTITY) {
-    const auto joint_list = urdf_model_.get_joints(urdf_model_.root_link->name, endtip_name);
+                    const CaSX& link_transf_offset = fab_math::CASX_TRANSF_IDENTITY) {
+    // NOTE: [base_name] is not always [urdf_model_.root_link->name]
+    const auto joint_list = urdf_model_.get_joints(base_name, endtip_name);
     auto T_fk = fab_math::CASX_TRANSF_IDENTITY;
     for (const auto& joint : joint_list) {
       const auto& joint_transf = joint->parent_to_joint_transform;
@@ -123,7 +126,7 @@ public:
           break;
       }
     }
-    return CaSX::mtimes(T_fk, link_transf) + link_trasnf_offset;
+    return CaSX::mtimes(CaSX::mtimes(T_fk, link_transf), link_transf_offset);
   }
 
   CaSX casadi(const CaSX& q, const FabVariant<int, std::string>& child_link,
@@ -139,6 +142,8 @@ public:
     const auto child_link_name = fab_core::get_variant_value<std::string>(child_link);
     if (!urdf_model_.get_link(child_link_name)) {
       throw FabError(child_link_name + " :Link not found in URDF model " + urdf_model_.name);
+    } else if (child_link_name == urdf_model_.root_link->name) {
+      return fab_math::CASX_TRANSF_IDENTITY;
     }
 
     CaSX fk;
@@ -163,12 +168,13 @@ public:
         break;
     }
 
+    // Offset
     if (position_only) {
       fk = fab_core::get_casx2(fk, {0, 3}, 3) + (link_transf_offset.is_zero()
                                                      ? CaSX::zeros(3)
                                                      : fab_core::get_casx2(link_transf_offset, {0, 3}, 3));
     } else {
-      fk += link_transf_offset;
+      fk = CaSX::mtimes(fk, link_transf_offset);
     }
     FAB_PRINT("URDFFK casadi", parent_link_name, child_link_name, q, fk);
     FAB_PRINT("FK Offset:", link_transf_offset);
