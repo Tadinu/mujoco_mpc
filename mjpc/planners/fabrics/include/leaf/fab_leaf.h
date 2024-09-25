@@ -87,7 +87,7 @@ public:
                                                 : CaSX::sym(var_name, (casadi_int)dim);
   }
 
-  CaSXDict evaluate(const FabCasadiArgMap& kwargs) {
+  CaSXDict evaluate(const CasadiArgMap& kwargs) {
     const auto res = diffmap_->forward(kwargs);
     auto&& x = res.at("phi");
     const auto J = res.at("J");
@@ -100,7 +100,7 @@ public:
       return {{"x", x}, {"xdot", xdot}};
     }
     const auto state_variable_names = fab_core::get_map_keys(geom_->vars()->state_variables());
-    FabCasadiArgMap task_space_arguments = {{state_variable_names[0], x}, {state_variable_names[1], xdot}};
+    CasadiArgMap task_space_arguments = {{state_variable_names[0], x}, {state_variable_names[1], xdot}};
     for (const auto& [arg_name, arg_value] : kwargs) {
       task_space_arguments[arg_name] = fab_core::get_variant_value<CaSX>(arg_value);
     }

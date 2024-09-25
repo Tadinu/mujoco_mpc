@@ -5,6 +5,8 @@
 #include <stdexcept>
 #include <variant>
 
+#include "mjpc/casadi/casadi_common.h"
+#include "mjpc/casadi/casadi_function.h"
 #include "mjpc/planners/fabrics/include/fab_common.h"
 #include "mjpc/planners/fabrics/include/fab_core_util.h"
 #include "mjpc/planners/fabrics/include/fab_variables.h"
@@ -12,20 +14,15 @@
 #define FAB_CASADI_GENERATE_FUNCTION_CODE (0)
 #define FAB_CASADI_USE_PREGEN_FUNCTIONS (0)
 
-using FabCasadiArg =
-    FabVariant<CaSX, int, double, std::string, std::vector<int>, std::vector<double>, std::map<int, double>>;
-using FabCasadiArgMap = std::map<std::string, FabCasadiArg>;
-
-class FabCasadiFunction {
+class FabCasadiFunction : public CasadiFunction {
 public:
   FabCasadiFunction() = default;
 
   FabCasadiFunction(std::string name, const FabVariables& variables, CaSXDict expressions,
                     bool use_pregen_functions = false)
-      : name_(std::move(name)),
-        inputs_(variables.all_vars()),
-        expressions_(std::move(expressions)),
-        arguments_(fab_core::get_casx_dict(variables.parameter_values())) {
+      : CasadiFunction(std::move(name), std::move(expressions)) {
+    inputs_ = variables.all_vars();
+    arguments_ = fab_core::get_casx_dict(variables.parameter_values());
     create_function();
 #if FAB_CASADI_USE_PREGEN_FUNCTIONS
     if (use_pregen_functions) {
@@ -34,75 +31,20 @@ public:
 #endif
   }
 
-  std::vector<std::string> input_names_;
-  CaSXVector input_values_;
-  std::vector<std::string> expression_names_;
-  CaSXVector expression_values_;
-
-  void create_function() {
-#if 0
-    // 1- Create [input_names_, input_values_] <- [inputs_]
-    input_names_ = fab_core::get_map_keys(inputs_);
-    std::sort(input_names_.begin(), input_names_.end());
-    std::transform(input_names_.begin(), input_names_.end(), std::back_inserter(input_values_),
-                   [this](auto& input_key) { return inputs_[input_key]; });
-
-    // 2- Create [expression_names_, expression_values_] <- [expressions_]
-    expression_names_ = fab_core::get_map_keys(expressions_);
-    std::sort(expression_names_.begin(), expression_names_.end());
-    std::transform(expression_names_.begin(), expression_names_.end(), std::back_inserter(expression_values_),
-                   [this](auto& exp_name) { return expressions_[exp_name]; });
-#else
-    // 1- Create [input_values_] <- [inputs_]
-    input_names_.clear();
-    input_values_.clear();
-    for (const auto& [input_name, input_value] : inputs_) {
-      input_names_.push_back(input_name);
-      input_values_.push_back(input_value);
-    }
-    FAB_PRINTDB("INPUTS", input_names_.size(), input_values_.size());
-
-    // 2- Create [expression_values_] <- [expressions_]
-    expression_names_.clear();
-    expression_values_.clear();
-    for (const auto& [exp_name, exp_value] : expressions_) {
-      expression_names_.push_back(exp_name);
-      expression_values_.push_back(exp_value);
-    }
-    FAB_PRINTDB("EXPRESSIONS", expression_names_.size(), expression_values_.size(),
-                fab_core::join(expression_names_));
-#endif
-
-    // 3- Create [function_]
-    FAB_PRINT("CREATE FUNCTION");
-    print_self();
-    function_ = CaFunction(name_, input_values_, expression_values_, input_names_, expression_names_
-                           /*, {{"allow_free", true}}*/);
-  }
-
-  CaFunction function() const { return function_; }
-
   std::map<std::string, std::function<CaSX()>> pregen_function_list_;
   void setup_pregen_functions();
   CaSX call_pregen_function() const;
 
-  void print_self() const {
-    FAB_PRINT("Func name:", name_, input_values_.size(), expression_values_.size());
-    FAB_PRINT("Input names: ", input_names_);
-    FAB_PRINT("Input values: ", input_values_);
-    FAB_PRINT("Expression names: ", expression_names_);
-    // FAB_PRINT("Expression values: ", expression_values_);
-    fab_core::print_named_map2<CaSX>(arguments_, "Args");
-  }
+  void print_self() const override { CasadiFunction::print_self(); }
 
-  CaSXDict evaluate(const FabCasadiArgMap& kwargs) {
+  virtual CaSXDict evaluate(const CasadiArgMap& kwargs) override {
     FAB_PRINTDB(name_, "EVALUATING...");
     // Process arguments
     FAB_PRINTDB("PRE-PROCESSED KWARGS", kwargs.size());
     fab_core::print_named_mapdb(kwargs);
     FAB_PRINTDB("----------------");
     // arguments_.clear();
-    auto fill_arg = [this](const std::string& arg_name, const FabCasadiArg& arg,
+    auto fill_arg = [this](const std::string& arg_name, const CasadiArg& arg,
                            const std::vector<std::string>& arg_prefix_name_list) {
       const bool bArg_matched =
           arg_prefix_name_list.empty() ||
@@ -184,7 +126,7 @@ public:
     // Invoke [function_]
     const auto start = std::chrono::high_resolution_clock::now();
 #if FAB_CASADI_USE_PREGEN_FUNCTIONS
-    CaSXDict outputs = {{expression_names_[0], call_pregen_function()}};
+    CaSXDict outputs = {{ expression_names_[0], call_pregen_function() }};
 #else
     CaSXDict outputs = function_(arguments_);
 #endif
@@ -200,13 +142,6 @@ public:
     }
     return outputs;
   }
-
-protected:
-  std::string name_;
-  CaSXDict inputs_;
-  CaSXDict expressions_;
-  CaSXDict arguments_;
-  CaFunction function_;
 };
 
 using FabCasadiFunctionPtr = std::shared_ptr<FabCasadiFunction>;

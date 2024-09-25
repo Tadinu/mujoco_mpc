@@ -48,7 +48,9 @@ set(LIB_MJPC_HEADERS
         trajectory.h
         utilities.h
         tasks/tasks.h
-        tasks/acrobot/acrobot.h
+        casadi/casadi_common.h
+	casadi/casadi_function.h
+	tasks/acrobot/acrobot.h
         tasks/allegro/allegro.h
         tasks/bimanual/handover/handover.h
         tasks/bimanual/reorient/reorient.h

@@ -129,7 +129,7 @@ public:
                                                 CaSXDict{{"h", h_}, {"xddot", xddot_}});
   }
 
-  virtual CaSXDict evaluate(const FabCasadiArgMap& kwargs) const {
+  virtual CaSXDict evaluate(const CasadiArgMap& kwargs) const {
     if (func_) {
       auto eval = func_->evaluate(kwargs);
       return {{"h", eval["h"]}, {"xddot", eval["xddot"]}};

@@ -248,7 +248,7 @@ public:
                                                 CaSXDict{{"M", M()}, {"f", f()}, {"xddot", xddot_}});
   }
 
-  CaSXDict evaluate(const FabCasadiArgMap& kwargs) const override {
+  CaSXDict evaluate(const CasadiArgMap& kwargs) const override {
     if (func_) {
       auto eval = func_->evaluate(kwargs);
       return {{"M", eval["M"]}, {"f", eval["f"]}, {"xddot", eval["xddot"]}};

@@ -4,7 +4,7 @@
 #include "mjpc/planners/fabrics/include/fab_geometry_primitives.h"
 
 using FabSelfCollisionNamePairs =
-    std::map<std::string /*link_name*/, std::array<std::string, 2> /*paired_links_names*/>;
+    std::map<std::string /*link_name*/, std::vector<std::string> /*link_names*/>;
 using FabCollisionLinks = std::map<std::string /*link_name*/, FabGeometricPrimitivePtr /*link_geom*/>;
 
 struct FabCollisionLinkNotExistError : public std::runtime_error {
@@ -55,13 +55,6 @@ public:
   }
 
   FabSelfCollisionNamePairs self_collision_pairs() const { return self_collision_pairs_; }
-
-  std::array<std::string, 2> self_collision_pair(const std::string& link_name) {
-    if (self_collision_pairs_.contains(link_name)) {
-      return self_collision_pairs_.at(link_name);
-    }
-    throw FabCollisionLinkNotExistError(link_name);
-  }
 
 protected:
   FabCollisionLinks collision_links_;
