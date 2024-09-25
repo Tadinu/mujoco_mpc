@@ -17,6 +17,7 @@
 
 #include <mujoco/mujoco.h>
 
+#include <algorithm>
 #include <array>
 #include <memory>
 #include <mutex>
@@ -134,12 +135,8 @@ public:
   virtual std::string XmlPath() const = 0;
   virtual std::string URDFPath() const { return {}; }
   virtual std::string GetBaseBodyName() const { return {}; }
-  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */
-    return {};
-  }
-  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */
-    return {};
-  }
+  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */ return {}; }
+  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */ return {}; }
   virtual FabSelfCollisionNamePairs GetSelfCollisionNamePairs() const {
     /* Ones in URDF, not XML */
     return {};
@@ -306,6 +303,29 @@ public:
   // Geom
   int QueryGeomId(const char* geom_name) const {
     return model_ ? mj_name2id(model_, mjOBJ_GEOM, geom_name) : -1;
+  }
+
+  std::vector<double> QueryGeomSize(const char* geom_name) const {
+    std::vector<double> size(3, 0.0);
+    int geom_id = QueryGeomId(geom_name);
+    if (geom_id > -1) {
+      mju_copy3(size.data(), &model_->geom_size[3 * geom_id]);
+    }
+    return size;
+  }
+
+  double QueryGeomSizeMax(const char* geom_name) const {
+    const auto size = QueryGeomSize(geom_name);
+    return std::max({size[0], size[1], size[2]});
+  }
+
+  double QueryGeomSizeMax(const std::vector<const char*>& geom_name_list) const {
+    double max = 0.;
+    for (const auto& geom_name : geom_name_list) {
+      const auto size = QueryGeomSize(geom_name);
+      max = std::max(max, std::max({size[0], size[1], size[2]}));
+    }
+    return max;
   }
 
   void SetGeomColor(uint geom_id, const float* rgba) const {

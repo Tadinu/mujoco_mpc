@@ -485,8 +485,8 @@ public:
     }
 
     // Self-collision link-pairs
-    for (const auto& [link_name_key, link_pair] : self_collision_pairs) {
-      for (const auto& link_name : link_pair) {
+    for (const auto& [link_name_key, link_list] : self_collision_pairs) {
+      for (const auto& link_name : link_list) {
         add_spherical_self_collision_geometry(link_name, link_name_key);
       }
     }
@@ -786,12 +786,14 @@ public:
     }
 
     // APPLY ACTION: COPY [action_] -> [action]
+#if FAB_DRAW_TRAJECTORY
     const mjtNum* target_pos = task_->QueryTargetPos();
     if (target_pos) {
       trajectory_->trace.push_back(target_pos[0]);
       trajectory_->trace.push_back(target_pos[1]);
       trajectory_->trace.push_back(target_pos[2]);
     }
+#endif
     FAB_PRINTDB("ACTION", action_);
 #if FAB_USE_ACTUATOR_VELOCITY
     mju_scl(action, action_.data(), task_->actuator_kv, int(action_.size()));

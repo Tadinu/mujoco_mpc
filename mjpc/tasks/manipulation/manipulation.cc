@@ -107,12 +107,14 @@ void manipulation::Bring::TransitionLocked(mjModel* model, mjData* data) {
     double goal_curve_pos[3] = {amplitude * mju_sin(data->time / 2), amplitude * mju_cos(data->time / mjPI),
                                 0.7};
     SetGoalPos(goal_curve_pos);
+  }
+
+  if (!AreObstaclesFixed()) {
     MoveObstacles();
   }
 }
 
 void manipulation::Bring::MoveObstacles() {
-#if 0
   static constexpr bool ALTERNATING = 0;
   static int8_t sign = 1;
   if constexpr (ALTERNATING) {
@@ -126,21 +128,29 @@ void manipulation::Bring::MoveObstacles() {
       sign_switched = false;
     }
   }
-  for (auto i = 1; i <= GetTotalObstaclesNum(); ++i) {
+  std::vector<StateX> obstacle_statesX = GetObstacleStatesX();
+  for (auto i = 1; i <= obstacle_statesX.size(); ++i) {
     const auto angular_vel_i = (i > 3) ? (0.1 * i) : M_PI;
-    const auto phase_i = angular_vel_i * data_->time;
+    const auto phase_i = 0.5 * angular_vel_i * data_->time;
     if constexpr (ALTERNATING) {
     } else {
       sign = (i % 2) == 0 ? 1 : -1;
     }
     const auto sin_pos_i = sign * mju_sin(phase_i);
     const auto cos_pos_i = mju_cos(phase_i);
-    double obstacle_curve_pos[2] = {0.05 * log(i + 1) * sin_pos_i, 0.05 * log(i + 1) * cos_pos_i};
+
+    double obstacle_curve_pos[3];
+    if (i % 2 == 0) {
+      mju_copy3(obstacle_curve_pos, (double[]){0.5 * log(i + 1) * sin_pos_i, 0.5 * log(i + 1) * cos_pos_i,
+                                               0.7 + 0.5 * log(i + 1) * cos_pos_i});
+    } else {
+      mju_copy3(obstacle_curve_pos, (double[]){0.5 * log(i + 1) * sin_pos_i, 0.5 * log(i + 1) * cos_pos_i,
+                                               0.7 + 0.5 * log(i + 1) * sin_pos_i});
+    }
     std::ostringstream obstacle_name;
     obstacle_name << "obstacle_" << (i - 1);
     SetBodyMocapPos(obstacle_name.str().c_str(), obstacle_curve_pos);
   }
-#endif
 }
 
 void manipulation::Bring::ResetLocked(const mjModel* model) {
@@ -155,7 +165,7 @@ FabPlannerConfigPtr manipulation::Bring::GetFabricsConfig() const {
     return FabConfigExprMeta{5.0 * (x_norm + (1 / alpha) * CaSX::log(1 + CaSX::exp(-2 * alpha * x_norm)))};
   };
   const FabConfigFunc fAttractor_metric = [](const CaSX& x, const CaSX& xdot, const std::string& affix) {
-    static constexpr float alpha = 300.f;
+    static constexpr float alpha = 600.f;
     static constexpr float beta = 0.3;
     const CaSX x_norm = CaSX::norm_2(x);
     return FabConfigExprMeta{((alpha - beta) * CaSX::exp(-1 * CaSX::pow(0.75 * x_norm, 2)) + beta) *
@@ -166,7 +176,7 @@ FabPlannerConfigPtr manipulation::Bring::GetFabricsConfig() const {
     const auto a_ex = FabPlannerConfig::sym_var("a_ex", affix);
     const auto a_le = FabPlannerConfig::sym_var("a_le", affix);
     return FabConfigExprMeta{
-        0.5 * (CaSX::tanh(-0.5 * (CaSX::norm_2(x) - 0.02)) + 1) * 0.65 + 0.01 + CaSX::fmax(0, a_ex - a_le),
+        0.5 * (CaSX::tanh(-0.5 * (CaSX::norm_2(x) - 0.02)) + 1) * 0.065 + 0.01 + CaSX::fmax(0, a_ex - a_le),
         {a_ex.name(), a_le.name()}};
   };
 
