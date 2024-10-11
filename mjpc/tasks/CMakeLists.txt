@@ -75,9 +75,15 @@ add_custom_target(
   COMMAND ${CMAKE_COMMAND} -E copy_directory
           ${menagerie_SOURCE_DIR}/wonik_allegro/assets
           ${CMAKE_CURRENT_BINARY_DIR}/allegro/assets
-  COMMAND patch -o ${CMAKE_CURRENT_BINARY_DIR}/allegro/right_hand_modified.xml
-          ${CMAKE_CURRENT_BINARY_DIR}/allegro/right_hand.xml
-          <${CMAKE_CURRENT_SOURCE_DIR}/allegro/right_hand.xml.patch
+  #COMMAND patch -o ${CMAKE_CURRENT_BINARY_DIR}/allegro/right_hand_modified.xml
+  #        ${CMAKE_CURRENT_BINARY_DIR}/allegro/right_hand.xml
+  #        <${CMAKE_CURRENT_SOURCE_DIR}/allegro/right_hand.xml.patch
+  COMMAND ${CMAKE_COMMAND} -E copy
+          ${CMAKE_CURRENT_SOURCE_DIR}/allegro/allegro_hand.yaml
+          ${CMAKE_CURRENT_BINARY_DIR}/allegro/allegro_hand.yaml
+  COMMAND ${CMAKE_COMMAND} -E copy
+          ${CMAKE_CURRENT_SOURCE_DIR}/allegro/allegro_hand_upside_down.yaml
+          ${CMAKE_CURRENT_BINARY_DIR}/allegro/allegro_hand_upside_down.yaml
 
   COMMAND ${CMAKE_COMMAND} -E copy
           ${menagerie_SOURCE_DIR}/franka_emika_panda/panda.xml
