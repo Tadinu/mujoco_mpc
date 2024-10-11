@@ -35,7 +35,11 @@ public:
       return error;
     }
 
+#if 0
     const char* what() const _NOEXCEPT override {
+#else
+    const char* what() const _GLIBCXX_TXN_SAFE_DYN _GLIBCXX_NOTHROW override {
+#endif
       static std::string full_message;
       if (prim1_ && prim2_) {
         full_message = "Distance undefined between " + prim1_->name_ + (" & ") + prim2_->name_;

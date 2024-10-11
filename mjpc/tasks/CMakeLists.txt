@@ -68,9 +68,6 @@ add_custom_target(
   COMMAND ${CMAKE_COMMAND} -E copy
           ${menagerie_SOURCE_DIR}/shadow_hand/right_hand.xml
           ${CMAKE_CURRENT_BINARY_DIR}/shadow_reorient/right_hand.xml
-  COMMAND ${CMAKE_COMMAND} -E copy
-          ${menagerie_SOURCE_DIR}/wonik_allegro/right_hand.xml
-          ${CMAKE_CURRENT_BINARY_DIR}/allegro/right_hand.xml
   COMMAND ${CMAKE_COMMAND} -E copy_directory
           ${menagerie_SOURCE_DIR}/shadow_hand/assets
           ${CMAKE_CURRENT_BINARY_DIR}/shadow_reorient/assets
@@ -78,9 +75,25 @@ add_custom_target(
   COMMAND ${CMAKE_COMMAND} -E copy_directory
           ${menagerie_SOURCE_DIR}/wonik_allegro/assets
           ${CMAKE_CURRENT_BINARY_DIR}/allegro/assets
+  COMMAND ${CMAKE_COMMAND} -E copy
+          ${menagerie_SOURCE_DIR}/wonik_allegro/right_hand.xml
+          ${CMAKE_CURRENT_BINARY_DIR}/allegro/right_hand.xml
   COMMAND patch -o ${CMAKE_CURRENT_BINARY_DIR}/allegro/right_hand_modified.xml
           ${CMAKE_CURRENT_BINARY_DIR}/allegro/right_hand.xml
           <${CMAKE_CURRENT_SOURCE_DIR}/allegro/right_hand.xml.patch
+
+  COMMAND ${CMAKE_COMMAND} -E copy
+          ${CMAKE_CURRENT_BINARY_DIR}/allegro_x/right_hand_modified.xml
+          ${CMAKE_CURRENT_BINARY_DIR}/allegro_x/right_hand_modified.xml
+  COMMAND ${CMAKE_COMMAND} -E copy
+          ${CMAKE_CURRENT_SOURCE_DIR}/allegro_x/allegro_hand.yaml
+          ${CMAKE_CURRENT_BINARY_DIR}/allegro_x/allegro_hand.yaml
+  COMMAND ${CMAKE_COMMAND} -E copy
+          ${CMAKE_CURRENT_SOURCE_DIR}/allegro_x/allegro_hand_upside_down.yaml
+          ${CMAKE_CURRENT_BINARY_DIR}/allegro_x/allegro_hand_upside_down.yaml
+  COMMAND ${CMAKE_COMMAND} -E copy
+          ${CMAKE_CURRENT_SOURCE_DIR}/allegro_x/allegro_hand_right.sdf
+          ${CMAKE_CURRENT_BINARY_DIR}/allegro_x/allegro_hand_right.sdf
 
   COMMAND ${CMAKE_COMMAND} -E copy
           ${menagerie_SOURCE_DIR}/franka_emika_panda/panda.xml
