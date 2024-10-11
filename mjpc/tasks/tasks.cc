@@ -20,6 +20,7 @@
 #include "mjpc/task.h"
 #include "mjpc/tasks/acrobot/acrobot.h"
 #include "mjpc/tasks/allegro/allegro.h"
+#include "mjpc/tasks/allegro_x/allegro_x.h"
 #include "mjpc/tasks/bimanual/handover/handover.h"
 #include "mjpc/tasks/bimanual/insert/insert.h"
 #include "mjpc/tasks/bimanual/reorient/reorient.h"
@@ -56,6 +57,7 @@ std::vector<std::shared_ptr<Task>> GetTasks() {
       std::make_shared<ParticleXFixed>(),
       std::make_shared<Acrobot>(),
       std::make_shared<Allegro>(),
+      std::make_shared<AllegroX>(),
       std::make_shared<aloha::Handover>(),
       std::make_shared<aloha::Insert>(),
       std::make_shared<aloha::Reorient>(),
@@ -77,4 +79,4 @@ std::vector<std::shared_ptr<Task>> GetTasks() {
       std::make_shared<Walker>(),
   };
 }
-}  // namespace mjpc
+} // namespace mjpc

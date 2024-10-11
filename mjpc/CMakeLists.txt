@@ -52,6 +52,7 @@ set(LIB_MJPC_HEADERS
 	    casadi/casadi_function.h
 	    tasks/acrobot/acrobot.h
         tasks/allegro/allegro.h
+        tasks/allegro_x/allegro_x.h
         tasks/bimanual/handover/handover.h
         tasks/bimanual/reorient/reorient.h
         tasks/cartpole/cartpole.h
@@ -170,6 +171,7 @@ add_library(
         tasks/tasks.cc
         tasks/acrobot/acrobot.cc
         tasks/allegro/allegro.cc
+        tasks/allegro_x/allegro_x.cc
         tasks/bimanual/insert/insert.cc
         tasks/bimanual/insert/insert.h
         tasks/bimanual/handover/handover.cc
@@ -337,6 +339,7 @@ target_compile_definitions(testspeed PRIVATE MJSIMULATE_STATIC)
 
 add_subdirectory(tasks)
 add_subdirectory(ispc)
+add_subdirectory(planners/idto)
 
 if (BUILD_TESTING AND MJPC_BUILD_TESTS)
     enable_testing()

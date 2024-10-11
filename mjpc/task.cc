@@ -36,6 +36,32 @@ void MissingParameterError(const mjModel* m, int sensorid) {
 }
 }  // namespace
 
+DrakeMeshcatPtr Task::meshcat_ = std::make_shared<drake::geometry::Meshcat>();
+
+void Task::InitIdto() {
+  // 1- [Configs]
+  if (idto_configs_) {
+    return;
+  } else if (idto_configs_path_.empty()) {
+    return;
+  }
+  idto_configs_ = std::make_shared<IdtoPlannerConfig>();
+
+  // Load parameters from file
+  IdtoPlannerConfig default_options;
+  *idto_configs_ = drake::yaml::LoadYamlFile<IdtoPlannerConfig>(idto_configs_path_, {}, default_options);
+  FAB_PRINT("IDTO MPC:", idto_configs_->mpc);
+
+#if IDTO_USE_MESHCAT
+  // NOTE: THIS MUST RUN ON MAIN THREAD
+  // 2- Meshcat
+  InitMeshcat();
+
+  // Update: [idto_configs_] -> [meshcat]
+  UpdateMeshcatFromIdtoConfigs();
+#endif
+}
+
 // initial residual parameters from model
 void Task::SetFeatureParameters(const mjModel* model) {
   // set counter
