@@ -2,7 +2,7 @@
   <include file="../common.xml"/>
 
   <statistic extent="0.4" center="0.3 0.1 0"/>
-  <size memory="1M"/>
+  <size memory="100M"/>
 
   <custom>
     <!-- agent/planner settings -->
