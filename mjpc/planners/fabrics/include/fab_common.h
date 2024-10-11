@@ -68,7 +68,11 @@ struct FabError : public std::runtime_error {
     return error;
   }
 
+#if 0
   const char* what() const _NOEXCEPT override {
+#else
+  const char* what() const _GLIBCXX_TXN_SAFE_DYN _GLIBCXX_NOTHROW override {
+#endif
     static std::string full_message;
     full_message = expression_ + ": " + message_;
     return full_message.c_str();

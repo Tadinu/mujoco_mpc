@@ -24,10 +24,17 @@
 #include <string>
 #include <vector>
 
+// drake
+#include <drake/geometry/meshcat.h>
+#include <drake/multibody/plant/multibody_plant.h>
+
+// mjpc
 #include "mjpc/norm.h"
 #include "mjpc/planners/fabrics/include/fab_common.h"
 #include "mjpc/planners/fabrics/include/fab_config.h"
 #include "mjpc/planners/fabrics/include/fab_goal.h"
+#include "mjpc/planners/idto/idto_common.h"
+#include "mjpc/planners/idto/idto_yaml_config.h"
 #include "mjpc/planners/rmp/include/core/rmp_state.h"
 #include "mjpc/planners/rmp/include/util/rmp_util.h"
 
@@ -88,10 +95,28 @@ public:
   Task() = default;
   virtual ~Task() = default;
 
-  // Fabrics config
-  virtual bool IsFabricsSupported() const { return false; }
+  void Initialize(mjModel* model) {
+    model_ = model;
 
+    // Init planners initial specifics (that must be done main-thread, eg: UI)
+    InitFabrics();
+    InitIdto();
+  }
+
+  // Fabrics
+  void InitFabrics() {}
+  virtual bool IsFabricsSupported() const { return false; }
   virtual FabPlannerConfigPtr GetFabricsConfig() const { return std::make_shared<FabPlannerConfig>(); }
+
+  // Idto
+  virtual void CreateDrakePlantModel(drake::multibody::MultibodyPlant<double>* plant) const {}
+  void InitIdto();
+  virtual void InitMeshcat() {}
+  virtual void UpdateMeshcatFromIdtoConfigs() {}
+  IdtoPlannerConfigPtr idto_configs_ = nullptr;
+  std::string idto_configs_path_;
+  static DrakeMeshcatPtr Meshcat() { return meshcat_; }
+  static DrakeMeshcatPtr meshcat_;
 
   // delegates to ResidualLocked, while holding a lock
   std::unique_ptr<AbstractResidualFn> Residual() const;
@@ -135,8 +160,12 @@ public:
   virtual std::string XmlPath() const = 0;
   virtual std::string URDFPath() const { return {}; }
   virtual std::string GetBaseBodyName() const { return {}; }
-  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */ return {}; }
-  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */ return {}; }
+  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */
+    return {};
+  }
+  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */
+    return {};
+  }
   virtual FabSelfCollisionNamePairs GetSelfCollisionNamePairs() const {
     /* Ones in URDF, not XML */
     return {};
@@ -213,7 +242,7 @@ public:
     return model_ ? mj_name2id(model_, mjOBJ_BODY, body_name) : -1;
   }
 
-  const mjtNum* QueryBodyQuat(int body_id, bool inertia_com = true) const {
+  mjtNum* QueryBodyQuat(int body_id, bool inertia_com = true) const {
     if (model_) {
       if (inertia_com) {
         static mjtNum quat[4];
@@ -226,7 +255,7 @@ public:
     return nullptr;
   }
 
-  const mjtNum* QueryBodyRotMat(int body_id, bool inertia_com = true) const {
+  mjtNum* QueryBodyRotMat(int body_id, bool inertia_com = true) const {
     if (model_) {
       if (inertia_com) {
         return &data_->ximat[9 * body_id];
@@ -239,7 +268,7 @@ public:
     return nullptr;
   }
 
-  const mjtNum* QueryBodyPos(int body_id, bool inertia_com = true) const {
+  mjtNum* QueryBodyPos(int body_id, bool inertia_com = true) const {
     if (model_) {
       return inertia_com ? &data_->xipos[3 * body_id] : &data_->xpos[3 * body_id];
     }
@@ -277,17 +306,17 @@ public:
   }
 
   // Body mocap
-  int GetBodyMocapId(const char* body_name) const {
+  int QueryBodyMocapId(const char* body_name) const {
     if (model_) {
       int body_id = QueryBodyId(body_name);
-      return (body_id >= 0) ? model_->body_mocapid[body_id] : -1;
+      return (body_id > -1) ? model_->body_mocapid[body_id] : -1;
     }
     return -1;
   }
 
   void SetBodyMocapPos(const char* body_name, const double* pos) const {
     if (data_) {
-      int bodyMocapId = GetBodyMocapId(body_name);
+      int bodyMocapId = QueryBodyMocapId(body_name);
       mju_copy3(&data_->mocap_pos[3 * bodyMocapId], pos);
       //  std::cout << body_name << ":" << bodyMocapId << " " << pos[0] << " " << pos[1] << std::endl;
     }
@@ -295,7 +324,7 @@ public:
 
   mjtNum* QueryBodyMocapPos(const char* body_name) const {
     if (data_) {
-      int bodyMocapId = GetBodyMocapId(body_name);
+      int bodyMocapId = QueryBodyMocapId(body_name);
       return &data_->mocap_pos[3 * bodyMocapId];
     }
     return nullptr;
@@ -303,22 +332,50 @@ public:
 
   void SetBodyMocapQuat(const char* body_name, const double* quat) const {
     if (data_) {
-      int bodyMocapId = GetBodyMocapId(body_name);
+      int bodyMocapId = QueryBodyMocapId(body_name);
       mju_copy3(&data_->mocap_quat[4 * bodyMocapId], quat);
     }
   }
 
   mjtNum* QueryBodyMocapQuat(const char* body_name) const {
     if (data_) {
-      int bodyMocapId = GetBodyMocapId(body_name);
+      int bodyMocapId = QueryBodyMocapId(body_name);
       return &data_->mocap_quat[4 * bodyMocapId];
     }
     return nullptr;
   }
 
+  mjtNum QueryBodyMass(const char* body_name) const {
+    if (model_) {
+      int bodyId = QueryBodyId(body_name);
+      return (bodyId > -1) ? model_->body_mass[bodyId] : 0;
+    }
+    return 0;
+  }
+
   // Geom
   int QueryGeomId(const char* geom_name) const {
     return model_ ? mj_name2id(model_, mjOBJ_GEOM, geom_name) : -1;
+  }
+
+  mjtNum* QueryGeomPos(const char* geom_name) const {
+    if (data_) {
+      const int geom_id = QueryGeomId(geom_name);
+      return (geom_id > -1) ? &data_->geom_xpos[3 * geom_id] : nullptr;
+    }
+    return nullptr;
+  }
+
+  mjtNum* QueryGeomQuat(const char* geom_name) const {
+    if (data_) {
+      const int geom_id = QueryGeomId(geom_name);
+      if (geom_id > -1) {
+        static mjtNum quat[4];
+        mju_mat2Quat(quat, &data_->geom_xmat[9 * geom_id]);
+        return &quat[0];
+      }
+    }
+    return nullptr;
   }
 
   std::vector<double> QueryGeomSize(const char* geom_name) const {

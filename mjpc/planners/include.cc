@@ -20,6 +20,7 @@
 #include "mjpc/planners/cross_entropy/planner.h"
 #include "mjpc/planners/fabrics/include/fab_planner.h"
 #include "mjpc/planners/gradient/planner.h"
+#include "mjpc/planners/idto/idto_planner.h"
 #include "mjpc/planners/ilqg/planner.h"
 #include "mjpc/planners/ilqs/planner.h"
 #include "mjpc/planners/planner.h"
@@ -31,6 +32,7 @@
 
 namespace mjpc {
 const char kPlannerNames[] =
+    "IDTO\n"
     "Fabrics\n"
     "RMP\n"
     "Sampling\n"
@@ -47,6 +49,7 @@ std::vector<std::unique_ptr<mjpc::Planner>> LoadPlanners() {
   std::vector<std::unique_ptr<mjpc::Planner>> planners;
 
   // NOTE: The adding order below must match [kPlannerNames]
+  planners.emplace_back(new IdtoPlanner);
   planners.emplace_back(new FabPlanner);
   planners.emplace_back(new rmp::RMPPlanner<rmp::CylindricalSpace>);
   // planners.emplace_back(new rmp::RMPPlanner<rmp::Space<2>>);
