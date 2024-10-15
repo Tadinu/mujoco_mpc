@@ -326,6 +326,7 @@ target_compile_definitions(testspeed PRIVATE MJSIMULATE_STATIC)
 add_subdirectory(tasks)
 add_subdirectory(ispc)
 add_subdirectory(planners/idto)
+add_subdirectory(contacts)
 
 if (BUILD_TESTING AND MJPC_BUILD_TESTS)
     enable_testing()

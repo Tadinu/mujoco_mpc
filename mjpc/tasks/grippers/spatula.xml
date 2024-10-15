@@ -1,0 +1,21 @@
+<mujoco model="spatula">
+  <compiler eulerseq="XYZ"/>
+  <asset>
+    <material name="material_1" emission="0" specular="0" rgba="0 0 0 0.80000001192092896"/>
+  </asset>
+  <worldbody>
+    <body name="spatula" pos="0 0 0" euler="0 -0 0">
+      <inertial pos="0 0.115649 0.044470999999999997" mass="0.068000000000000005" fullinertia="0.21095403274864072 0.037108032886608931 0.18858265237650276 -4.264472553729218e-08 0 -0.069821697385502049"/>
+      <geom name="spatula_handle_collision" type="cylinder" group="3" size="0.014999999999999999 0.055" friction="1 0.0050000000000000001 0.0001" pos="0 0.13500000000000001 0.051999999999999998" euler="114.59155902616463 -0 0"/>
+      <geom name="spatula_connector" type="cylinder" group="0" size="0.002 0.024" pos="0 0.067500000000000004 0.014999999999999999" euler="-53.858032742297382 0 0"/>
+      <geom name="spatula_bottom" type="box" group="0" size="0.040000000000000001 0.050000000000000003 0.00050000000000000001" pos="0 0 0" euler="0 -0 0"/>
+      <geom name="spatula_handle_visual" type="cylinder" contype="0" conaffinity="0" group="0" size="0.014999999999999999 0.055" material="material_1" pos="0 0.13500000000000001 0.051999999999999998" euler="114.59155902616463 -0 0"/>
+      <freejoint name="spatula_freejoint"/>
+      <site name="spatula" pos="0 0 0"/>
+    </body>
+  </worldbody>
+
+  <sensor>
+    <framepos name="spatula" objtype="site" objname="spatula"/>
+  </sensor>
+</mujoco>
