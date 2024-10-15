@@ -160,12 +160,8 @@ public:
   virtual std::string XmlPath() const = 0;
   virtual std::string URDFPath() const { return {}; }
   virtual std::string GetBaseBodyName() const { return {}; }
-  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */
-    return {};
-  }
-  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */
-    return {};
-  }
+  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */ return {}; }
+  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */ return {}; }
   virtual FabSelfCollisionNamePairs GetSelfCollisionNamePairs() const {
     /* Ones in URDF, not XML */
     return {};
@@ -449,8 +445,10 @@ public:
       FabDynamicsState{.default_lin = std::vector(3, 0.), .default_ang = std::vector(3, 0.)};
   virtual bool IsGoalFixed() const { return true; }
   virtual bool QueryGoalReached() {
-    return (rmp::vectorFromScalarArray<3>(GetRobotPos()) - rmp::vectorFromScalarArray<3>(GetGoalPos()))
-               .norm() < 0.005;
+    auto* goal_pos = GetGoalPos();
+    return goal_pos &&
+           (rmp::vectorFromScalarArray<3>(GetRobotPos()) - rmp::vectorFromScalarArray<3>(goal_pos)).norm() <
+               0.005;
   }
 
   Eigen::Vector3d rotMatrixToEulerAngles(Eigen::Matrix3d& R) {
@@ -471,20 +469,23 @@ public:
 
   virtual void QueryGoalState() {
     MJPC_LOCK_TASK_DATA_ACCESS;
-    goal_state_.reset();
-    mju_copy3(goal_state_.pose.pos.data(), GetGoalPos());
+    auto* goal_pos = GetGoalPos();
+    if (goal_pos) {
+      goal_state_.reset();
+      mju_copy3(goal_state_.pose.pos.data(), goal_pos);
 #if 0
-    mjtNum mat[9];
-    mju_quat2Mat(mat, GetGoalQuat());
-    Eigen::Matrix3d emat;
-    mju_copy(emat.data(), mat, 9 * sizeof(double));
-    const auto erot = rotMatrixToEulerAngles(emat);
-    mjtNum rot[3];
-    mju_copy3(rot, erot.data());
-    mju_copy3(goal_state_.pose.rot.data(), rot);
+      mjtNum mat[9];
+      mju_quat2Mat(mat, GetGoalQuat());
+      Eigen::Matrix3d emat;
+      mju_copy(emat.data(), mat, 9 * sizeof(double));
+      const auto erot = rotMatrixToEulerAngles(emat);
+      mjtNum rot[3];
+      mju_copy3(rot, erot.data());
+      mju_copy3(goal_state_.pose.rot.data(), rot);
 #endif
-    mju_copy3(goal_state_.linear_vel.data(), GetGoalVel());
-    mju_copy3(goal_state_.linear_acc.data(), GetGoalAcc());
+      mju_copy3(goal_state_.linear_vel.data(), GetGoalVel());
+      mju_copy3(goal_state_.linear_acc.data(), GetGoalAcc());
+    }
   }
 
   FabDynamicsState GetGoalState() const {
