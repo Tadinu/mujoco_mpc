@@ -13,7 +13,7 @@
       <site name="gripper" pos="0 0 0"/>
       <body name="left_finger_bubble" pos="0 0 -0.072499999999999995" euler="0 -0 0">
         <inertial pos="0 0 0" mass="0.050000000000000003" fullinertia="0.16 0.16 0.16 0 0 0"/>
-        <geom name="left_finger_ellipsoid" type="mesh" group="3" contype="0" conaffinity="0" friction="1 0.0050000000000000001 0.0001" pos="0 -0.041665000000000001 -0.1095" euler="0 -0 0" mesh="ellipsoid_bubble_geometry"/>
+        <geom name="left_finger_ellipsoid" type="mesh" contype="0" conaffinity="0" group="3" friction="1 0.0050000000000000001 0.0001" pos="0 -0.041665000000000001 -0.1095" euler="0 -0 0" mesh="ellipsoid_bubble_geometry"/>
         <geom name="left_finger_visual_mesh" type="mesh" contype="0" conaffinity="0" group="0" pos="0 0 0" euler="90.000210459149713 -0 179.9998479605043" mesh="bubble_finger"/>
         <geom name="left_finger_bubble" type="mesh" group="0" pos="0 -0.029999999999999999 -0.1095" euler="-179.99999999913413 89.999789538302082 89.999789540949109" mesh="ellipsoid_bubble_geometry"/>
         <joint name="left_finger_sliding_joint" type="slide" pos="0 0 0" axis="0 1 0" limited="true" range="-0.055 0"/>
@@ -23,7 +23,7 @@
       </body>
       <body name="right_finger_bubble" pos="0 0 -0.072499999999999995" euler="0 -0 0">
         <inertial pos="0 0 0" mass="0.050000000000000003" fullinertia="0.16 0.16 0.16 0 0 0"/>
-        <geom name="right_finger_ellipsoid" type="mesh" group="3" contype="0" conaffinity="0" friction="1 0.0050000000000000001 0.0001" pos="0 0.041665000000000001 -0.1095" euler="0 -0 0" mesh="bubble_finger"/>
+        <geom name="right_finger_ellipsoid" type="mesh" contype="0" conaffinity="0" group="3" friction="1 0.0050000000000000001 0.0001" pos="0 0.041665000000000001 -0.1095" euler="0 -0 0" mesh="bubble_finger"/>
         <geom name="right_finger_visual_mesh" type="mesh" contype="0" conaffinity="0" group="0" pos="0 0 0" euler="90.000210459149713 -0 0" mesh="bubble_finger"/>
         <geom name="right_finger_bubble" type="mesh" group="0" pos="0 0.029999999999999999 -0.1095" euler="179.99999999913413 89.999789538302082 -89.999789540949109" mesh="ellipsoid_bubble_geometry"/>
         <joint name="right_finger_sliding_joint" type="slide" pos="0 0 0" axis="0 1 0" limited="true" range="0 0.055"/>

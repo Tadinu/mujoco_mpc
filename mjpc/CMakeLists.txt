@@ -54,6 +54,7 @@ set(LIB_MJPC_HEADERS
         tasks/bimanual/reorient/reorient.h
         tasks/cartpole/cartpole.h
         tasks/fingers/fingers.h
+        tasks/grippers/grippers.h
         tasks/humanoid/stand/stand.h
         tasks/humanoid/tracking/tracking.h
         tasks/humanoid/walk/walk.h
@@ -171,6 +172,7 @@ add_library(
         tasks/bimanual/reorient/reorient.cc
         tasks/cartpole/cartpole.cc
         tasks/fingers/fingers.cc
+        tasks/grippers/grippers.cc
         tasks/humanoid/stand/stand.cc
         tasks/humanoid/tracking/tracking.cc
         tasks/humanoid/walk/walk.cc

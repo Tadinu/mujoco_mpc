@@ -83,6 +83,11 @@ set(MUJOCO_MPC_DM_CONTROL_GIT_TAG
     CACHE STRING "Git revision for dm_control."
 )
 
+set(MUJOCO_MPC_LBFGSPP_GIT_TAG
+    master
+    CACHE STRING "Git revision for LBFGSpp."
+)
+
 findorfetch(
   USE_SYSTEM_PACKAGE
   OFF
@@ -221,6 +226,22 @@ if(NOT TARGET lodepng)
     target_include_directories(lodepng PUBLIC ${lodepng_SOURCE_DIR})
   endif()
 endif()
+
+findorfetch(
+  USE_SYSTEM_PACKAGE
+  OFF
+  PACKAGE_NAME
+  lbfgspp
+  LIBRARY_NAME
+  lbfgspp
+  GIT_REPO
+  https://github.com/yixuan/LBFGSpp.git
+  GIT_TAG
+  ${MUJOCO_MPC_LBFGSPP_GIT_TAG}
+  TARGETS
+  lbfgspp
+  EXCLUDE_FROM_ALL
+)
 
 set(MJPC_COMPILE_OPTIONS "${AVX_COMPILE_OPTIONS}" "${EXTRA_COMPILE_OPTIONS}")
 set(MJPC_LINK_OPTIONS "${EXTRA_LINK_OPTIONS}")
