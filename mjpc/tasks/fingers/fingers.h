@@ -15,34 +15,35 @@
 #ifndef MJPC_MJPC_TASKS_FINGERS_FINGERS_H_
 #define MJPC_MJPC_TASKS_FINGERS_FINGERS_H_
 
+#include <mujoco/mujoco.h>
+
 #include <memory>
 #include <string>
-#include <mujoco/mujoco.h>
+
 #include "mjpc/task.h"
 
 namespace mjpc {
 class Fingers : public Task {
- public:
+public:
   std::string Name() const override;
   std::string XmlPath() const override;
   class ResidualFn : public mjpc::BaseResidualFn {
-   public:
+  public:
     explicit ResidualFn(const Fingers* task) : mjpc::BaseResidualFn(task) {}
-    void Residual(const mjModel* model, const mjData* data,
-                  double* residual) const override;
+    void Residual(const mjModel* model, const mjData* data, double* residual) const override;
   };
   Fingers() : residual_(this) {}
 
- protected:
+protected:
+  bool IsCIOSupported() const override { return true; }
   std::unique_ptr<mjpc::AbstractResidualFn> ResidualLocked() const override {
     return std::make_unique<ResidualFn>(this);
   }
   ResidualFn* InternalResidual() override { return &residual_; }
 
- private:
+private:
   ResidualFn residual_;
 };
 }  // namespace mjpc
-
 
 #endif  // MJPC_MJPC_TASKS_FINGERS_FINGERS_H_

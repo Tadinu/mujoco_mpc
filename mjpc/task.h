@@ -100,6 +100,7 @@ public:
 
     // Init planners initial specifics (that must be done main-thread, eg: UI)
     InitFabrics();
+    InitCIO();
     InitIdto();
   }
 
@@ -107,6 +108,10 @@ public:
   void InitFabrics() {}
   virtual bool IsFabricsSupported() const { return false; }
   virtual FabPlannerConfigPtr GetFabricsConfig() const { return std::make_shared<FabPlannerConfig>(); }
+
+  // CIO
+  void InitCIO() {}
+  virtual bool IsCIOSupported() const { return false; }
 
   // Idto
   virtual void CreateDrakePlantModel(drake::multibody::MultibodyPlant<double>* plant) const {}
@@ -160,8 +165,12 @@ public:
   virtual std::string XmlPath() const = 0;
   virtual std::string URDFPath() const { return {}; }
   virtual std::string GetBaseBodyName() const { return {}; }
-  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */ return {}; }
-  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */ return {}; }
+  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */
+    return {};
+  }
+  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */
+    return {};
+  }
   virtual FabSelfCollisionNamePairs GetSelfCollisionNamePairs() const {
     /* Ones in URDF, not XML */
     return {};
