@@ -1,34 +1,38 @@
-// Copyright 2022 DeepMind Technologies Limited
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-#include "mjpc/tasks/fingers/fingers.h"
+#include "mjpc/tasks/grippers/grippers.h"
 
 #include <string>
 
-#include <absl/random/random.h>
+// MuJoCo
 #include <mujoco/mujoco.h>
+
+// Abseil
+#include <absl/random/random.h>
+
+// Mjpc
 #include "mjpc/task.h"
 #include "mjpc/utilities.h"
 
-namespace mjpc {
-std::string Fingers::XmlPath() const {
-  return GetModelPath("fingers/task.xml");
-}
-std::string Fingers::Name() const { return "FreeFingers"; }
+// [N] Baseline force to be applied by the gripper
+static constexpr double DFT_GRIPPER_FORCE = 1;
+// [N] Amplitude of the oscillations, carried out by the gripper
+static constexpr double DFT_AMPLITUDE = 5;
+// Duty cycle of the control signal
+static constexpr double DFT_DUTY_CYCLE = 0.5;
+// [s] Period of the control signal
+static constexpr double DFT_PERIOD = 3;
+// [m/s] Stiction tolerance
+static constexpr double DFT_STICTION_TOLERANCE = 5;
 
-void Fingers::ResidualFn::Residual(const mjModel* model, const mjData* data,
-                     double* residual) const {
+// If zero, the plant is modeled as a continuous system
+// If positive, the period (in seconds) of the discrete updates for the plant modeled as a discrete system
+// Must be non-negative
+static constexpr double DFT_MBP_DISCRETE_UPDATE_PERIOD = 5;
+
+namespace mjpc {
+std::string Grippers::XmlPath() const { return GetModelPath("grippers/task.xml"); }
+std::string Grippers::Name() const { return "FreeGrippers"; }
+
+void Grippers::ResidualFn::Residual(const mjModel* model, const mjData* data, double* residual) const {
   int counter = 0;
 
   // reach
@@ -41,18 +45,27 @@ void Fingers::ResidualFn::Residual(const mjModel* model, const mjData* data,
   counter += 3;
 
   // bring
-  for (int i=0; i < 3; i++) {
+  for (int i = 0; i < 3; i++) {
     double* object = SensorByName(model, data, std::to_string(i).c_str());
-    double* target = SensorByName(model, data,
-                                        (std::to_string(i) + "t").c_str());
+    double* target = SensorByName(model, data, (std::to_string(i) + "t").c_str());
     residual[counter++] = mju_dist3(object, target);
   }
 
   // control
-  for (int i=0; i < model->nu; i++) {
+  for (int i = 0; i < model->nu; i++) {
     residual[counter++] = data->ctrl[i];
   }
 
   CheckSensorDim(model, counter);
+}
+
+void Grippers::Control() {
+  const Eigen::Vector2d amplitudes(DFT_AMPLITUDE, -DFT_AMPLITUDE);
+  const Eigen::Vector2d duty_cycles(DFT_DUTY_CYCLE, DFT_DUTY_CYCLE);
+  const Eigen::Vector2d periods(DFT_PERIOD, DFT_PERIOD);
+  const Eigen::Vector2d phases = Eigen::Vector2d::Zero();
+  static constexpr double gripper_force = 1;
+  const auto square_force = SquareWave<2>(amplitudes, duty_cycles, periods, phases);
+  const auto constant_force = Eigen::Vector2d(gripper_force, -gripper_force);
 }
 }  // namespace mjpc

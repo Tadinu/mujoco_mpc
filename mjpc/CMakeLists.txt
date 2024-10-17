@@ -54,6 +54,7 @@ set(LIB_MJPC_HEADERS
         tasks/bimanual/reorient/reorient.h
         tasks/cartpole/cartpole.h
         tasks/fingers/fingers.h
+        tasks/grippers/grippers.h
         tasks/humanoid/stand/stand.h
         tasks/humanoid/tracking/tracking.h
         tasks/humanoid/walk/walk.h
@@ -136,6 +137,10 @@ set(LIB_MJPC_HEADERS
         planners/fabrics/include/fab_param_tuner.h
         planners/fabrics/include/casadi_gen/fab_task_panda_dynamic_func.h
         planners/fabrics/include/casadi_gen/fab_task_panda_dynamic_python_func.h
+        planners/cio/cio_common.h
+        planners/cio/cio_world.h
+        planners/cio/cio_planner.h
+        planners/cio/cio_util.h
         urdf_parser/include/common.h
         urdf_parser/include/geometry.h
         urdf_parser/include/joint.h
@@ -171,6 +176,7 @@ add_library(
         tasks/bimanual/reorient/reorient.cc
         tasks/cartpole/cartpole.cc
         tasks/fingers/fingers.cc
+        tasks/grippers/grippers.cc
         tasks/humanoid/stand/stand.cc
         tasks/humanoid/tracking/tracking.cc
         tasks/humanoid/walk/walk.cc
