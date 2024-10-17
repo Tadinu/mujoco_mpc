@@ -13,9 +13,11 @@
 // limitations under the License.
 
 #include "mjpc/planners/robust/robust_planner.h"
-#include <algorithm>
 
 #include <mujoco/mujoco.h>
+
+#include <algorithm>
+
 #include "mjpc/array_safety.h"
 #include "mjpc/planners/planner.h"
 #include "mjpc/states/state.h"
@@ -48,8 +50,7 @@ void RobustPlanner::Initialize(mjModel* model, const Task& task) {
   // in sampling config
   ncandidates_ = GetNumberOrDefault(-1, model, "robust_candidates");
   if (ncandidates_ == -1) {
-    int sampling_rollouts =
-        GetNumberOrDefault(10, model, "sampling_trajectories");
+    int sampling_rollouts = GetNumberOrDefault(10, model, "sampling_trajectories");
     ncandidates_ = sampling_rollouts / nrepetitions_;
   }
 
@@ -58,6 +59,7 @@ void RobustPlanner::Initialize(mjModel* model, const Task& task) {
 }
 
 void RobustPlanner::Allocate() {
+  delegate_->InitTrajectory();
   delegate_->Allocate();
   // initial state
   int num_state = model_->nq + model_->nv + model_->na;
@@ -90,8 +92,7 @@ void RobustPlanner::SetState(const State& state) {
 
 void RobustPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
   // get the best N candidates
-  int ncandidates =
-      delegate_->OptimizePolicyCandidates(ncandidates_, horizon, pool);
+  int ncandidates = delegate_->OptimizePolicyCandidates(ncandidates_, horizon, pool);
   if (!ncandidates) {
     return;
   }
@@ -111,18 +112,14 @@ void RobustPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
   int count_before = pool.GetCount();
   for (int i = 0; i < ncandidates; i++) {
     for (int j = 0; j < repetitions; j++) {
-      Trajectory* trajectory = &trajectories_[repetitions*i + j];
-      pool.Schedule([&, delegate = delegate_.get(), candidate = i,
-                     trajectory]() {
-        auto sample_policy_i = [delegate, candidate](double* action,
-                                                     const double* state,
-                                                     double time) {
+      Trajectory* trajectory = &trajectories_[repetitions * i + j];
+      pool.Schedule([&, delegate = delegate_.get(), candidate = i, trajectory]() {
+        auto sample_policy_i = [delegate, candidate](double* action, const double* state, double time) {
           delegate->ActionFromCandidatePolicy(action, candidate, state, time);
         };
-        trajectory->NoisyRollout(
-            sample_policy_i, task_, model_, data_[ThreadPool::WorkerId()].get(),
-            state_.data(), time_, mocap_.data(), userdata_.data(),
-            /*xfrc_std=*/xfrc_std_, /*xfrc_rate=*/xfrc_rate_, horizon);
+        trajectory->NoisyRollout(sample_policy_i, task_, model_, data_[ThreadPool::WorkerId()].get(),
+                                 state_.data(), time_, mocap_.data(), userdata_.data(),
+                                 /*xfrc_std=*/xfrc_std_, /*xfrc_rate=*/xfrc_rate_, horizon);
       });
     }
   }
@@ -141,10 +138,8 @@ void RobustPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
       if (trajectories_[repetitions * candidate + j].failure) {
         continue;
       }
-      double total_return =
-          trajectories_[repetitions * candidate + j].total_return;
-      mean_return =
-          (valid_rollouts * mean_return + total_return) / (valid_rollouts + 1);
+      double total_return = trajectories_[repetitions * candidate + j].total_return;
+      mean_return = (valid_rollouts * mean_return + total_return) / (valid_rollouts + 1);
       valid_rollouts++;
     }
     if (best_candidate == -1 || mean_return < best_score) {
@@ -159,22 +154,18 @@ void RobustPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
 void RobustPlanner::NominalTrajectory(int horizon, ThreadPool& pool) {
   delegate_->NominalTrajectory(horizon, pool);
 }
-void RobustPlanner::ActionFromPolicy(double* action, const double* state,
-                                     double time, bool use_previous) {
+void RobustPlanner::ActionFromPolicy(double* action, const double* state, double time, bool use_previous) {
   delegate_->ActionFromPolicy(action, state, time, use_previous);
 }
-const Trajectory* RobustPlanner::BestTrajectory() {
-  return delegate_->BestTrajectory();
-}
+const Trajectory* RobustPlanner::BestTrajectory() { return delegate_->BestTrajectory(); }
 void RobustPlanner::Traces(mjvScene* scn) { delegate_->Traces(scn); }
 void RobustPlanner::GUI(mjUI& ui) {
   delegate_->GUI(ui);
-  mjuiDef defRobust[] = {
-      {mjITEM_SLIDERINT, "R Candidates", 2, &ncandidates_, "0 1"},
-      {mjITEM_SLIDERINT, "R Rollouts", 2, &nrepetitions_, "1 10"},
-      {mjITEM_SLIDERNUM, "R XFRC Std", 2, &xfrc_std_, "0 1"},
-      {mjITEM_SLIDERNUM, "R XFRC Rate", 2, &xfrc_rate_, "0 1"},
-      {mjITEM_END}};
+  mjuiDef defRobust[] = {{mjITEM_SLIDERINT, "R Candidates", 2, &ncandidates_, "0 1"},
+                         {mjITEM_SLIDERINT, "R Rollouts", 2, &nrepetitions_, "1 10"},
+                         {mjITEM_SLIDERNUM, "R XFRC Std", 2, &xfrc_std_, "0 1"},
+                         {mjITEM_SLIDERNUM, "R XFRC Rate", 2, &xfrc_rate_, "0 1"},
+                         {mjITEM_END}};
 
   // set number of candidates slider limits
   mju::sprintf_arr(defRobust[0].other, "%i %i", 1, kMaxTrajectory);
@@ -182,11 +173,9 @@ void RobustPlanner::GUI(mjUI& ui) {
   // add robust planner
   mjui_add(&ui, defRobust);
 }
-void RobustPlanner::Plots(mjvFigure* fig_planner, mjvFigure* fig_timer,
-                          int planner_shift, int timer_shift, int planning,
-                          int* shift) {
-  delegate_->Plots(fig_planner, fig_timer, planner_shift, timer_shift, planning,
-                   shift);
+void RobustPlanner::Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, int planner_shift, int timer_shift,
+                          int planning, int* shift) {
+  delegate_->Plots(fig_planner, fig_timer, planner_shift, timer_shift, planning, shift);
 }
 
 void RobustPlanner::ResizeTrajectories(int ntrajectories) {
@@ -196,8 +185,8 @@ void RobustPlanner::ResizeTrajectories(int ntrajectories) {
     int num_state = model_->nq + model_->nv + model_->na;
     for (int i = size_before; i < ntrajectories; i++) {
       Trajectory& trajectory = trajectories_[i];
-      trajectory.Initialize(num_state, model_->nu, task_->num_residual,
-                              task_->num_trace, kMaxTrajectoryHorizon);
+      trajectory.Initialize(num_state, model_->nu, task_->num_residual, task_->num_trace,
+                            kMaxTrajectoryHorizon);
       trajectory.Allocate(kMaxTrajectoryHorizon);
     }
   }

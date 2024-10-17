@@ -100,6 +100,7 @@ public:
 
     // Init planners initial specifics (that must be done main-thread, eg: UI)
     InitFabrics();
+    InitCIO();
     InitIdto();
   }
 
@@ -107,6 +108,10 @@ public:
   void InitFabrics() {}
   virtual bool IsFabricsSupported() const { return false; }
   virtual FabPlannerConfigPtr GetFabricsConfig() const { return std::make_shared<FabPlannerConfig>(); }
+
+  // CIO
+  void InitCIO() {}
+  virtual bool IsCIOSupported() const { return false; }
 
   // Idto
   virtual void CreateDrakePlantModel(drake::multibody::MultibodyPlant<double>* plant) const {}
@@ -152,7 +157,7 @@ public:
 
   // calls CostValue on the pointer returned from InternalResidual(), while
   // holding a lock
-  double CostValue(const double* residual) const;
+  virtual double CostValue(const double* residual) const;
 
   virtual void ModifyScene(const mjModel* model, const mjData* data, mjvScene* scene) const {}
 
@@ -160,8 +165,12 @@ public:
   virtual std::string XmlPath() const = 0;
   virtual std::string URDFPath() const { return {}; }
   virtual std::string GetBaseBodyName() const { return {}; }
-  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */ return {}; }
-  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */ return {}; }
+  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */
+    return {};
+  }
+  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */
+    return {};
+  }
   virtual FabSelfCollisionNamePairs GetSelfCollisionNamePairs() const {
     /* Ones in URDF, not XML */
     return {};
@@ -239,7 +248,7 @@ public:
   }
 
   mjtNum* QueryBodyQuat(int body_id, bool inertia_com = true) const {
-    if (model_) {
+    if (data_) {
       if (inertia_com) {
         static mjtNum quat[4];
         mju_mat2Quat(quat, &data_->ximat[9 * body_id]);
@@ -252,7 +261,7 @@ public:
   }
 
   mjtNum* QueryBodyRotMat(int body_id, bool inertia_com = true) const {
-    if (model_) {
+    if (data_) {
       if (inertia_com) {
         return &data_->ximat[9 * body_id];
       } else {
@@ -265,7 +274,7 @@ public:
   }
 
   mjtNum* QueryBodyPos(int body_id, bool inertia_com = true) const {
-    if (model_) {
+    if (data_) {
       return inertia_com ? &data_->xipos[3 * body_id] : &data_->xpos[3 * body_id];
     }
     return nullptr;
@@ -339,6 +348,13 @@ public:
       return &data_->mocap_quat[4 * bodyMocapId];
     }
     return nullptr;
+  }
+
+  mjtNum QueryBodyMass(int body_id) const {
+    if (model_) {
+      return (body_id > -1) ? model_->body_mass[body_id] : 0;
+    }
+    return 0;
   }
 
   mjtNum QueryBodyMass(const char* body_name) const {
@@ -423,6 +439,8 @@ public:
 
   // residual parameters
   std::vector<double> parameters;
+
+  // universal raytraces
   std::vector<mjtNum> ray_starts;
   std::vector<mjtNum> ray_ends;
   bool last_goal_reached_ = false;
@@ -451,20 +469,8 @@ public:
                0.005;
   }
 
-  Eigen::Vector3d rotMatrixToEulerAngles(Eigen::Matrix3d& R) {
-    float sy = mju_sqrt(R(0, 0) * R(0, 0) + R(1, 0) * R(1, 0));
-    bool singular = sy < 1e-6;
-    float x, y, z;
-    if (!singular) {
-      x = mju_atan2(R(2, 1), R(2, 2));
-      y = mju_atan2(-R(2, 0), sy);
-      z = mju_atan2(R(1, 0), R(0, 0));
-    } else {
-      x = mju_atan2(-R(1, 2), R(1, 1));
-      y = mju_atan2(-R(2, 0), sy);
-      z = 0;
-    }
-    return {x, y, z};
+  Eigen::Vector3d rotMatrixToEulerAngles(Eigen::Matrix3d& R) const {
+    return R.eulerAngles(0, 1, 2);  // XYZ or RPY
   }
 
   virtual void QueryGoalState() {

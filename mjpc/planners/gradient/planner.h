@@ -15,11 +15,12 @@
 #ifndef MJPC_PLANNERS_GRADIENT_PLANNER_H_
 #define MJPC_PLANNERS_GRADIENT_PLANNER_H_
 
+#include <mujoco/mujoco.h>
+
 #include <memory>
 #include <shared_mutex>
 #include <vector>
 
-#include <mujoco/mujoco.h>
 #include "mjpc/planners/cost_derivatives.h"
 #include "mjpc/planners/gradient/gradient.h"
 #include "mjpc/planners/gradient/policy.h"
@@ -36,7 +37,7 @@ namespace mjpc {
 
 // first-order gradient descent planner
 class GradientPlanner : public Planner {
- public:
+public:
   // constructor
   GradientPlanner() {
     mappings.emplace_back(new ZeroSplineMapping);
@@ -53,8 +54,7 @@ class GradientPlanner : public Planner {
   void Allocate() override;
 
   // reset memory to zeros
-  void Reset(int horizon,
-             const double* initial_repeated_action = nullptr) override;
+  void Reset(int horizon, const double* initial_repeated_action = nullptr) override;
 
   // set state
   void SetState(const State& state) override;
@@ -66,8 +66,7 @@ class GradientPlanner : public Planner {
   void NominalTrajectory(int horizon, ThreadPool& pool) override;
 
   // compute action from policy
-  void ActionFromPolicy(double* action, const double* state, double time,
-                        bool use_previous = false) override;
+  void ActionFromPolicy(double* action, const double* state, double time, bool use_previous = false) override;
 
   // resample nominal policy for current time
   void ResamplePolicy(int horizon);
@@ -85,13 +84,11 @@ class GradientPlanner : public Planner {
   void GUI(mjUI& ui) override;
 
   // planner-specific plots
-  void Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, int planner_shift,
-             int timer_shift, int planning, int* shift) override;
+  void Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, int planner_shift, int timer_shift, int planning,
+             int* shift) override;
 
   // return number of parameters optimized by planner
-  int NumParameters() override {
-    return policy.num_spline_points * policy.model->nu;
-  };
+  int NumParameters() override { return policy.num_spline_points * policy.model->nu; };
 
   // ----- members ----- //
   mjModel* model;
@@ -120,7 +117,6 @@ class GradientPlanner : public Planner {
   int dim_max;               // maximum dimension
 
   // candidate trajectories
-  Trajectory trajectory[kMaxTrajectory];
   int num_trajectory;
 
   // model derivatives
@@ -158,7 +154,7 @@ class GradientPlanner : public Planner {
   double gradient_compute_time;
   double policy_update_compute_time;
 
- private:
+private:
   mutable std::shared_mutex mtx_;
   int derivative_skip_ = 0;
 };

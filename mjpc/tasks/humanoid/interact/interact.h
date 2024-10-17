@@ -31,12 +31,7 @@ constexpr int kTorsoHeightParameterIndex = 1;
 constexpr int kNumberOfFreeJoints = 0;
 
 // ---------- Enums ----------------- //
-enum TaskMode : int {
-  kSitting = 0,
-  kStanding = 1,
-  kRelaxing = 2,
-  kStayingStill = 3
-};
+enum TaskMode : int { kSitting = 0, kStanding = 1, kRelaxing = 2, kStayingStill = 3 };
 
 // ----------- Default weights for the residual terms ----------------- //
 const std::vector<std::vector<double>> default_weights = {
@@ -57,51 +52,41 @@ constexpr float CONTACT_POINTS_COLOR[kNumberOfContactPairsInteract][4] = {
 constexpr float FACING_DIRECTION_COLOR[] = {1., 1., 1., 0.8};
 
 class Interact : public Task {
- public:
+public:
   class ResidualFn : public mjpc::BaseResidualFn {
-   public:
-    explicit ResidualFn(const Interact* task,
-                        const ContactKeyframe& kf = ContactKeyframe(),
+  public:
+    explicit ResidualFn(const Interact* task, const ContactKeyframe& kf = ContactKeyframe(),
                         int current_mode = kSitting)
-        : mjpc::BaseResidualFn(task),
-          residual_keyframe_(kf),
-          current_task_mode_((TaskMode)current_mode) {}
+        : mjpc::BaseResidualFn(task), residual_keyframe_(kf), current_task_mode_((TaskMode)current_mode) {}
 
     // ------------------ Residuals for interaction task ------------
-    void Residual(const mjModel* model, const mjData* data,
-                  double* residual) const override;
+    void Residual(const mjModel* model, const mjData* data, double* residual) const override;
 
-   protected:
+  protected:
     ContactKeyframe residual_keyframe_;
 
-   private:
+  private:
     friend class Interact;
 
     TaskMode current_task_mode_;
 
-    void UpResidual(const mjModel* model, const mjData* data, double* residual,
-                    std::string&& name, int* counter) const;
+    void UpResidual(const mjModel* model, const mjData* data, double* residual, std::string&& name,
+                    int* counter) const;
 
-    void HeadHeightResidual(const mjModel* model, const mjData* data,
-                            double* residual, int* counter) const;
+    void HeadHeightResidual(const mjModel* model, const mjData* data, double* residual, int* counter) const;
 
-    void TorsoHeightResidual(const mjModel* model, const mjData* data,
-                             double* residual, int* counter) const;
+    void TorsoHeightResidual(const mjModel* model, const mjData* data, double* residual, int* counter) const;
 
-    void KneeFeetXYResidual(const mjModel* model, const mjData* data,
-                            double* residual, int* counter) const;
+    void KneeFeetXYResidual(const mjModel* model, const mjData* data, double* residual, int* counter) const;
 
-    void COMFeetXYResidual(const mjModel* model, const mjData* data,
-                           double* residual, int* counter) const;
+    void COMFeetXYResidual(const mjModel* model, const mjData* data, double* residual, int* counter) const;
 
-    void TorsoTargetResidual(const mjModel* model, const mjData* data,
-                             double* residual, int* counter) const;
+    void TorsoTargetResidual(const mjModel* model, const mjData* data, double* residual, int* counter) const;
 
-    void FacingDirectionResidual(const mjModel* model, const mjData* data,
-                                 double* residual, int* counter) const;
+    void FacingDirectionResidual(const mjModel* model, const mjData* data, double* residual,
+                                 int* counter) const;
 
-    void ContactResidual(const mjModel* model, const mjData* data,
-                         double* residual, int* counter) const;
+    void ContactResidual(const mjModel* model, const mjData* data, double* residual, int* counter) const;
   };
 
   Interact() : residual_(this) {}
@@ -111,19 +96,17 @@ class Interact : public Task {
   std::string Name() const override;
   std::string XmlPath() const override;
 
- protected:
-  std::unique_ptr<mjpc::ResidualFn> ResidualLocked() const override {
-    return std::make_unique<ResidualFn>(this, residual_.residual_keyframe_,
-                                        residual_.current_task_mode_);
+protected:
+  std::unique_ptr<mjpc::AbstractResidualFn> ResidualLocked() const override {
+    return std::make_unique<ResidualFn>(this, residual_.residual_keyframe_, residual_.current_task_mode_);
   }
   ResidualFn* InternalResidual() override { return &residual_; }
 
- private:
+private:
   ResidualFn residual_;
 
   // draw task-related geometry in the scene
-  void ModifyScene(const mjModel* model, const mjData* data,
-                   mjvScene* scene) const override;
+  void ModifyScene(const mjModel* model, const mjData* data, mjvScene* scene) const override;
 };
 
 }  // namespace mjpc::humanoid

@@ -57,6 +57,7 @@ set(LIB_MJPC_HEADERS
         tasks/bimanual/reorient/reorient.h
         tasks/cartpole/cartpole.h
         tasks/fingers/fingers.h
+        tasks/grippers/grippers.h
         tasks/humanoid/stand/stand.h
         tasks/humanoid/tracking/tracking.h
         tasks/humanoid/walk/walk.h
@@ -142,6 +143,10 @@ set(LIB_MJPC_HEADERS
         planners/fabrics/include/fab_param_tuner.h
         planners/fabrics/include/casadi_gen/fab_task_panda_dynamic_func.h
         planners/fabrics/include/casadi_gen/fab_task_panda_dynamic_python_func.h
+        planners/cio/cio_common.h
+        planners/cio/cio_trajectory.h
+        planners/cio/cio_planner.h
+        planners/cio/cio_util.h
         urdf_parser/include/common.h
         urdf_parser/include/geometry.h
         urdf_parser/include/joint.h
@@ -178,6 +183,7 @@ add_library(
         tasks/bimanual/reorient/reorient.cc
         tasks/cartpole/cartpole.cc
         tasks/fingers/fingers.cc
+        tasks/grippers/grippers.cc
   tasks/humanoid/interact/interact.cc
   tasks/humanoid/interact/interact.h
   tasks/humanoid/interact/contact_keyframe.cc
@@ -225,6 +231,7 @@ add_library(
         planners/fabrics/src/fab_math_util.cpp
         planners/fabrics/src/fab_planner.cpp
         planners/fabrics/src/fab_casadi_function.cpp
+        planners/cio/cio_common.cc
         urdf_parser/common.cpp
         urdf_parser/geometry.cpp
         urdf_parser/joint.cpp
@@ -266,6 +273,7 @@ target_link_libraries(
         OpenMP::OpenMP_CXX
         casadi
         ${Ipopt_LIBRARIES}
+        lbfgspp
 )
 target_include_directories(libmjpc
         PUBLIC
