@@ -15,9 +15,10 @@
 #ifndef MJPC_PLANNERS_ILQG_POLICY_H_
 #define MJPC_PLANNERS_ILQG_POLICY_H_
 
+#include <mujoco/mujoco.h>
+
 #include <vector>
 
-#include <mujoco/mujoco.h>
 #include "mjpc/planners/policy.h"
 #include "mjpc/task.h"
 #include "mjpc/trajectory.h"
@@ -26,7 +27,7 @@ namespace mjpc {
 
 // iLQG policy
 class iLQGPolicy : public Policy {
- public:
+public:
   // constructor
   iLQGPolicy() = default;
 
@@ -37,8 +38,7 @@ class iLQGPolicy : public Policy {
   void Allocate(const mjModel* model, const Task& task, int horizon) override;
 
   // reset memory to zeros
-  void Reset(int horizon,
-             const double* initial_repeated_action = nullptr) override;
+  void Reset(int horizon, const double* initial_repeated_action = nullptr) override;
 
   // set action from policy
   // if state == nullptr, return the nominal action without a feedback term
@@ -47,17 +47,17 @@ class iLQGPolicy : public Policy {
   // copy policy
   void CopyFrom(const iLQGPolicy& policy, int horizon);
 
- public:
+public:
   // ----- members ----- //
   const mjModel* model;
 
-  Trajectory trajectory;              // reference trajectory
-  std::vector<double> feedback_gain;  // (T * dim_action * dim_state_derivative)
-  std::vector<double> action_improvement;  // (T * dim_action)
+  TrajectoryPtr trajectory = std::make_shared<Trajectory>();  // reference trajectory
+  std::vector<double> feedback_gain;                          // (T * dim_action * dim_state_derivative)
+  std::vector<double> action_improvement;                     // (T * dim_action)
 
   // scratch space
-  mutable std::vector<double> state_scratch;       // dim_state
-  mutable std::vector<double> action_scratch;      // dim_action
+  mutable std::vector<double> state_scratch;   // dim_state
+  mutable std::vector<double> action_scratch;  // dim_action
 
   // interpolation
   mutable std::vector<double> feedback_gain_scratch;

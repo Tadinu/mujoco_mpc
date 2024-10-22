@@ -12,10 +12,6 @@ public:
     return (p1 - p2) / delta;
   }
 
-  static double get_dist(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2) {
-    return std::sqrt((p1 - p2).norm());
-  }
-
   // Ref: https://gist.github.com/lorenzoriano/5414671
   template <typename T>
   static std::vector<T> linspace(double start, double end, int num) {

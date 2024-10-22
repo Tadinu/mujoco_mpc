@@ -14,13 +14,14 @@
 
 #include "mjpc/planners/sample_gradient/planner.h"
 
+#include <absl/random/random.h>
+#include <mujoco/mujoco.h>
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <shared_mutex>
 
-#include <absl/random/random.h>
-#include <mujoco/mujoco.h>
 #include "mjpc/array_safety.h"
 #include "mjpc/planners/planner.h"
 #include "mjpc/planners/policy.h"
@@ -59,8 +60,7 @@ void SampleGradientPlanner::Initialize(mjModel* model, const Task& task) {
   // set number of trajectories to rollout
   num_trajectory_ = GetNumberOrDefault(10, model, "sampling_trajectories");
 
-  interpolation_ = GetNumberOrDefault(SplineInterpolation::kCubicSpline, model,
-                                      "sampling_representation");
+  interpolation_ = GetNumberOrDefault(SplineInterpolation::kCubicSpline, model, "sampling_representation");
 
   // set number of gradient trajectories to rollout
   num_gradient_ = GetNumberOrDefault(0, model, "sample_gradient_trajectories");
@@ -69,8 +69,7 @@ void SampleGradientPlanner::Initialize(mjModel* model, const Task& task) {
   gradient_filter_ = GetNumberOrDefault(1.0, model, "sample_gradient_filter");
 
   if (num_trajectory_ > kMaxTrajectory) {
-    mju_error_i("Too many trajectories, %d is the maximum allowed.",
-                kMaxTrajectory);
+    mju_error_i("Too many trajectories, %d is the maximum allowed.", kMaxTrajectory);
   }
 }
 
@@ -101,14 +100,10 @@ void SampleGradientPlanner::Allocate() {
     trajectory_order[i] = i;
   }
 
-  // trajectories and parameters are resized and initialized in OptimizePolicy
-  // need to allocate at least one for NominalTrajectory
-  trajectory.resize(kMaxTrajectory);
-  candidate_policy.resize(kMaxTrajectory);
   for (int i = 0; i < kMaxTrajectory; i++) {
-    trajectory[i].Initialize(state.size(), model->nu, task->num_residual,
-                             task->num_trace, kMaxTrajectoryHorizon);
-    trajectory[i].Allocate(kMaxTrajectoryHorizon);
+    trajectory[i]->Initialize(state.size(), model->nu, task->num_residual, task->num_trace,
+                              kMaxTrajectoryHorizon);
+    trajectory[i]->Allocate(kMaxTrajectoryHorizon);
     candidate_policy[i].Allocate(model, *task, kMaxTrajectoryHorizon);
   }
 
@@ -118,8 +113,7 @@ void SampleGradientPlanner::Allocate() {
 }
 
 // reset memory to zeros
-void SampleGradientPlanner::Reset(int horizon,
-                                  const double* initial_repeated_action) {
+void SampleGradientPlanner::Reset(int horizon, const double* initial_repeated_action) {
   // state
   std::fill(state.begin(), state.end(), 0.0);
   std::fill(mocap.begin(), mocap.end(), 0.0);
@@ -139,7 +133,7 @@ void SampleGradientPlanner::Reset(int horizon,
 
   // trajectory samples
   for (int i = 0; i < kMaxTrajectory; i++) {
-    trajectory[i].Reset(kMaxTrajectoryHorizon);
+    trajectory[i]->Reset(kMaxTrajectoryHorizon);
     candidate_policy[i].Reset(horizon);
   }
 
@@ -161,8 +155,7 @@ void SampleGradientPlanner::Reset(int horizon,
 
 // set state
 void SampleGradientPlanner::SetState(const State& state) {
-  state.CopyTo(this->state.data(), this->mocap.data(), this->userdata.data(),
-               &this->time);
+  state.CopyTo(this->state.data(), this->mocap.data(), this->userdata.data(), &this->time);
 }
 
 // optimize nominal policy using random sampling and gradient search
@@ -197,8 +190,7 @@ void SampleGradientPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
   // TODO(taylor): a bit faster to do in Rollouts, but needs more scratch to be
   // memory safe
   for (int i = 0; i < num_gradient; i++) {
-    this->ResamplePolicy(candidate_policy[num_noisy + i], horizon,
-                         num_spline_points);
+    this->ResamplePolicy(candidate_policy[num_noisy + i], horizon, num_spline_points);
   }
 
   // ----- roll out noisy policies ----- //
@@ -221,16 +213,13 @@ void SampleGradientPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
   }
 
   // sort lowest to highest total return
-  std::partial_sort(
-      trajectory_order.begin(), trajectory_order.begin() + num_trajectory,
-      trajectory_order.begin() + num_trajectory,
-      [&trajectory = trajectory](int a, int b) {
-        return trajectory[a].total_return < trajectory[b].total_return;
-      });
+  std::partial_sort(trajectory_order.begin(), trajectory_order.begin() + num_trajectory,
+                    trajectory_order.begin() + num_trajectory, [&trajectory = trajectory](int a, int b) {
+                      return trajectory[a]->total_return < trajectory[b]->total_return;
+                    });
 
   // set winner
-  if (trajectory[trajectory_order[0]].total_return <
-      trajectory[idx_nominal].total_return) {
+  if (trajectory[trajectory_order[0]]->total_return < trajectory[idx_nominal]->total_return) {
     winner = trajectory_order[0];
   } else {
     winner = idx_nominal;
@@ -254,9 +243,7 @@ void SampleGradientPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
   }
 
   // improvement: compare nominal to winner
-  improvement = mju_max(
-      trajectory[idx_nominal].total_return - trajectory[winner].total_return,
-      0.0);
+  improvement = mju_max(trajectory[idx_nominal]->total_return - trajectory[winner]->total_return, 0.0);
 
   // stop timer
   policy_update_compute_time = GetDuration(policy_update_start);
@@ -275,20 +262,17 @@ void SampleGradientPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
 // compute trajectory using nominal policy
 void SampleGradientPlanner::NominalTrajectory(int horizon, ThreadPool& pool) {
   // set policy
-  auto nominal_policy = [&cp = resampled_policy](
-                            double* action, const double* state, double time) {
+  auto nominal_policy = [&cp = resampled_policy](double* action, const double* state, double time) {
     cp.Action(action, state, time);
   };
 
   // rollout nominal policy
-  trajectory[idx_nominal].Rollout(nominal_policy, task, model, data_[0].get(),
-                                  state.data(), time, mocap.data(),
-                                  userdata.data(), horizon);
+  trajectory[idx_nominal]->Rollout(nominal_policy, task, model, data_[0].get(), state.data(), time,
+                                   mocap.data(), userdata.data(), horizon);
 }
 
 // set action from policy
-void SampleGradientPlanner::ActionFromPolicy(double* action,
-                                             const double* state, double time,
+void SampleGradientPlanner::ActionFromPolicy(double* action, const double* state, double time,
                                              bool use_previous) {
   const std::shared_lock<std::shared_mutex> lock(mtx_);
   if (use_previous) {
@@ -299,14 +283,12 @@ void SampleGradientPlanner::ActionFromPolicy(double* action,
 }
 
 // update policy via resampling
-void SampleGradientPlanner::ResamplePolicy(
-    SamplingPolicy& policy, int horizon, int num_spline_points) {
+void SampleGradientPlanner::ResamplePolicy(SamplingPolicy& policy, int horizon, int num_spline_points) {
   // dimension
 
   // time
   double nominal_time = time;
-  double time_shift = mju_max(
-      (horizon - 1) * model->opt.timestep / (num_spline_points - 1), 1.0e-5);
+  double time_shift = mju_max((horizon - 1) * model->opt.timestep / (num_spline_points - 1), 1.0e-5);
 
   // get spline points
   plan_scratch.Clear();
@@ -345,8 +327,7 @@ void SampleGradientPlanner::AddNoiseToPolicy(int i) {
 
   for (int j = 0; j < num_spline_points; j++) {
     TimeSpline::Node node = candidate_policy[i].plan.NodeAt(j);
-    mju_addToScl(node.values().data(), DataAt(noise, j * model->nu + shift),
-                 noise_exploration, model->nu);
+    mju_addToScl(node.values().data(), DataAt(noise, j * model->nu + shift), noise_exploration, model->nu);
     Clamp(node.values().data(), model->actuator_ctrlrange, model->nu);
   }
 
@@ -355,24 +336,20 @@ void SampleGradientPlanner::AddNoiseToPolicy(int i) {
 }
 
 // rollout candidate policies
-void SampleGradientPlanner::Rollouts(int num_trajectory, int num_gradient,
-                                     int horizon, ThreadPool& pool) {
+void SampleGradientPlanner::Rollouts(int num_trajectory, int num_gradient, int horizon, ThreadPool& pool) {
   // reset perturbation compute time
   noise_compute_time = 0.0;
 
   // search
   int count_before = pool.GetCount();
   for (int i = 0; i < num_trajectory; i++) {
-    pool.Schedule([&s = *this, &model = this->model, &task = this->task,
-                   &state = this->state, &time = this->time,
-                   &mocap = this->mocap, &userdata = this->userdata, horizon,
-                   idx_nominal = this->idx_nominal, num_trajectory,
-                   num_gradient, i]() {
+    pool.Schedule([&s = *this, &model = this->model, &task = this->task, &state = this->state,
+                   &time = this->time, &mocap = this->mocap, &userdata = this->userdata, horizon,
+                   idx_nominal = this->idx_nominal, num_trajectory, num_gradient, i]() {
       // nominal and noisy policies
       if (i < num_trajectory - num_gradient) {
         // copy nominal policy
-        s.candidate_policy[i].CopyFrom(s.resampled_policy,
-                                       s.resampled_policy.num_spline_points);
+        s.candidate_policy[i].CopyFrom(s.resampled_policy, s.resampled_policy.num_spline_points);
 
         // noisy nominal policy
         if (i > idx_nominal) s.AddNoiseToPolicy(i);
@@ -381,16 +358,14 @@ void SampleGradientPlanner::Rollouts(int num_trajectory, int num_gradient,
       // ----- rollout sample policy ----- //
 
       // policy
-      auto sample_policy_i = [&candidate_policy = s.candidate_policy, &i](
-                                 double* action, const double* state,
-                                 double time) {
+      auto sample_policy_i = [&candidate_policy = s.candidate_policy, &i](double* action, const double* state,
+                                                                          double time) {
         candidate_policy[i].Action(action, state, time);
       };
 
       // policy rollout
-      s.trajectory[i].Rollout(
-          sample_policy_i, task, model, s.data_[ThreadPool::WorkerId()].get(),
-          state.data(), time, mocap.data(), userdata.data(), horizon);
+      s.trajectory[i]->Rollout(sample_policy_i, task, model, s.data_[ThreadPool::WorkerId()].get(),
+                               state.data(), time, mocap.data(), userdata.data(), horizon);
     });
   }
   pool.WaitCount(count_before + num_trajectory);
@@ -398,8 +373,7 @@ void SampleGradientPlanner::Rollouts(int num_trajectory, int num_gradient,
 }
 
 // compute candidate trajectories
-void SampleGradientPlanner::GradientCandidates(int num_trajectory,
-                                               int num_gradient, int horizon,
+void SampleGradientPlanner::GradientCandidates(int num_trajectory, int num_gradient, int horizon,
                                                ThreadPool& pool) {
   if (num_gradient < 1) return;
 
@@ -427,12 +401,10 @@ void SampleGradientPlanner::GradientCandidates(int num_trajectory,
     }
 
     // sort lowest to highest total return
-    std::partial_sort(
-        trajectory_order.begin(), trajectory_order.begin() + num_noisy,
-        trajectory_order.begin() + num_noisy,
-        [&trajectory = trajectory](int a, int b) {
-          return trajectory[a].total_return < trajectory[b].total_return;
-        });
+    std::partial_sort(trajectory_order.begin(), trajectory_order.begin() + num_noisy,
+                      trajectory_order.begin() + num_noisy, [&trajectory = trajectory](int a, int b) {
+                        return trajectory[a]->total_return < trajectory[b]->total_return;
+                      });
 
     // compute normalization
     double f0 = std::log(0.5 * num_noisy + 1.0);
@@ -443,26 +415,21 @@ void SampleGradientPlanner::GradientCandidates(int num_trajectory,
 
     // compute weights
     for (int i = 0; i < num_noisy; i++) {
-      return_weight_[i] =
-          std::max(0.0, f0 - std::log(trajectory_order[i] + 1)) / den -
-          1.0 / num_noisy;
+      return_weight_[i] = std::max(0.0, f0 - std::log(trajectory_order[i] + 1)) / den - 1.0 / num_noisy;
     }
   }
 
   // gradient
   std::fill(gradient.begin(), gradient.end(), 0.0);
   for (int i = 0; i < num_noisy; i++) {
-    double* noisei = noise.data() +
-                     trajectory_order[i] * (model->nu * kMaxTrajectoryHorizon);
-    mju_addToScl(gradient.data(), noisei, return_weight_[i] / num_noisy,
-                 num_parameters);
+    double* noisei = noise.data() + trajectory_order[i] * (model->nu * kMaxTrajectoryHorizon);
+    mju_addToScl(gradient.data(), noisei, return_weight_[i] / num_noisy, num_parameters);
   }
 
   // compute step sizes for gradient direction
   if (step_size_.size() != num_gradient) {
     step_size_.resize(num_gradient);
-    LogScale(step_size_.data(), gradient_max_step_size, gradient_min_step_size,
-             num_gradient);
+    LogScale(step_size_.data(), gradient_max_step_size, gradient_min_step_size, num_gradient);
   }
 
   // gradient filter gf * grad + (1 - gf) * grad_prev
@@ -480,8 +447,7 @@ void SampleGradientPlanner::GradientCandidates(int num_trajectory,
     // gradient step
     for (int t = 0; t < candidate_policy[i].plan.Size(); t++) {
       TimeSpline::Node n = candidate_policy[i].plan.NodeAt(t);
-      mju_addToScl(n.values().data(), gradient.data() + t * model->nu,
-                   -scaling * gradient_filter, model->nu);
+      mju_addToScl(n.values().data(), gradient.data() + t * model->nu, -scaling * gradient_filter, model->nu);
 
       // TODO(taylor): resample the gradient_previous?
       mju_addToScl(n.values().data(), gradient_previous.data() + t * model->nu,
@@ -493,9 +459,7 @@ void SampleGradientPlanner::GradientCandidates(int num_trajectory,
 }
 
 // returns the nominal trajectory (this is the purple trace)
-const Trajectory* SampleGradientPlanner::BestTrajectory() {
-  return &trajectory[winner];
-}
+const Trajectory* SampleGradientPlanner::BestTrajectory() { return trajectory[winner].get(); }
 
 // visualize planner-specific traces
 void SampleGradientPlanner::Traces(mjvScene* scn) {
@@ -542,10 +506,9 @@ void SampleGradientPlanner::Traces(mjvScene* scn) {
                      idx < num_noisy ? white : orange);
 
         // make geometry
-        mjv_connector(
-            &scn->geoms[scn->ngeom], mjGEOM_LINE, width,
-            trajectory[k].trace.data() + 3 * task->num_trace * i + 3 * j,
-            trajectory[k].trace.data() + 3 * task->num_trace * (i + 1) + 3 * j);
+        mjv_connector(&scn->geoms[scn->ngeom], mjGEOM_LINE, width,
+                      trajectory[k]->trace.data() + 3 * task->num_trace * i + 3 * j,
+                      trajectory[k]->trace.data() + 3 * task->num_trace * (i + 1) + 3 * j);
 
         // increment number of geometries
         scn->ngeom += 1;
@@ -556,25 +519,22 @@ void SampleGradientPlanner::Traces(mjvScene* scn) {
 
 // planner-specific GUI elements
 void SampleGradientPlanner::GUI(mjUI& ui) {
-  mjuiDef defSampleGradient[] = {
-      {mjITEM_SLIDERINT, "Rollouts", 2, &num_trajectory_, "0 1"},
-      {mjITEM_SELECT, "Spline", 2, &interpolation_, "Zero\nLinear\nCubic"},
-      {mjITEM_SLIDERINT, "Spline Pts", 2, &policy.num_spline_points, "0 1"},
-      {mjITEM_SLIDERNUM, "Noise Std.", 2, &noise_exploration, "0 1"},
-      {mjITEM_SLIDERINT, "Grad. Rollouts", 2, &num_gradient_, "0 1"},
-      {mjITEM_SLIDERNUM, "Grad. Filter", 2, &gradient_filter_, "0 1"},
-      {mjITEM_END}};
+  mjuiDef defSampleGradient[] = {{mjITEM_SLIDERINT, "Rollouts", 2, &num_trajectory_, "0 1"},
+                                 {mjITEM_SELECT, "Spline", 2, &interpolation_, "Zero\nLinear\nCubic"},
+                                 {mjITEM_SLIDERINT, "Spline Pts", 2, &policy.num_spline_points, "0 1"},
+                                 {mjITEM_SLIDERNUM, "Noise Std.", 2, &noise_exploration, "0 1"},
+                                 {mjITEM_SLIDERINT, "Grad. Rollouts", 2, &num_gradient_, "0 1"},
+                                 {mjITEM_SLIDERNUM, "Grad. Filter", 2, &gradient_filter_, "0 1"},
+                                 {mjITEM_END}};
 
   // set number of trajectory slider limits
   mju::sprintf_arr(defSampleGradient[0].other, "%i %i", 2, kMaxTrajectory);
 
   // set spline point limits
-  mju::sprintf_arr(defSampleGradient[2].other, "%i %i", MinSamplingSplinePoints,
-                   MaxSamplingSplinePoints);
+  mju::sprintf_arr(defSampleGradient[2].other, "%i %i", MinSamplingSplinePoints, MaxSamplingSplinePoints);
 
   // set noise standard deviation limits
-  mju::sprintf_arr(defSampleGradient[3].other, "%f %f", MinNoiseStdDev,
-                   MaxNoiseStdDev);
+  mju::sprintf_arr(defSampleGradient[3].other, "%f %f", MinNoiseStdDev, MaxNoiseStdDev);
 
   // set number of gradient trajectory slider limits
   mju::sprintf_arr(defSampleGradient[4].other, "%i %i", 0, kMaxTrajectory);
@@ -584,17 +544,14 @@ void SampleGradientPlanner::GUI(mjUI& ui) {
 }
 
 // planner-specific plots
-void SampleGradientPlanner::Plots(mjvFigure* fig_planner, mjvFigure* fig_timer,
-                                  int planner_shift, int timer_shift,
-                                  int planning, int* shift) {
+void SampleGradientPlanner::Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, int planner_shift,
+                                  int timer_shift, int planning, int* shift) {
   // ----- planner ----- //
   double planner_bounds[2] = {-6.0, 6.0};
 
   // improvement
-  mjpc::PlotUpdateData(fig_planner, planner_bounds,
-                       fig_planner->linedata[0 + planner_shift][0] + 1,
-                       mju_log10(mju_max(improvement, 1.0e-6)), 100,
-                       0 + planner_shift, 0, 1, -100);
+  mjpc::PlotUpdateData(fig_planner, planner_bounds, fig_planner->linedata[0 + planner_shift][0] + 1,
+                       mju_log10(mju_max(improvement, 1.0e-6)), 100, 0 + planner_shift, 0, 1, -100);
 
   // winner plot value
   double winner_plot_val = 0.0;  // nominal
@@ -605,14 +562,12 @@ void SampleGradientPlanner::Plots(mjvFigure* fig_planner, mjvFigure* fig_timer,
     winner_plot_val = 6.0 * (winner - num_noisy) / num_gradient_;
   }
 
-  mjpc::PlotUpdateData(fig_planner, planner_bounds,
-                       fig_planner->linedata[1 + planner_shift][0] + 1,
+  mjpc::PlotUpdateData(fig_planner, planner_bounds, fig_planner->linedata[1 + planner_shift][0] + 1,
                        winner_plot_val, 100, 1 + planner_shift, 0, 1, -100);
 
   // legend
   mju::strcpy_arr(fig_planner->linename[0 + planner_shift], "Improvement");
-  mju::strcpy_arr(fig_planner->linename[1 + planner_shift],
-                  "Perturb|Nominal|Gradient");
+  mju::strcpy_arr(fig_planner->linename[1 + planner_shift], "Perturb|Nominal|Gradient");
 
   fig_planner->range[1][0] = planner_bounds[0];
   fig_planner->range[1][1] = planner_bounds[1];
@@ -622,24 +577,17 @@ void SampleGradientPlanner::Plots(mjvFigure* fig_planner, mjvFigure* fig_timer,
 
   // ----- timer ----- //
 
-  PlotUpdateData(
-      fig_timer, timer_bounds, fig_timer->linedata[0 + timer_shift][0] + 1,
-      1.0e-3 * noise_compute_time * planning, 100, 0 + timer_shift, 0, 1, -100);
+  PlotUpdateData(fig_timer, timer_bounds, fig_timer->linedata[0 + timer_shift][0] + 1,
+                 1.0e-3 * noise_compute_time * planning, 100, 0 + timer_shift, 0, 1, -100);
 
-  PlotUpdateData(fig_timer, timer_bounds,
-                 fig_timer->linedata[1 + timer_shift][0] + 1,
-                 1.0e-3 * rollouts_compute_time * planning, 100,
-                 1 + timer_shift, 0, 1, -100);
+  PlotUpdateData(fig_timer, timer_bounds, fig_timer->linedata[1 + timer_shift][0] + 1,
+                 1.0e-3 * rollouts_compute_time * planning, 100, 1 + timer_shift, 0, 1, -100);
 
-  PlotUpdateData(fig_timer, timer_bounds,
-                 fig_timer->linedata[2 + timer_shift][0] + 1,
-                 1.0e-3 * gradient_candidates_compute_time * planning, 100,
-                 2 + timer_shift, 0, 1, -100);
+  PlotUpdateData(fig_timer, timer_bounds, fig_timer->linedata[2 + timer_shift][0] + 1,
+                 1.0e-3 * gradient_candidates_compute_time * planning, 100, 2 + timer_shift, 0, 1, -100);
 
-  PlotUpdateData(fig_timer, timer_bounds,
-                 fig_timer->linedata[3 + timer_shift][0] + 1,
-                 1.0e-3 * policy_update_compute_time * planning, 100,
-                 3 + timer_shift, 0, 1, -100);
+  PlotUpdateData(fig_timer, timer_bounds, fig_timer->linedata[3 + timer_shift][0] + 1,
+                 1.0e-3 * policy_update_compute_time * planning, 100, 3 + timer_shift, 0, 1, -100);
 
   // legend
   mju::strcpy_arr(fig_timer->linename[0 + timer_shift], "Noise");

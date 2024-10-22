@@ -15,11 +15,12 @@
 #ifndef MJPC_PLANNERS_CROSS_ENTROPY_PLANNER_H_
 #define MJPC_PLANNERS_CROSS_ENTROPY_PLANNER_H_
 
+#include <mujoco/mujoco.h>
+
 #include <atomic>
 #include <shared_mutex>
 #include <vector>
 
-#include <mujoco/mujoco.h>
 #include "mjpc/planners/planner.h"
 #include "mjpc/planners/sampling/policy.h"
 #include "mjpc/spline/spline.h"
@@ -31,7 +32,7 @@
 namespace mjpc {
 
 class CrossEntropyPlanner : public Planner {
- public:
+public:
   // constructor
   CrossEntropyPlanner() = default;
 
@@ -47,8 +48,7 @@ class CrossEntropyPlanner : public Planner {
   void Allocate() override;
 
   // reset memory to zeros
-  void Reset(int horizon,
-             const double* initial_repeated_action = nullptr) override;
+  void Reset(int horizon, const double* initial_repeated_action = nullptr) override;
 
   // set state
   void SetState(const State& state) override;
@@ -61,8 +61,7 @@ class CrossEntropyPlanner : public Planner {
   void NominalTrajectory(int horizon);
 
   // set action from policy
-  void ActionFromPolicy(double* action, const double* state, double time,
-                        bool use_previous = false) override;
+  void ActionFromPolicy(double* action, const double* state, double time, bool use_previous = false) override;
 
   // resample nominal policy
   void ResamplePolicy(int horizon);
@@ -83,13 +82,11 @@ class CrossEntropyPlanner : public Planner {
   void GUI(mjUI& ui) override;
 
   // planner-specific plots
-  void Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, int planner_shift,
-             int timer_shift, int planning, int* shift) override;
+  void Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, int planner_shift, int timer_shift, int planning,
+             int* shift) override;
 
   // return number of parameters optimized by planner
-  int NumParameters() override {
-    return policy.num_spline_points * policy.model->nu;
-  };
+  int NumParameters() override { return policy.num_spline_points * policy.model->nu; };
 
   // ----- members ----- //
   mjModel* model;
@@ -112,8 +109,7 @@ class CrossEntropyPlanner : public Planner {
   std::vector<double> times_scratch;
 
   // trajectories
-  Trajectory trajectory[kMaxTrajectory];
-  Trajectory nominal_trajectory;
+  TrajectoryPtr nominal_trajectory = std::make_shared<Trajectory>();
 
   // order of indices of rolled out trajectories, ordered by total return
   std::vector<int> trajectory_order;
@@ -136,8 +132,7 @@ class CrossEntropyPlanner : public Planner {
   double rollouts_compute_time;
   double policy_update_compute_time;
 
-  mjpc::spline::SplineInterpolation interpolation_ =
-      mjpc::spline::SplineInterpolation::kZeroSpline;
+  mjpc::spline::SplineInterpolation interpolation_ = mjpc::spline::SplineInterpolation::kZeroSpline;
   int num_trajectory_;
   mutable std::shared_mutex mtx_;
 };

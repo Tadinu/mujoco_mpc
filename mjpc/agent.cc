@@ -164,6 +164,7 @@ void Agent::Initialize(const mjModel* model) {
 void Agent::Allocate() {
   // planner
   for (const auto& planner : planners_) {
+    planner->InitTrajectory();
     planner->Allocate();
   }
 

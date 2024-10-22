@@ -15,10 +15,11 @@
 #ifndef MJPC_PLANNERS_ILQG_PLANNER_H_
 #define MJPC_PLANNERS_ILQG_PLANNER_H_
 
+#include <mujoco/mujoco.h>
+
 #include <shared_mutex>
 #include <vector>
 
-#include <mujoco/mujoco.h>
 #include "mjpc/planners/ilqg/backward_pass.h"
 #include "mjpc/planners/ilqg/policy.h"
 #include "mjpc/planners/ilqg/settings.h"
@@ -30,7 +31,7 @@ namespace mjpc {
 
 // planner for iLQG
 class iLQGPlanner : public Planner {
- public:
+public:
   // constructor
   iLQGPlanner() = default;
 
@@ -41,8 +42,7 @@ class iLQGPlanner : public Planner {
   void Allocate() override;
 
   // reset memory to zeros
-  void Reset(int horizon,
-             const double* initial_repeated_action = nullptr) override;
+  void Reset(int horizon, const double* initial_repeated_action = nullptr) override;
 
   // set state
   void SetState(const State& state) override;
@@ -55,8 +55,7 @@ class iLQGPlanner : public Planner {
 
   // set action from policy
   // if state == nullptr, return the nominal action without a feedback term
-  void ActionFromPolicy(double* action, const double* state, double time,
-                        bool use_previous = false) override;
+  void ActionFromPolicy(double* action, const double* state, double time, bool use_previous = false) override;
 
   // return trajectory with best total return
   const Trajectory* BestTrajectory() override;
@@ -68,13 +67,11 @@ class iLQGPlanner : public Planner {
   void GUI(mjUI& ui) override;
 
   // planner-specific plots
-  void Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, int planner_shift,
-             int timer_shift, int planning, int* shift) override;
+  void Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, int planner_shift, int timer_shift, int planning,
+             int* shift) override;
 
   // return number of parameters optimized by planner
-  int NumParameters() override {
-    return policy.trajectory.dim_action * (policy.trajectory.horizon - 1);
-  };
+  int NumParameters() override { return policy.trajectory->dim_action * (policy.trajectory->horizon - 1); };
 
   // single iLQG iteration
   void Iteration(int horizon, ThreadPool& pool);
@@ -111,9 +108,6 @@ class iLQGPlanner : public Planner {
   int dim_action;            // action
   int dim_sensor;            // output (i.e., all sensors)
   int dim_max;               // maximum dimension
-
-  // candidate trajectories
-  Trajectory trajectory[kMaxTrajectory];
 
   // model derivatives
   ModelDerivatives model_derivative;
@@ -154,7 +148,7 @@ class iLQGPlanner : public Planner {
   // mutex
   mutable std::shared_mutex mtx_;
 
- private:
+private:
   int num_trajectory_ = 1;
   int num_rollouts_gui_ = 1;
   int derivative_skip_ = 0;

@@ -138,7 +138,7 @@ set(LIB_MJPC_HEADERS
         planners/fabrics/include/casadi_gen/fab_task_panda_dynamic_func.h
         planners/fabrics/include/casadi_gen/fab_task_panda_dynamic_python_func.h
         planners/cio/cio_common.h
-        planners/cio/cio_world.h
+        planners/cio/cio_trajectory.h
         planners/cio/cio_planner.h
         planners/cio/cio_util.h
         urdf_parser/include/common.h

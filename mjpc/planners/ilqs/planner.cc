@@ -14,11 +14,12 @@
 
 #include "mjpc/planners/ilqs/planner.h"
 
+#include <absl/types/span.h>
+#include <mujoco/mujoco.h>
+
 #include <chrono>
 #include <vector>
 
-#include <absl/types/span.h>
-#include <mujoco/mujoco.h>
 #include "mjpc/array_safety.h"
 #include "mjpc/planners/ilqg/planner.h"
 #include "mjpc/planners/sampling/planner.h"
@@ -41,9 +42,11 @@ void iLQSPlanner::Initialize(mjModel* model, const Task& task) {
 // allocate memory
 void iLQSPlanner::Allocate() {
   // Sampling
+  sampling.InitTrajectory();
   sampling.Allocate();
 
   // iLQG
+  ilqg.InitTrajectory();
   ilqg.Allocate();
 
   // ----- policy conversion ----- //
@@ -99,9 +102,8 @@ void iLQSPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
 
     // get times for spline parameters
     double nominal_time = sampling.time;
-    double time_shift = mju_max(
-        (horizon - 1) * sampling.model->opt.timestep / (num_spline_points - 1),
-        1.0e-5);
+    double time_shift =
+        mju_max((horizon - 1) * sampling.model->opt.timestep / (num_spline_points - 1), 1.0e-5);
 
     // get spline points
     spline_times_cache.clear();
@@ -119,8 +121,8 @@ void iLQSPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
 
       // compute parameter to action mapping
       mappings[sampling.policy.plan.Interpolation()]->Compute(
-          spline_times_cache, num_spline_points,
-          ilqg.candidate_policy[0].trajectory.times.data(), horizon - 1);
+          spline_times_cache, num_spline_points, ilqg.candidate_policy[0].trajectory->times.data(),
+          horizon - 1);
 
       // ----- compute inverse mapping ----- //
       // resize
@@ -130,42 +132,37 @@ void iLQSPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
 
       // M = A' A
       double* mapping = mappings[sampling.policy.plan.Interpolation()]->Get();
-      mju_mulMatTMat(inversemapping_cache.data(), mapping, mapping, dim_actions,
-                     dim_parameters, dim_parameters);
+      mju_mulMatTMat(inversemapping_cache.data(), mapping, mapping, dim_actions, dim_parameters,
+                     dim_parameters);
 
       // cholesky(M)
       mju_cholFactor(inversemapping_cache.data(), dim_parameters, 0.0);
 
       // M \ A'
       for (int i = 0; i < dim_actions; i++) {
-        mju_cholSolve(inversemappingT.data() + i * dim_parameters,
-                      inversemapping_cache.data(), mapping + i * dim_parameters,
-                      dim_parameters);
+        mju_cholSolve(inversemappingT.data() + i * dim_parameters, inversemapping_cache.data(),
+                      mapping + i * dim_parameters, dim_parameters);
       }
 
       // transpose
-      mju_transpose(inversemapping.data(), inversemappingT.data(), dim_actions,
-                    dim_parameters);
+      mju_transpose(inversemapping.data(), inversemappingT.data(), dim_actions, dim_parameters);
     }
 
     // compute parameters from actions via inverse mapping
     spline_parameters_cache.resize(dim_parameters);
     mju_mulMatVec(spline_parameters_cache.data(), inversemapping.data(),
-                  ilqg.candidate_policy[0].trajectory.actions.data(),
-                  dim_parameters, dim_actions);
+                  ilqg.candidate_policy[0].trajectory->actions.data(), dim_parameters, dim_actions);
 
     // clamp parameters
     for (int t = 0; t < num_spline_points; t++) {
-      Clamp(DataAt(spline_parameters_cache, t * sampling.model->nu),
-            sampling.model->actuator_ctrlrange, sampling.model->nu);
+      Clamp(DataAt(spline_parameters_cache, t * sampling.model->nu), sampling.model->actuator_ctrlrange,
+            sampling.model->nu);
     }
     sampling.policy.plan.Clear();
     for (int t = 0; t < num_spline_points; t++) {
       sampling.policy.plan.AddNode(
           spline_times_cache[t],
-          absl::MakeConstSpan(
-              spline_parameters_cache.data() + t * sampling.model->nu,
-              sampling.model->nu));
+          absl::MakeConstSpan(spline_parameters_cache.data() + t * sampling.model->nu, sampling.model->nu));
     }
   }
 
@@ -174,10 +171,9 @@ void iLQSPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
 
   // check for improvement
   if (sampling.winner > 0 &&  // if winner==0, there was surely no improvement
-      (sampling.trajectory[sampling.winner].total_return <
-       (previous_active_policy == kSampling
-            ? sampling.trajectory[0].total_return
-            : ilqg.candidate_policy[0].trajectory.total_return))) {
+      (sampling.trajectory[sampling.winner]->total_return <
+       (previous_active_policy == kSampling ? sampling.trajectory[0]->total_return
+                                            : ilqg.candidate_policy[0].trajectory->total_return))) {
     // zero ilqg timers
     if (active_policy == kSampling) {
       ilqg.nominal_compute_time = 0.0;
@@ -203,10 +199,9 @@ void iLQSPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
   ilqg.Iteration(horizon, pool);
 
   // comparison for new active policy
-  if (ilqg.trajectory[ilqg.winner].total_return <
-      (previous_active_policy == kSampling
-           ? sampling.trajectory[sampling.winner].total_return
-           : ilqg.trajectory[0].total_return)) {
+  if (ilqg.trajectory[ilqg.winner]->total_return < (previous_active_policy == kSampling
+                                                        ? sampling.trajectory[sampling.winner]->total_return
+                                                        : ilqg.trajectory[0]->total_return)) {
     active_policy = kiLQG;
   }
   // If no improvement was found either way, both policies were updated, but
@@ -225,8 +220,7 @@ void iLQSPlanner::NominalTrajectory(int horizon, ThreadPool& pool) {
 }
 
 // set action from policy
-void iLQSPlanner::ActionFromPolicy(double* action, const double* state,
-                                   double time, bool use_previous) {
+void iLQSPlanner::ActionFromPolicy(double* action, const double* state, double time, bool use_previous) {
   if (use_previous) {
     if (previous_active_policy == kSampling) {
       // We always call sampling.OptimizePolicy above, which always updates the
@@ -275,46 +269,37 @@ void iLQSPlanner::GUI(mjUI& ui) {
   sampling.GUI(ui);
 
   // iLQG
-  mjuiDef defiLQGSeparator[] = {{mjITEM_SEPARATOR, "iLQG Settings", 1},
-                                {mjITEM_END}};
+  mjuiDef defiLQGSeparator[] = {{mjITEM_SEPARATOR, "iLQG Settings", 1}, {mjITEM_END}};
   mjui_add(&ui, defiLQGSeparator);
   ilqg.GUI(ui);
 }
 
 // planner-specific plots
-void iLQSPlanner::Plots(mjvFigure* fig_planner, mjvFigure* fig_timer,
-                        int planner_shift, int timer_shift, int planning,
-                        int* shift) {
+void iLQSPlanner::Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, int planner_shift, int timer_shift,
+                        int planning, int* shift) {
   // Sampling
-  sampling.Plots(fig_planner, fig_timer, planner_shift, timer_shift, planning,
-                 shift);
+  sampling.Plots(fig_planner, fig_timer, planner_shift, timer_shift, planning, shift);
 
   // iLQG
-  ilqg.Plots(fig_planner, fig_timer, planner_shift + 1, timer_shift + 4,
-             planning, shift);
+  ilqg.Plots(fig_planner, fig_timer, planner_shift + 1, timer_shift + 4, planning, shift);
 
   // ----- re-label ----- //
   // planner plots
   mju::strcpy_arr(fig_planner->linename[0 + planner_shift], "Improve. (S)");
   mju::strcpy_arr(fig_planner->linename[0 + planner_shift + 1], "Reg. (LQ)");
-  mju::strcpy_arr(fig_planner->linename[0 + planner_shift + 2],
-                  "Action Step (LQ)");
-  mju::strcpy_arr(fig_planner->linename[0 + planner_shift + 3],
-                  "Feedback Scaling (LQ)");
+  mju::strcpy_arr(fig_planner->linename[0 + planner_shift + 2], "Action Step (LQ)");
+  mju::strcpy_arr(fig_planner->linename[0 + planner_shift + 3], "Feedback Scaling (LQ)");
 
   // timer plots
   mju::strcpy_arr(fig_timer->linename[0 + timer_shift], "Noise (S)");
   mju::strcpy_arr(fig_timer->linename[1 + timer_shift], "Rollout (S)");
   mju::strcpy_arr(fig_timer->linename[2 + timer_shift], "Policy Update (S)");
   mju::strcpy_arr(fig_timer->linename[0 + timer_shift + 3], "Nominal (LQ)");
-  mju::strcpy_arr(fig_timer->linename[1 + timer_shift + 3],
-                  "Model Deriv. (LQ)");
+  mju::strcpy_arr(fig_timer->linename[1 + timer_shift + 3], "Model Deriv. (LQ)");
   mju::strcpy_arr(fig_timer->linename[2 + timer_shift + 3], "Cost Deriv. (LQ)");
-  mju::strcpy_arr(fig_timer->linename[3 + timer_shift + 3],
-                  "Backward Pass (LQ)");
+  mju::strcpy_arr(fig_timer->linename[3 + timer_shift + 3], "Backward Pass (LQ)");
   mju::strcpy_arr(fig_timer->linename[4 + timer_shift + 3], "Rollouts (LQ)");
-  mju::strcpy_arr(fig_timer->linename[5 + timer_shift + 3],
-                  "Policy Update (LQ)");
+  mju::strcpy_arr(fig_timer->linename[5 + timer_shift + 3], "Policy Update (LQ)");
 }
 
 }  // namespace mjpc

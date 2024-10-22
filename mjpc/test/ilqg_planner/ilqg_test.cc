@@ -94,26 +94,26 @@ TEST(iLQGTest, Particle) {
 
   // test final state
   EXPECT_NEAR(planner.candidate_policy[0]
-                  .trajectory.states[(steps - 1) * (model->nq + model->nv)],
+                  .trajectory->states[(steps - 1) * (model->nq + model->nv)],
               state.mocap()[0], 1.0e-2);
   EXPECT_NEAR(planner.candidate_policy[0]
-                  .trajectory.states[(steps - 1) * (model->nq + model->nv) + 1],
+                  .trajectory->states[(steps - 1) * (model->nq + model->nv) + 1],
               state.mocap()[1], 1.0e-2);
   EXPECT_NEAR(planner.candidate_policy[0]
-                  .trajectory.states[(steps - 1) * (model->nq + model->nv) + 2],
+                  .trajectory->states[(steps - 1) * (model->nq + model->nv) + 2],
               0.0, 1.0e-1);
   EXPECT_NEAR(planner.candidate_policy[0]
-                  .trajectory.states[(steps - 1) * (model->nq + model->nv) + 3],
+                  .trajectory->states[(steps - 1) * (model->nq + model->nv) + 3],
               0.0, 1.0e-1);
 
   // test action limits
   for (int t = 0; t < steps - 1; t++) {
     for (int i = 0; i < model->nu; i++) {
       EXPECT_LE(
-          planner.candidate_policy[0].trajectory.actions[t * model->nu + i],
+          planner.candidate_policy[0].trajectory->actions[t * model->nu + i],
           model->actuator_ctrlrange[2 * i + 1]);
       EXPECT_GE(
-          planner.candidate_policy[0].trajectory.actions[t * model->nu + i],
+          planner.candidate_policy[0].trajectory->actions[t * model->nu + i],
           model->actuator_ctrlrange[2 * i]);
     }
   }

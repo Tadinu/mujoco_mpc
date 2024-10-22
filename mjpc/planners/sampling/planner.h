@@ -38,7 +38,7 @@ inline constexpr double MinNoiseStdDev = 0.0;
 inline constexpr double MaxNoiseStdDev = 1.0;
 
 class SamplingPlanner : public RankedPlanner {
- public:
+public:
   // constructor
   SamplingPlanner() = default;
 
@@ -54,8 +54,7 @@ class SamplingPlanner : public RankedPlanner {
   void Allocate() override;
 
   // reset memory to zeros
-  void Reset(int horizon,
-             const double* initial_repeated_action = nullptr) override;
+  void Reset(int horizon, const double* initial_repeated_action = nullptr) override;
 
   // set state
   void SetState(const State& state) override;
@@ -67,8 +66,7 @@ class SamplingPlanner : public RankedPlanner {
   void NominalTrajectory(int horizon, ThreadPool& pool) override;
 
   // set action from policy
-  void ActionFromPolicy(double* action, const double* state,
-                        double time, bool use_previous = false) override;
+  void ActionFromPolicy(double* action, const double* state, double time, bool use_previous = false) override;
 
   // resample nominal policy
   void UpdateNominalPolicy(int horizon);
@@ -89,25 +87,21 @@ class SamplingPlanner : public RankedPlanner {
   void GUI(mjUI& ui) override;
 
   // planner-specific plots
-  void Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, int planner_shift,
-             int timer_shift, int planning, int* shift) override;
+  void Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, int planner_shift, int timer_shift, int planning,
+             int* shift) override;
 
   // return number of parameters optimized by planner
-  int NumParameters() override {
-    return policy.num_spline_points * model->nu;
-  };
+  int NumParameters() override { return policy.num_spline_points * model->nu; };
 
   // optimizes policies, but rather than picking the best, generate up to
   // ncandidates. returns number of candidates created.
-  int OptimizePolicyCandidates(int ncandidates, int horizon,
-                               ThreadPool& pool) override;
+  int OptimizePolicyCandidates(int ncandidates, int horizon, ThreadPool& pool) override;
   // returns the total return for the nth candidate (or another score to
   // minimize)
   double CandidateScore(int candidate) const override;
 
   // set action from candidate policy
-  void ActionFromCandidatePolicy(double* action, int candidate,
-                                 const double* state, double time) override;
+  void ActionFromCandidatePolicy(double* action, int candidate, const double* state, double time) override;
 
   void CopyCandidateToPolicy(int candidate) override;
 
@@ -129,17 +123,13 @@ class SamplingPlanner : public RankedPlanner {
   // scratch
   mjpc::spline::TimeSpline plan_scratch;
 
-  // trajectories
-  Trajectory trajectory[kMaxTrajectory];
-
   // order of indices of rolled out trajectories, ordered by total return
   std::vector<int> trajectory_order;
 
   // ----- noise ----- //
   double noise_exploration[2] = {0};  // stds for sampling: N(0, exploration)
   std::vector<double> noise;
-mjpc::spline::SplineInterpolation interpolation_ =
-      mjpc::spline::SplineInterpolation::kZeroSpline;
+  mjpc::spline::SplineInterpolation interpolation_ = mjpc::spline::SplineInterpolation::kZeroSpline;
 
   // best trajectory
   int winner;

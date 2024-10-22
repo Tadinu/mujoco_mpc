@@ -49,5 +49,7 @@ void CIOObservation::add_noise() {
   pose.add_noise();
   vel.add_noise();
   acc.add_noise();
-  contact.add_noise();
+  for (auto& contact : contacts) {
+    contact.add_noise();
+  }
 }
