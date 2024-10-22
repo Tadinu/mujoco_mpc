@@ -33,7 +33,7 @@
 namespace mjpc {
 
 class SampleGradientPlanner : public Planner {
- public:
+public:
   // constructor
   SampleGradientPlanner() = default;
 
@@ -49,8 +49,7 @@ class SampleGradientPlanner : public Planner {
   void Allocate() override;
 
   // reset memory to zeros
-  void Reset(int horizon,
-             const double* initial_repeated_action = nullptr) override;
+  void Reset(int horizon, const double* initial_repeated_action = nullptr) override;
 
   // set state
   void SetState(const State& state) override;
@@ -62,23 +61,19 @@ class SampleGradientPlanner : public Planner {
   void NominalTrajectory(int horizon, ThreadPool& pool) override;
 
   // set action from policy
-  void ActionFromPolicy(double* action, const double* state, double time,
-                        bool use_previous = false) override;
+  void ActionFromPolicy(double* action, const double* state, double time, bool use_previous = false) override;
 
   // resample nominal policy
-  void ResamplePolicy(SamplingPolicy& policy, int horizon,
-                      int num_spline_points);
+  void ResamplePolicy(SamplingPolicy& policy, int horizon, int num_spline_points);
 
   // add noise to nominal policy
   void AddNoiseToPolicy(int i);
 
   // rollout candidate policies
-  void Rollouts(int num_trajectory, int num_gradient, int horizon,
-                ThreadPool& pool);
+  void Rollouts(int num_trajectory, int num_gradient, int horizon, ThreadPool& pool);
 
   // compute candidate trajectories along approximate gradient direction
-  void GradientCandidates(int num_trajectory, int num_gradient, int horizon,
-                          ThreadPool& pool);
+  void GradientCandidates(int num_trajectory, int num_gradient, int horizon, ThreadPool& pool);
 
   // return trajectory with best total return
   const Trajectory* BestTrajectory() override;
@@ -90,13 +85,11 @@ class SampleGradientPlanner : public Planner {
   void GUI(mjUI& ui) override;
 
   // planner-specific plots
-  void Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, int planner_shift,
-             int timer_shift, int planning, int* shift) override;
+  void Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, int planner_shift, int timer_shift, int planning,
+             int* shift) override;
 
   // return number of parameters optimized by planner
-  int NumParameters() override {
-    return policy.num_spline_points * model->nu;
-  };
+  int NumParameters() override { return policy.num_spline_points * model->nu; };
 
   // ----- members ----- //
   mjModel* model;
@@ -110,7 +103,7 @@ class SampleGradientPlanner : public Planner {
 
   // policy
   SamplingPolicy policy;  // (Guarded by mtx_)
-  std::vector<SamplingPolicy> candidate_policy;
+  SamplingPolicy candidate_policy[kMaxTrajectory];
   SamplingPolicy resampled_policy;
   SamplingPolicy previous_policy;
 
@@ -118,16 +111,13 @@ class SampleGradientPlanner : public Planner {
   mjpc::spline::TimeSpline plan_scratch;
 
   // trajectories
-  std::vector<Trajectory> trajectory;
-
   // order of indices of rolled out trajectories, ordered by total return
   std::vector<int> trajectory_order;
 
   // zero-mean Gaussian noise standard deviation
   double noise_exploration;
   std::vector<double> noise;
-  mjpc::spline::SplineInterpolation interpolation_ =
-      mjpc::spline::SplineInterpolation::kZeroSpline;
+  mjpc::spline::SplineInterpolation interpolation_ = mjpc::spline::SplineInterpolation::kZeroSpline;
 
   // improvement
   double improvement;

@@ -14,24 +14,24 @@
 
 #include "mjpc/trajectory.h"
 
+#include <absl/random/distributions.h>
+#include <absl/random/random.h>
+#include <mujoco/mujoco.h>
+
 #include <algorithm>
 #include <functional>
 #include <iostream>
 
-#include <absl/random/distributions.h>
-#include <absl/random/random.h>
-#include <mujoco/mujoco.h>
 #include "mjpc/utilities.h"
 
 namespace mjpc {
 namespace {
 // maximum return value
 inline constexpr double kMaxReturnValue = 1.0e6;
-}
+}  // namespace
 
 // initialize dimensions
-void Trajectory::Initialize(int dim_state, int dim_action, int dim_residual,
-                            int num_trace, int horizon) {
+void Trajectory::Initialize(int dim_state, int dim_action, int dim_residual, int num_trace, int horizon) {
   this->horizon = horizon;
   this->dim_state = dim_state;
   this->dim_action = dim_action;
@@ -50,6 +50,7 @@ void Trajectory::Allocate(int T) {
 
   // costs
   costs.resize(T);
+  non_residual_costs.resize(T);
 
   // residual
   residual.resize(dim_residual * T);
@@ -68,8 +69,7 @@ void Trajectory::Reset(int T, const double* initial_repeated_action) {
 
   if (initial_repeated_action != nullptr) {
     for (int i = 0; i < T; ++i) {
-      mju_copy(actions.data() + i * dim_action, initial_repeated_action,
-               dim_action);
+      mju_copy(actions.data() + i * dim_action, initial_repeated_action, dim_action);
     }
   } else {
     std::fill(actions.begin(), actions.begin() + dim_action * T, 0.0);
@@ -80,6 +80,7 @@ void Trajectory::Reset(int T, const double* initial_repeated_action) {
 
   // costs
   std::fill(costs.begin(), costs.begin() + T, 0.0);
+  std::fill(non_residual_costs.begin(), non_residual_costs.begin() + T, 0.0);
   std::fill(residual.begin(), residual.begin() + dim_residual * T, 0.0);
   total_return = 0.0;
   failure = false;
@@ -89,20 +90,16 @@ void Trajectory::Reset(int T, const double* initial_repeated_action) {
 }
 
 // simulate model forward in time with continuous-time indexed policy
-void Trajectory::Rollout(
-    std::function<void(double* action, const double* state, double time)>
-        policy,
-    const Task* task, const mjModel* model, mjData* data, const double* state,
-    double time, const double* mocap, const double* userdata, int steps) {
+void Trajectory::Rollout(std::function<void(double* action, const double* state, double time)> policy,
+                         const Task* task, const mjModel* model, mjData* data, const double* state,
+                         double time, const double* mocap, const double* userdata, int steps) {
   NoisyRollout(policy, task, model, data, state, time, mocap, userdata,
                /*xfrc_std=*/0, /*xfrc_rate=*/1, steps);
 }
-void Trajectory::NoisyRollout(
-    std::function<void(double* action, const double* state, double time)>
-        policy,
-    const Task* task, const mjModel* model, mjData* data, const double* state,
-    double time, const double* mocap, const double* userdata, double xfrc_std,
-    double xfrc_rate, int steps) {
+void Trajectory::NoisyRollout(std::function<void(double* action, const double* state, double time)> policy,
+                              const Task* task, const mjModel* model, mjData* data, const double* state,
+                              double time, const double* mocap, const double* userdata, double xfrc_std,
+                              double xfrc_rate, int steps) {
   // reset failure flag
   failure = false;
 
@@ -148,9 +145,8 @@ void Trajectory::NoisyRollout(
       // convert rate and scale to discrete time (Ornstein–Uhlenbeck)
       mjtNum rate = mju_exp(-model->opt.timestep / xfrc_rate);
       mjtNum scale = xfrc_std * mju_sqrt(1 - rate * rate);
-      for (int i = 0; i < 6*model->nbody; i++) {
-        data->xfrc_applied[i] = rate * data->xfrc_applied[i] +
-                                absl::Gaussian<mjtNum>(gen, 0, scale);
+      for (int i = 0; i < 6 * model->nbody; i++) {
+        data->xfrc_applied[i] = rate * data->xfrc_applied[i] + absl::Gaussian<mjtNum>(gen, 0, scale);
       }
     }
 
@@ -158,12 +154,12 @@ void Trajectory::NoisyRollout(
     mj_step(model, data);
 
     // record residual
-    mju_copy(DataAt(residual, t * dim_residual), data->sensordata,
-             dim_residual);
+    mju_copy(DataAt(residual, t * dim_residual), data->sensordata, dim_residual);
+    // calculate non-residual cost
+    CalculateNonResidualCost(model, data, task, t);
 
     // record trace
-    GetTraces(DataAt(trace, t * 3 * task->num_trace), model, data,
-              task->num_trace);
+    GetTraces(DataAt(trace, t * 3 * task->num_trace), model, data, task->num_trace);
 
     // check for step warnings
     if ((failure |= CheckWarnings(data))) {
@@ -188,8 +184,8 @@ void Trajectory::NoisyRollout(
 
   // copy final action
   if (horizon > 1) {
-    mju_copy(DataAt(actions, (horizon - 1) * dim_action),
-             DataAt(actions, (horizon - 2) * dim_action), dim_action);
+    mju_copy(DataAt(actions, (horizon - 1) * dim_action), DataAt(actions, (horizon - 2) * dim_action),
+             dim_action);
   } else {
     mju_zero(DataAt(actions, (horizon - 1) * dim_action), dim_action);
   }
@@ -198,23 +194,19 @@ void Trajectory::NoisyRollout(
   mj_forward(model, data);
 
   // final residual
-  mju_copy(DataAt(residual, (horizon - 1) * dim_residual), data->sensordata,
-           dim_residual);
+  mju_copy(DataAt(residual, (horizon - 1) * dim_residual), data->sensordata, dim_residual);
 
   // final trace
-  GetTraces(DataAt(trace, (horizon - 1) * 3 * task->num_trace), model, data,
-            task->num_trace);
+  GetTraces(DataAt(trace, (horizon - 1) * 3 * task->num_trace), model, data, task->num_trace);
 
   // compute return
   UpdateReturn(task);
 }
 
 // simulate model forward in time with discrete-time indexed policy
-void Trajectory::RolloutDiscrete(
-    std::function<void(double* action, const double* state, int index)>
-        policy,
-    const Task* task, const mjModel* model, mjData* data, const double* state,
-    double time, const double* mocap, const double* userdata, int steps) {
+void Trajectory::RolloutDiscrete(std::function<void(double* action, const double* state, int index)> policy,
+                                 const Task* task, const mjModel* model, mjData* data, const double* state,
+                                 double time, const double* mocap, const double* userdata, int steps) {
   // reset failure flag
   failure = false;
 
@@ -257,12 +249,12 @@ void Trajectory::RolloutDiscrete(
     mj_step(model, data);
 
     // record residual
-    mju_copy(DataAt(residual, t * dim_residual), data->sensordata,
-             dim_residual);
+    mju_copy(DataAt(residual, t * dim_residual), data->sensordata, dim_residual);
+    // calculate non-residual cost
+    CalculateNonResidualCost(model, data, task, t);
 
     // record trace
-    GetTraces(DataAt(trace, t * 3 * task->num_trace), model, data,
-              task->num_trace);
+    GetTraces(DataAt(trace, t * 3 * task->num_trace), model, data, task->num_trace);
 
     // check for step warnings
     if ((failure |= CheckWarnings(data))) {
@@ -287,8 +279,8 @@ void Trajectory::RolloutDiscrete(
 
   // copy final action
   if (horizon > 1) {
-    mju_copy(DataAt(actions, (horizon - 1) * dim_action),
-             DataAt(actions, (horizon - 2) * dim_action), dim_action);
+    mju_copy(DataAt(actions, (horizon - 1) * dim_action), DataAt(actions, (horizon - 2) * dim_action),
+             dim_action);
   } else {
     mju_zero(DataAt(actions, (horizon - 1) * dim_action), dim_action);
   }
@@ -297,12 +289,10 @@ void Trajectory::RolloutDiscrete(
   mj_forward(model, data);
 
   // final residual
-  mju_copy(DataAt(residual, (horizon - 1) * dim_residual), data->sensordata,
-           dim_residual);
+  mju_copy(DataAt(residual, (horizon - 1) * dim_residual), data->sensordata, dim_residual);
 
   // final trace
-  GetTraces(DataAt(trace, (horizon - 1) * 3 * task->num_trace), model, data,
-            task->num_trace);
+  GetTraces(DataAt(trace, (horizon - 1) * 3 * task->num_trace), model, data, task->num_trace);
 
   // compute return
   UpdateReturn(task);
@@ -316,6 +306,9 @@ void Trajectory::UpdateReturn(const Task* task) {
   for (int t = 0; t < horizon; t++) {
     // compute stage cost
     costs[t] = task->CostValue(DataAt(residual, t * task->num_residual));
+    if (t < non_residual_costs.size()) {
+      costs[t] += non_residual_costs[t];
+    }
 
     // update total return
     total_return += costs[t];

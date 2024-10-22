@@ -39,6 +39,13 @@ public:
 
   virtual void InitTaskFabrics() {}
 
+  // init trajectories
+  virtual void InitTrajectory() {
+    for (auto& traj : trajectory) {
+      traj = std::make_shared<Trajectory>();
+    }
+  }
+
   // allocate memory
   virtual void Allocate() = 0;
 
@@ -79,6 +86,8 @@ public:
 
   std::vector<UniqueMjData> data_;
   void ResizeMjData(const mjModel* model, int num_threads);
+
+  TrajectoryPtr trajectory[kMaxTrajectory];
 
   virtual urdf::UrdfModel RobotURDFModel() const { return {}; }
   bool tuning_on_ = false;

@@ -60,8 +60,8 @@ TEST(iLQGTest, BackwardPass) {
 
   // policy
   iLQGPolicy p;
-  p.trajectory.Initialize(n, m, 0, 0, T);
-  p.trajectory.Allocate(T);
+  p.trajectory->Initialize(n, m, 0, 0, T);
+  p.trajectory->Allocate(T);
   p.feedback_gain.resize(m * n * T);
   p.action_improvement.resize(m * T);
 
