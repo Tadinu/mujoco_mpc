@@ -154,6 +154,14 @@ add_custom_target(
           ${menagerie_SOURCE_DIR}/shadow_hand/assets
           ${CMAKE_CURRENT_BINARY_DIR}/rubik/assets
 
+  # MPL
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          ${CMAKE_CURRENT_SOURCE_DIR}/mpl/MPL
+          ${CMAKE_CURRENT_BINARY_DIR}/mpl/MPL
+  COMMAND ${CMAKE_COMMAND} -E copy
+          ${CMAKE_CURRENT_SOURCE_DIR}/mpl/task.xml
+          ${CMAKE_CURRENT_BINARY_DIR}/mpl/MPL/task.xml
+
   # ALOHA
   COMMAND ${CMAKE_COMMAND} -E copy_directory
           ${menagerie_SOURCE_DIR}/aloha/assets

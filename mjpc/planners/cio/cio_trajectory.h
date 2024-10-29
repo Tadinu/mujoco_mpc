@@ -28,10 +28,10 @@ public:
   void SetTimestep(double timestep) { config_.delT = timestep; }
 
   void SetContactState(CIOObjectPtr obj, std::vector<CIOContact> contact_list) {
-    contact_states_.emplace(std::move(obj), std::move(contact_list));
+    hand_contacts_.emplace(std::move(obj), std::move(contact_list));
   }
 
-  bool HasEnvData() const { return manip_obj_ && !fingers_.empty() && !contact_states_.empty(); }
+  bool HasEnvData() const { return manip_obj_ && !hand_parts_.empty() && !hand_contacts_.empty(); }
   void Setup(const mjModel* model, const mjData* data, const mjpc::Task* task) {
     // [Model, data]
     mj_model_ = model;
@@ -54,29 +54,64 @@ public:
     }
     manip_obj_->set_mj_info(model, data, task);
 
-    // [Fingers]
-    const auto finger0_body_id = task->QueryBodyId("finger_a");
-    const auto finger1_body_id = task->QueryBodyId("finger_b");
-    if (fingers_.empty()) {
-      const auto fingertip_radius = task->QueryGeomSizeMax("finger_a");
-      auto finger0 =
-          std::make_shared<CIOSphere>(finger0_body_id, task->QueryGeomId("finger_a"), fingertip_radius);
-      finger0->set_mj_info(model, data, task);
-      auto finger1 =
-          std::make_shared<CIOSphere>(finger1_body_id, task->QueryGeomId("finger_b"), fingertip_radius);
-      finger1->set_mj_info(model, data, task);
-      fingers_ = std::vector{std::move(finger0), std::move(finger1)};
+    // [Hand parts]
+    static const char* hand_part_name_list[] = {
+        "palm",                                      // Palm
+        "thumb0",  "thumb1",  "thumb2",  "thumb3",   // Thumb
+        "index0",  "index1",  "index2",  "index3",   // Index
+        "middle0", "middle1", "middle2", "middle3",  // Middle
+        "ring0",   "ring1",   "ring2",   "ring3",    // Ring
+        "pinky0",  "pinky1",  "pinky2",  "pinky3"    // Pinky
+    };
+    static std::map<int /*id*/, const char*> hand_part_body_ids;
+    if (hand_part_body_ids.empty()) {
+      for (const auto& hand_part_name : hand_part_name_list) {
+        hand_part_body_ids.emplace(task->QueryBodyId(hand_part_name), hand_part_name);
+      }
     }
 
-    // [Fingers' Contacts]
+    // Fill [hand_parts_]
+    if (hand_parts_.empty()) {
+      for (const auto& [hand_part_body_id, hand_part_name] : hand_part_body_ids) {
+        auto hand_part = std::make_shared<CIOObject>(hand_part_body_id, task->QueryGeomId(hand_part_name));
+        hand_part->set_mj_info(model, data, task);
+        hand_parts_.emplace(hand_part_body_id, hand_part);
+      }
+    }
+
+    // [Hand Parts' Contacts]
     int ncon = data->ncon;
-    CIOContactMap contact_states;
-    std::vector<CIOContact> finger0_contacts;
-    std::vector<CIOContact> finger1_contacts;
-    for (int i = 0; i < ncon; i++) {
-      auto contact_i = data->contact[i];
-      int body1 = model->geom_bodyid[contact_i.geom1];
-      int body2 = model->geom_bodyid[contact_i.geom2];
+    CIOContactMap hand_contacts;
+    const auto fAddHandContact = [this, &hand_contacts](int in_contact_body_id, CIOContact in_contact) {
+      // Take contact from hand parts only
+      const auto hand_part =
+          hand_parts_.contains(in_contact_body_id) ? hand_parts_.at(in_contact_body_id) : nullptr;
+      if (!hand_part) {
+        return;
+      }
+      if (!hand_contacts.contains(hand_part)) {
+        hand_contacts.emplace(hand_part, std::vector{std::move(in_contact)});
+        return;
+      }
+
+      auto& hand_part_contacts = hand_contacts.at(hand_part);
+      bool already_added = false;
+      for (const auto& contact : hand_part_contacts) {
+        if (contact.id == in_contact.id) {
+          already_added = true;
+          break;
+        }
+      }
+      if (!already_added) {
+        hand_part_contacts.emplace_back(std::move(in_contact));
+      }
+    };
+
+    // Fill [hand_contacts]
+    for (int i = 0; i < ncon; ++i) {
+      const auto& contact_i = data->contact[i];
+      int body1_id = model->geom_bodyid[contact_i.geom1];
+      int body2_id = model->geom_bodyid[contact_i.geom2];
       // nothing to do for excluded contacts
       if (contact_i.efc_address < 0) {
         continue;
@@ -92,19 +127,17 @@ public:
       mju_mulMatTVec3(conray, contact_i.frame, conforce);
       mju_normalize3(conray);
 
-      auto cio_contact = CIOContact{.f = Eigen::Vector3d(conray),
+      auto cio_contact = CIOContact{.id = i,
+                                    .f = Eigen::Vector3d(conray),
                                     .ro = Eigen::Vector3d(contact_i.pos),
                                     .c = double((contact_i.dist > 0) ? 1 : 0)};
-      if ((body1 == finger0_body_id) || (body2 == finger0_body_id)) {
-        finger0_contacts.emplace_back(std::move(cio_contact));
-      } else if ((body1 == finger1_body_id) || (body2 == finger1_body_id)) {
-        finger1_contacts.emplace_back(std::move(cio_contact));
-      }
+      // Body1 contacts
+      fAddHandContact(body1_id, cio_contact);
+      // Body2 contacts
+      fAddHandContact(body2_id, std::move(cio_contact));
     }
 
-    contact_states.emplace(fingers_[0], std::move(finger0_contacts));
-    contact_states.emplace(fingers_[1], std::move(finger1_contacts));
-    contact_states_ = std::move(contact_states);
+    hand_contacts_ = std::move(hand_contacts);
 
     // Configure traj
     SetTimestep(model->opt.timestep);
@@ -113,7 +146,7 @@ public:
 
   void SetEVars() {
     const auto manip_obj_pose = manip_obj_->pose();
-    for (auto& [contact_obj, contact_list] : contact_states_) {
+    for (auto& [contact_obj, contact_list] : hand_contacts_) {
       for (auto i = 0; i < contact_list.size(); ++i) {
         auto& contact_i = contact_list[i];
         const auto& r = contact_i.r = manip_obj_pose.position() + contact_i.ro;
@@ -122,9 +155,9 @@ public:
         contact_i.e_H_ = contact_i.pi_H_ - r;
         contact_i.e_O_ = contact_i.pi_O_ - r;
 
-        auto traj_contact_i = (prev_traj_contact_states_.contains(contact_obj) &&
-                               (i < prev_traj_contact_states_.at(contact_obj).size()))
-                                  ? prev_traj_contact_states_.at(contact_obj)[i]
+        auto traj_contact_i = (prev_traj_hand_contacts_.contains(contact_obj) &&
+                               (i < prev_traj_hand_contacts_.at(contact_obj).size()))
+                                  ? prev_traj_hand_contacts_.at(contact_obj)[i]
                                   : contact_i;
         if (traj_contact_i.empty()) {
           traj_contact_i = contact_i;
@@ -133,13 +166,13 @@ public:
         contact_i.e_dot_O_ = CIOUtils::calc_derivative(contact_i.e_H_, traj_contact_i.e_H_, config_.delT);
       }
     }
-    prev_traj_contact_states_ = contact_states_;
+    prev_traj_hand_contacts_ = hand_contacts_;
   }
 
   // Contact-invariant cost
   double L_Contacts() const {
     double cost = 0;
-    for (const auto& [_, contact_list] : contact_states_) {
+    for (const auto& [_, contact_list] : hand_contacts_) {
       for (const auto& contact : contact_list) {
         cost += contact.c * (pow(contact.e_O_.norm(), 2) + pow(contact.e_H_.norm(), 2) +
                              pow(contact.e_dot_O_.norm(), 2) + pow(contact.e_dot_H_.norm(), 2));
@@ -157,7 +190,7 @@ public:
 #else
     mjtNum fromto_new[6] = {0};
     mjtNum margin = 0.01;
-    return mj_geomDistance(mj_model_, mj_data_, fingers_[0]->geom_id(), fingers_[1]->geom_id(), margin,
+    return mj_geomDistance(mj_model_, mj_data_, hand_parts_[0]->geom_id(), hand_parts_[1]->geom_id(), margin,
                            fromto_new);
 #endif
   }
@@ -168,7 +201,7 @@ public:
 
     // 1- Total (linear) forces on object
     Eigen::Vector3d f_total = Eigen::Vector3d::Zero();
-    for (const auto& [contact_obj, contact_list] : contact_states_) {
+    for (const auto& [contact_obj, contact_list] : hand_contacts_) {
       for (const auto& contact : contact_list) {
         f_total += contact.c * contact.f;
       }
@@ -187,7 +220,7 @@ public:
 
     // 2- Total (angular) torques on object
     Eigen::Vector3d m_total = Eigen::Vector3d::Zero();
-    for (const auto& [contact_obj, contact_list] : contact_states_) {
+    for (const auto& [contact_obj, contact_list] : hand_contacts_) {
       for (const auto& contact : contact_list) {
         m_total += (contact.c * contact.f).cross(contact.ro - contact_obj->pose().position());
       }
@@ -209,7 +242,7 @@ public:
 
     // 3- Force regularization cost
     double force_reg_cost = 0.0;
-    for (const auto& [contact_obj, contact_list] : contact_states_) {
+    for (const auto& [contact_obj, contact_list] : hand_contacts_) {
       for (const auto& contact : contact_list) {
         force_reg_cost += contact.f.squaredNorm();
       }
@@ -218,7 +251,7 @@ public:
 
     // 4- [L_cone]: Constrain contact force to lie in the friction cone of the contact surface
     double cone_cost = 0.0;
-    for (const auto& [contact_obj, contact_list] : contact_states_) {
+    for (const auto& [contact_obj, contact_list] : hand_contacts_) {
       for (const auto& contact : contact_list) {
         const auto n = contact_obj->get_surface_normal(contact.pi_H_);
         const auto f_n = contact.f.normalized();
@@ -269,12 +302,13 @@ public:
     non_residual_costs[t] = TotalCost();
   }
 
-  double TotalCost(int stage_idx = 0) const {
+  double TotalCost() const {
     if (!HasEnvData()) {
       return 0;
     }
     double ci = 0.0, phys = 0.0, kinem = 0.0, task = 0.0;
 
+    const int stage_idx = (mj_data_->ncon > 0) ? 1 : 0;
     const auto& stage_weight = config_.stage_weights[stage_idx];
     ci += stage_weight.w_CI * L_Contacts();
     if (ci > 0) {
@@ -291,8 +325,8 @@ public:
   std::map<int, CIOObjectPtr> GetAllObjects() const {
     auto objects = manip_obj_ ? std::map<int, CIOObjectPtr>{{manip_obj_->id(), manip_obj_}}
                               : std::map<int, CIOObjectPtr>{};
-    for (const auto& finger : fingers_) {
-      objects.emplace(finger->id(), finger);
+    for (const auto& [body_id, hand_part] : hand_parts_) {
+      objects.emplace(body_id, hand_part);
     }
     return objects;
   }
@@ -304,7 +338,7 @@ public:
           .obj_id = obj_id,
           .pose = obj->pose(),
           .vel = obj->vel(),
-          .contacts = contact_states_.contains(obj) ? contact_states_.at(obj) : std::vector<CIOContact>{}});
+          .contacts = hand_contacts_.contains(obj) ? hand_contacts_.at(obj) : std::vector<CIOContact>{}});
     }
     return s;
   }
@@ -366,9 +400,9 @@ public:
     return out_observations;
   }
 
-  CIOContactMap GetContactStates() const { return contact_states_; }
+  CIOContactMap GetContactStates() const { return hand_contacts_; }
   std::vector<CIOContact> GetObjectContacts(const CIOObjectPtr& object) const {
-    return contact_states_.contains(object) ? contact_states_.at(object) : std::vector<CIOContact>{};
+    return hand_contacts_.contains(object) ? hand_contacts_.at(object) : std::vector<CIOContact>{};
   }
 
   CIOContact get_contact(const CIOObjectPtr& object, int contact_idx) const {
@@ -420,7 +454,7 @@ public:
 
     // Contacts
     CIOContactMap all_contact_info;
-    for (const auto& [contact_obj, contact_list] : contact_states_) {
+    for (const auto& [contact_obj, contact_list] : hand_contacts_) {
       all_contact_info.insert_or_assign(contact_obj, GetSmoothContacts(contact_obj));
     }
 
@@ -430,7 +464,7 @@ public:
       CIOTrajectoryPtr traj_t = std::make_shared<CIOTrajectory>(*this);
 
       // World's objs contact
-      for (const auto& [contact_obj, contact_list] : contact_states_) {
+      for (const auto& [contact_obj, contact_list] : hand_contacts_) {
         auto obj_contact_list = all_contact_info.at(contact_obj);
         if (!obj_contact_list.empty()) {
           traj_t->SetContactState(contact_obj, std::move(obj_contact_list));
@@ -458,13 +492,19 @@ public:
 
   int GetFingersSelfCollisionNum() const {
     int contact_count = 0;
-    for (auto i = 0; i < mj_data_->ncon; ++i) {
-      const auto& contact = mj_data_->contact[i];
-      const auto finger0_geomid = fingers_[0]->geom_id();
-      const auto finger1_geomid = fingers_[1]->geom_id();
-      if (((contact.geom[0] == finger0_geomid) && (contact.geom[1] == finger1_geomid)) ||
-          ((contact.geom[0] == finger1_geomid) && (contact.geom[1] == finger0_geomid))) {
-        contact_count++;
+    for (auto c = 0; c < mj_data_->ncon; ++c) {
+      const auto& contact = mj_data_->contact[c];
+      for (const auto& [i, hand_part_i] : hand_parts_) {
+        const auto geomid_i = hand_part_i->geom_id();
+        for (const auto& [j, hand_part_j] : hand_parts_) {
+          const auto geomid_j = hand_part_j->geom_id();
+          if (i != j) {
+            if (((contact.geom[0] == geomid_i) && (contact.geom[1] == geomid_j)) ||
+                ((contact.geom[0] == geomid_j) && (contact.geom[1] == geomid_i))) {
+              contact_count++;
+            }
+          }
+        }
       }
     }
     return contact_count;
@@ -474,9 +514,9 @@ private:
   const mjModel* mj_model_ = nullptr;
   const mjData* mj_data_ = nullptr;
   CIOObjectPtr manip_obj_ = nullptr;
-  std::vector<CIOFingerPtr> fingers_;
-  CIOContactMap contact_states_;
-  CIOContactMap prev_traj_contact_states_;
+  std::map<int /*hand_part_body_id*/, CIOObjectPtr> hand_parts_;
+  CIOContactMap hand_contacts_;
+  CIOContactMap prev_traj_hand_contacts_;
   CIOConfig config_;
 };
 using CIOTrajectoryPtr = CIOTrajectory::CIOTrajectoryPtr;

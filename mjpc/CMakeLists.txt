@@ -55,6 +55,7 @@ set(LIB_MJPC_HEADERS
         tasks/cartpole/cartpole.h
         tasks/fingers/fingers.h
         tasks/grippers/grippers.h
+        tasks/mpl/mpl.h
         tasks/humanoid/stand/stand.h
         tasks/humanoid/tracking/tracking.h
         tasks/humanoid/walk/walk.h
@@ -177,6 +178,7 @@ add_library(
         tasks/cartpole/cartpole.cc
         tasks/fingers/fingers.cc
         tasks/grippers/grippers.cc
+        tasks/mpl/mpl.cc
   tasks/humanoid/interact/interact.cc
   tasks/humanoid/interact/interact.h
   tasks/humanoid/interact/contact_keyframe.cc

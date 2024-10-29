@@ -45,6 +45,13 @@ void CIOContact::add_noise() {
   CIOUtils::add_gaussian_noise(c);
 }
 
+const int CIOObservation::pose_size = CIOPose().size();
+const int CIOObservation::vel_size = CIOVelocity().size();
+const int CIOObservation::acc_size = CIOAcceleration().size();
+const int CIOObservation::pose_vel_size = CIOPose().size() + CIOVelocity().size();
+const int CIOObservation::pose_vel_acc_size =
+    CIOPose().size() + CIOVelocity().size() + CIOAcceleration().size();
+const int CIOObservation::contact_size = CIOContact().size();
 void CIOObservation::add_noise() {
   pose.add_noise();
   vel.add_noise();

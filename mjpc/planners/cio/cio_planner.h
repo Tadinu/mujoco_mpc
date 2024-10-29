@@ -29,7 +29,12 @@ public:
 
   Eigen::VectorXd opt_x() const { return x_; }
   double cost() const { return 0; }
-  double operator()(const Eigen::VectorXd& x, Eigen::VectorXd& grad) { return cost(); }
+  double operator()(const Eigen::VectorXd& x, Eigen::VectorXd& grad) {
+    CIOObservation obs;
+    obs.from_data(x.data(), (x.size() - CIOObservation::pose_vel_acc_size) / CIOObservation::contact_size);
+    // Calculate cost()
+    return cost();
+  }
 
   void optimize() {
     LBFGSpp::LBFGSBParam<double> param;
