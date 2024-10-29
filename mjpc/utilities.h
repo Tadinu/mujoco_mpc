@@ -44,6 +44,224 @@ inline bool IsSelectedControl(const std::vector<int>& indices, int idx) {
   return indices.empty() || std::find(indices.begin(), indices.end(), idx) != indices.end();
 };
 
+// Joint
+inline int QueryJointId(const mjModel* model, const char* joint_name) {
+  return model ? mj_name2id(model, mjOBJ_JOINT, joint_name) : -1;
+}
+
+inline int QueryJointPosAddress(const mjModel* model, const char* joint_name) {
+  int joint_id = QueryJointId(model, joint_name);
+  return (model && (joint_id >= 0) && (joint_id < model->njnt)) ? model->jnt_qposadr[joint_id] : 0;
+}
+
+inline int QueryJointDofAddress(const mjModel* model, const char* joint_name) {
+  int joint_id = QueryJointId(model, joint_name);
+  return (model && (joint_id >= 0) && (joint_id < model->njnt)) ? model->jnt_dofadr[joint_id] : 0;
+}
+
+// NOTE: model_->nq,nv are actuated joints/controls configured in MJ model
+// dof: full dof of the robot
+inline std::vector<double> QueryJointPos(const mjModel* model, const mjData* data, int dof,
+                                         const std::string& first_joint_name) {
+  if (model && data) {
+    std::vector<double> qpos(dof, 0);
+    mju_copy(qpos.data(), data->qpos + QueryJointPosAddress(model, first_joint_name.c_str()),
+             std::min(model->nq, dof));
+    return qpos;
+  }
+  return {};
+}
+
+inline std::vector<double> QueryJointVel(const mjModel* model, const mjData* data, int dof,
+                                         const std::string& first_joint_name) {
+  if (model && data) {
+    std::vector<double> qvel(dof, 0);
+    mju_copy(qvel.data(), data->qvel + QueryJointDofAddress(model, first_joint_name.c_str()),
+             std::min(model->nv, dof));
+    return qvel;
+  }
+  return {};
+}
+
+// Body
+inline int QueryBodyId(const mjModel* model, const char* body_name) {
+  return model ? mj_name2id(model, mjOBJ_BODY, body_name) : -1;
+}
+
+inline mjtNum* QueryBodyQuat(const mjData* data, int body_id, bool inertia_com = true) {
+  if (data) {
+    if (inertia_com) {
+      static mjtNum quat[4];
+      mju_mat2Quat(quat, &data->ximat[9 * body_id]);
+      return &quat[0];
+    } else {
+      return &data->xquat[4 * body_id];
+    }
+  }
+  return nullptr;
+}
+
+inline mjtNum* QueryBodyRotMat(const mjData* data, int body_id, bool inertia_com = true) {
+  if (data) {
+    if (inertia_com) {
+      return &data->ximat[9 * body_id];
+    } else {
+      static mjtNum mat[9];
+      mju_quat2Mat(mat, &data->xquat[4 * body_id]);
+      return &mat[0];
+    }
+  }
+  return nullptr;
+}
+
+inline mjtNum* QueryBodyPos(const mjData* data, int body_id, bool inertia_com = true) {
+  if (data) {
+    return inertia_com ? &data->xipos[3 * body_id] : &data->xpos[3 * body_id];
+  }
+  return nullptr;
+}
+
+inline mjtNum* QueryBodyVel(const mjData* data, int body_id, bool linear = true) {
+  if (data) {
+    static double lvel[3] = {0};
+#if 1
+    mju_copy3(lvel, linear ? &data->cvel[6 * body_id + 3] : &data->cvel[6 * body_id]);
+#else
+    mjtNum vel[6];
+    mj_objectVelocity(model_, data_, mjOBJ_BODY, body_id, vel, 0);
+    mju_copy3(lvel, linear ? &vel[3] : &vel[0]);
+#endif
+    return &lvel[0];
+  }
+  return nullptr;
+}
+
+inline mjtNum* QueryBodyAcc(const mjData* data, int body_id, bool linear = true) {
+  if (data) {
+    static double lacc[3] = {0};
+#if 1
+    mju_copy3(lacc, linear ? &data->cacc[6 * body_id + 3] : &data->cacc[6 * body_id]);
+#else
+    mjtNum acc[6];
+    mj_objectAcceleration(model_, data_, mjOBJ_BODY, body_id, acc, 0);
+    mju_copy3(lacc, linear ? &acc[3] : &acc[0]);
+#endif
+    return &lacc[0];
+  }
+  return nullptr;
+}
+
+// Body mocap
+inline int QueryBodyMocapId(const mjModel* model, const char* body_name) {
+  if (model) {
+    int body_id = QueryBodyId(model, body_name);
+    return (body_id > -1) ? model->body_mocapid[body_id] : -1;
+  }
+  return -1;
+}
+
+inline void SetBodyMocapPos(const mjModel* model, const mjData* data, const char* body_name,
+                            const double* pos) {
+  if (data) {
+    int bodyMocapId = QueryBodyMocapId(model, body_name);
+    mju_copy3(&data->mocap_pos[3 * bodyMocapId], pos);
+    //  std::cout << body_name << ":" << bodyMocapId << " " << pos[0] << " " << pos[1] << std::endl;
+  }
+}
+
+inline mjtNum* QueryBodyMocapPos(const mjModel* model, const mjData* data, const char* body_name) {
+  if (data) {
+    int bodyMocapId = QueryBodyMocapId(model, body_name);
+    return &data->mocap_pos[3 * bodyMocapId];
+  }
+  return nullptr;
+}
+
+inline void SetBodyMocapQuat(const mjModel* model, const mjData* data, const char* body_name,
+                             const double* quat) {
+  if (data) {
+    int bodyMocapId = QueryBodyMocapId(model, body_name);
+    mju_copy3(&data->mocap_quat[4 * bodyMocapId], quat);
+  }
+}
+
+inline mjtNum* QueryBodyMocapQuat(const mjModel* model, const mjData* data, const char* body_name) {
+  if (data) {
+    int bodyMocapId = QueryBodyMocapId(model, body_name);
+    return &data->mocap_quat[4 * bodyMocapId];
+  }
+  return nullptr;
+}
+
+inline mjtNum QueryBodyMass(const mjModel* model, int body_id) {
+  if (model) {
+    return (body_id > -1) ? model->body_mass[body_id] : 0;
+  }
+  return 0;
+}
+
+inline mjtNum QueryBodyMass(const mjModel* model, const char* body_name) {
+  if (model) {
+    int bodyId = QueryBodyId(model, body_name);
+    return (bodyId > -1) ? model->body_mass[bodyId] : 0;
+  }
+  return 0;
+}
+
+// Geom
+inline int QueryGeomId(const mjModel* model, const char* geom_name) {
+  return model ? mj_name2id(model, mjOBJ_GEOM, geom_name) : -1;
+}
+
+inline mjtNum* QueryGeomPos(const mjModel* model, const mjData* data, const char* geom_name) {
+  if (data) {
+    const int geom_id = QueryGeomId(model, geom_name);
+    return (geom_id > -1) ? &data->geom_xpos[3 * geom_id] : nullptr;
+  }
+  return nullptr;
+}
+
+inline mjtNum* QueryGeomQuat(const mjModel* model, const mjData* data, const char* geom_name) {
+  if (data) {
+    const int geom_id = QueryGeomId(model, geom_name);
+    if (geom_id > -1) {
+      static mjtNum quat[4];
+      mju_mat2Quat(quat, &data->geom_xmat[9 * geom_id]);
+      return &quat[0];
+    }
+  }
+  return nullptr;
+}
+
+inline std::vector<double> QueryGeomSize(const mjModel* model, const char* geom_name) {
+  std::vector<double> size(3, 0.0);
+  int geom_id = QueryGeomId(model, geom_name);
+  if (geom_id > -1) {
+    mju_copy3(size.data(), &model->geom_size[3 * geom_id]);
+  }
+  return size;
+}
+
+inline double QueryGeomSizeMax(const mjModel* model, const char* geom_name) {
+  const auto size = QueryGeomSize(model, geom_name);
+  return std::max({size[0], size[1], size[2]});
+}
+
+inline double QueryGeomSizeMax(const mjModel* model, const std::vector<const char*>& geom_name_list) {
+  double max = 0.;
+  for (const auto& geom_name : geom_name_list) {
+    const auto size = QueryGeomSize(model, geom_name);
+    max = std::max(max, std::max({size[0], size[1], size[2]}));
+  }
+  return max;
+}
+
+inline void SetGeomColor(const mjvScene* scene, const mjModel* model, uint geom_id, const float* rgba) {
+  if (scene && (geom_id < model->ngeom)) {
+    memcpy(scene->geoms[geom_id].rgba, rgba, sizeof(float) * 4);
+  }
+}
+
 // set mjData state
 void SetState(const mjModel* model, mjData* data, const double* state);
 

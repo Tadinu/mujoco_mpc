@@ -168,6 +168,32 @@ add_custom_target(
           ${menagerie_SOURCE_DIR}/shadow_hand/assets
           ${CMAKE_CURRENT_BINARY_DIR}/rubik/assets
 
+  # MPL
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          ${menagerie_SOURCE_DIR}/franka_emika_panda
+          ${CMAKE_CURRENT_BINARY_DIR}/mpl/MPL
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          ${CMAKE_CURRENT_SOURCE_DIR}/mpl/MPL
+          ${CMAKE_CURRENT_BINARY_DIR}/mpl/MPL
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          ${CMAKE_CURRENT_SOURCE_DIR}/mpl/MPL/mesh
+          ${CMAKE_CURRENT_BINARY_DIR}/mpl/MPL/assets
+  COMMAND ${CMAKE_COMMAND} -E copy
+          ${CMAKE_CURRENT_SOURCE_DIR}/mpl/task.xml
+          ${CMAKE_CURRENT_BINARY_DIR}/mpl/MPL/task.xml
+  COMMAND ${CMAKE_COMMAND} -E copy
+          ${CMAKE_CURRENT_SOURCE_DIR}/mpl/task_underactuated.xml
+          ${CMAKE_CURRENT_BINARY_DIR}/mpl/MPL/task_underactuated.xml
+  COMMAND ${Python_EXECUTABLE}
+          ${CMAKE_CURRENT_BINARY_DIR}/mpl/merge_panda_mpl.py
+          ${CMAKE_CURRENT_BINARY_DIR}/mpl/MPL/panda_nohand.xml
+          ${CMAKE_CURRENT_BINARY_DIR}/mpl/MPL/MPL_Underactuated.xml
+          ${CMAKE_CURRENT_BINARY_DIR}/mpl/MPL/panda_mpl_underactuated.xml 1
+  COMMAND ${Python_EXECUTABLE}
+          ${CMAKE_CURRENT_BINARY_DIR}/mpl/merge_panda_mpl.py
+          ${CMAKE_CURRENT_BINARY_DIR}/mpl/MPL/panda_nohand.xml
+          ${CMAKE_CURRENT_BINARY_DIR}/mpl/MPL/MPL_no_mocap.xml
+          ${CMAKE_CURRENT_BINARY_DIR}/mpl/MPL/panda_mpl.xml 0
   # ALOHA
   COMMAND ${CMAKE_COMMAND} -E copy_directory
           ${menagerie_SOURCE_DIR}/aloha/assets

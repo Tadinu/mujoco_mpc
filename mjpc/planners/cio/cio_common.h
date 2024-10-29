@@ -12,9 +12,10 @@
 #include <Eigen/Geometry>
 
 // mjpc
+#include "mjpc/casadi/casadi_common.h"
 #include "mjpc/task.h"
 
-#define CIO_USE_LBFGSB (0)
+#define CIO_USE_LBFGSB (1)
 #define CIO_USE_EXT_OBJ_WRENCH (0)
 
 struct CIOPose {
@@ -33,12 +34,18 @@ struct CIOPose {
   Eigen::Translation3d trans;
   Eigen::Quaterniond quat;
   void add_noise();
-  constexpr int size() const { return (sizeof(trans) + sizeof(quat)) / sizeof(double); }
+  constexpr int size() const { return size_byte() / sizeof(double); }
+  constexpr int size_byte() const { return sizeof(trans) + sizeof(quat); }
   std::vector<double> data() const {
     std::vector<double> out(size());
     std::memcpy(out.data(), trans.translation().data(), sizeof(trans));
     std::memcpy(out.data() + (sizeof(trans) / sizeof(double)), quat.coeffs().data(), sizeof(quat));
     return out;
+  }
+
+  void from_data(const double* data) {
+    std::memcpy(trans.translation().data(), data, sizeof(trans));
+    std::memcpy(quat.coeffs().data(), data + (sizeof(trans) / sizeof(double)), sizeof(quat));
   }
 };
 
@@ -46,12 +53,17 @@ struct CIOVelocity {
   Eigen::Vector3d linear_vel = Eigen::Vector3d::Zero();
   Eigen::Vector3d angular_vel = Eigen::Vector3d::Zero();
   void add_noise();
-  constexpr int size() const { return (sizeof(linear_vel) + sizeof(angular_vel)) / sizeof(double); }
+  constexpr int size() const { return size_byte() / sizeof(double); }
+  constexpr int size_byte() const { return sizeof(linear_vel) + sizeof(angular_vel); }
   std::vector<double> data() const {
     std::vector<double> out(size());
     std::memcpy(out.data(), linear_vel.data(), sizeof(linear_vel));
     std::memcpy(out.data() + (sizeof(linear_vel) / sizeof(double)), angular_vel.data(), sizeof(angular_vel));
     return out;
+  }
+  void from_data(const double* data) {
+    std::memcpy(linear_vel.data(), data, sizeof(linear_vel));
+    std::memcpy(angular_vel.data(), data + (sizeof(linear_vel) / sizeof(double)), sizeof(angular_vel));
   }
 };
 
@@ -59,12 +71,17 @@ struct CIOAcceleration {
   Eigen::Vector3d linear_acc = Eigen::Vector3d::Zero();
   Eigen::Vector3d angular_acc = Eigen::Vector3d::Zero();
   void add_noise();
-  constexpr int size() const { return (sizeof(linear_acc) + sizeof(angular_acc)) / sizeof(double); }
+  constexpr int size() const { return size_byte() / sizeof(double); }
+  constexpr int size_byte() const { return sizeof(linear_acc) + sizeof(angular_acc); }
   std::vector<double> data() const {
     std::vector<double> out(size());
     std::memcpy(out.data(), linear_acc.data(), sizeof(linear_acc));
     std::memcpy(out.data() + (sizeof(linear_acc) / sizeof(double)), angular_acc.data(), sizeof(angular_acc));
     return out;
+  }
+  void from_data(const double* data) {
+    std::memcpy(linear_acc.data(), data, sizeof(linear_acc));
+    std::memcpy(angular_acc.data(), data + (sizeof(linear_acc) / sizeof(double)), sizeof(angular_acc));
   }
 };
 
@@ -75,12 +92,16 @@ struct CIOGoal {
 };
 
 struct CIOContact {
+  int id = 0;
   // Contact force
   Eigen::Vector3d f = Eigen::Vector3d::Zero();
   // Position of applied force in the frame of the manipulated object
   Eigen::Vector3d ro = Eigen::Vector3d::Zero();
   // [0,1]: Probability of being in contact
-  double c = 0;
+  // double c = 0;
+  // Distance between nearest points; neg: penetration
+  double dist = 0;
+  double dist_dot = 0;
 
   // Position of applied force in world frame
   Eigen::Vector3d r = Eigen::Vector3d::Zero();
@@ -92,15 +113,19 @@ struct CIOContact {
   Eigen::Vector3d e_H_ = Eigen::Vector3d::Zero();
   Eigen::Vector3d e_dot_O_ = Eigen::Vector3d::Zero();
   Eigen::Vector3d e_dot_H_ = Eigen::Vector3d::Zero();
-  bool empty() const { return f.isZero() && ro.isZero() && (c == 0); }
+  bool empty() const { return f.isZero() && ro.isZero(); }
   void add_noise();
-  constexpr int size() const { return (sizeof(f) + sizeof(ro) + sizeof(c)) / sizeof(double); }
+  constexpr int size() const { return size_byte() / sizeof(double); }
+  constexpr int size_byte() const { return sizeof(f) + sizeof(ro); }
   std::vector<double> data() const {
     std::vector<double> out(size());
-    std::memcpy(out.data(), f.data(), sizeof(f) * sizeof(double));
-    std::memcpy(out.data() + sizeof(f), ro.data(), sizeof(ro) * sizeof(double));
-    std::memcpy(out.data() + sizeof(f) + sizeof(ro), &c, sizeof(double));
+    std::memcpy(out.data(), f.data(), sizeof(f));
+    std::memcpy(out.data() + (sizeof(f) / sizeof(double)), ro.data(), sizeof(ro));
     return out;
+  }
+  void from_data(const double* data) {
+    std::memcpy(f.data(), data, sizeof(f));
+    std::memcpy(ro.data(), data + (sizeof(f) / sizeof(double)), sizeof(ro));
   }
 };
 
@@ -111,15 +136,15 @@ struct CIOObservation {
   CIOAcceleration acc;
   std::vector<CIOContact> contacts;
 
+  static const int pose_size;
+  static const int vel_size;
+  static const int acc_size;
+  static const int pose_vel_size;
+  static const int pose_vel_acc_size;
+  static const int contact_size;
   void add_noise();
   std::vector<double> data() const {
-    static const int pose_size = pose.size();
-    static const int vel_size = vel.size();
-    static const int acc_size = acc.size();
-    static const int pose_vel_size = pose_size + vel_size;          //(sizeof(vel) / sizeof(double));
-    static const int pose_vel_acc_size = pose_vel_size + acc_size;  //(sizeof(acc) / sizeof(double));
-    static const int contact_size = CIOContact().size();
-    std::vector<double> out(pose.size() + vel.size() + acc.size() + contacts.size() * contact_size);
+    std::vector<double> out(pose_size + vel_size + acc_size + contacts.size() * contact_size);
     std::memcpy(out.data(), pose.data().data(), pose_size * sizeof(double));
     std::memcpy(out.data() + pose_size, vel.data().data(), vel_size * sizeof(double));
     std::memcpy(out.data() + pose_vel_size, acc.data().data(), acc_size * sizeof(double));
@@ -130,6 +155,17 @@ struct CIOObservation {
     }
     return out;
   }
+  void from_data(const double* data, int elem_num) {
+    pose.from_data(data);
+    vel.from_data(data + pose_size);
+    acc.from_data(data + pose_vel_size);
+    const auto contacts_num = (elem_num - pose_vel_acc_size) / contact_size;
+    contacts.resize(contacts_num);
+    for (auto i = 0; i < contacts_num; ++i) {
+      contacts[i].from_data(data + pose_vel_acc_size + i * contact_size);
+    }
+  }
+  void from_data(const std::vector<double>& data_vec) { from_data(data_vec.data(), (int)data_vec.size()); }
 };
 
 struct CIOStageWeight {
@@ -160,7 +196,7 @@ struct CIOConfig {
 class CIOObject {
 public:
   CIOObject() = default;
-  explicit CIOObject(int body_id, int geom_id, double step_size = 0.5)
+  CIOObject(int body_id, int geom_id, double step_size = 0.5)
       : body_id_(body_id), geom_id_(geom_id), step_size_(step_size) {}
 
   void set_mj_info(const mjModel* model, const mjData* data, const mjpc::Task* task) {
@@ -189,7 +225,9 @@ public:
     return (point - pose().position()).normalized();
   }
 
-  virtual Eigen::Vector3d project_point(const Eigen::Vector3d& point) const = 0;
+  virtual Eigen::Vector3d project_point(const Eigen::Vector3d& point) const {
+    return Eigen::Vector3d::Zero();
+  }
   virtual void discretize() {}
   virtual bool check_inside(const Eigen::Vector3d& point) { return false; }
 

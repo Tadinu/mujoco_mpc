@@ -50,7 +50,6 @@ void Trajectory::Allocate(int T) {
 
   // costs
   costs.resize(T);
-  non_residual_costs.resize(T);
 
   // residual
   residual.resize(dim_residual * T);
@@ -80,7 +79,6 @@ void Trajectory::Reset(int T, const double* initial_repeated_action) {
 
   // costs
   std::fill(costs.begin(), costs.begin() + T, 0.0);
-  std::fill(non_residual_costs.begin(), non_residual_costs.begin() + T, 0.0);
   std::fill(residual.begin(), residual.begin() + dim_residual * T, 0.0);
   total_return = 0.0;
   failure = false;
@@ -155,8 +153,6 @@ void Trajectory::NoisyRollout(std::function<void(double* action, const double* s
 
     // record residual
     mju_copy(DataAt(residual, t * dim_residual), data->sensordata, dim_residual);
-    // calculate non-residual cost
-    CalculateNonResidualCost(model, data, task, t);
 
     // record trace
     GetTraces(DataAt(trace, t * 3 * task->num_trace), model, data, task->num_trace);
@@ -250,8 +246,6 @@ void Trajectory::RolloutDiscrete(std::function<void(double* action, const double
 
     // record residual
     mju_copy(DataAt(residual, t * dim_residual), data->sensordata, dim_residual);
-    // calculate non-residual cost
-    CalculateNonResidualCost(model, data, task, t);
 
     // record trace
     GetTraces(DataAt(trace, t * 3 * task->num_trace), model, data, task->num_trace);
@@ -304,11 +298,8 @@ void Trajectory::UpdateReturn(const Task* task) {
   total_return = 0;
 
   for (int t = 0; t < horizon; t++) {
-    // compute stage cost
+    // add stage cost to the current early per-frame cost
     costs[t] = task->CostValue(DataAt(residual, t * task->num_residual));
-    if (t < non_residual_costs.size()) {
-      costs[t] += non_residual_costs[t];
-    }
 
     // update total return
     total_return += costs[t];

@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "mjpc/task.h"
+#include "mjpc/tasks/mpl/mpl_cost.h"
 
 namespace mjpc {
 
@@ -63,24 +64,20 @@ public:
   void RolloutDiscrete(std::function<void(double* action, const double* state, int index)> policy,
                        const Task* task, const mjModel* model, mjData* data, const double* state, double time,
                        const double* mocap, const double* userdata, int steps);
-
-  virtual void CalculateNonResidualCost(const mjModel* model, mjData* data, const Task* task,
-                                        int t /*horizon frame*/) {}
   // ----- members ----- //
-  int horizon;                             // trajectory length
-  int dim_state;                           // states dimension
-  int dim_action;                          // actions dimension
-  int dim_residual;                        // residual dimension
-  int dim_trace;                           // traces dimension
-  std::vector<double> states;              // (horizon   x nq + nv + na)
-  std::vector<double> actions;             // (horizon-1 x num_action)
-  std::vector<double> times;               // horizon
-  std::vector<double> residual;            // (horizon   x num_residual)
-  std::vector<double> costs;               // horizon
-  std::vector<double> non_residual_costs;  // horizon
-  std::vector<double> trace;               // (horizon   x 3)
-  double total_return;                     // (1)
-  bool failure;                            // true if last rollout had a warning
+  int horizon;                   // trajectory length
+  int dim_state;                 // states dimension
+  int dim_action;                // actions dimension
+  int dim_residual;              // residual dimension
+  int dim_trace;                 // traces dimension
+  std::vector<double> states;    // (horizon   x nq + nv + na)
+  std::vector<double> actions;   // (horizon-1 x num_action)
+  std::vector<double> times;     // horizon
+  std::vector<double> residual;  // (horizon   x num_residual)
+  std::vector<double> costs;     // horizon
+  std::vector<double> trace;     // (horizon   x 3)
+  double total_return;           // (1)
+  bool failure;                  // true if last rollout had a warning
 
 private:
   // calculates total_return and costs

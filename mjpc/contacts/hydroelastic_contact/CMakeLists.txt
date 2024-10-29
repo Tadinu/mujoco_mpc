@@ -1,7 +1,7 @@
 # drake
 find_package(drake CONFIG REQUIRED)
 # /opt/drake/lib/cmake/drake/drake-config.cmake
-message("DRAKE: ${drake_VERSION}")
+message("HYDROELASTIC_CONTACT DRAKE: ${drake_VERSION}")
 
 set(HYDROELASTIC_CONTACT_HEADERS
         common_types.h
