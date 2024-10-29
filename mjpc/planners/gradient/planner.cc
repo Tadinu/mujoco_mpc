@@ -21,6 +21,7 @@
 #include <shared_mutex>
 
 #include "mjpc/array_safety.h"
+#include "mjpc/optimizers/stochastic_optimizer.h"
 #include "mjpc/planners/cost_derivatives.h"
 #include "mjpc/planners/gradient/gradient.h"
 #include "mjpc/planners/gradient/policy.h"
@@ -57,6 +58,17 @@ void GradientPlanner::Initialize(mjModel* model, const Task& task) {
   dim_sensor = model->nsensordata;                   // number of sensor values
   dim_max = mju_max(mju_max(mju_max(dim_state, dim_state_derivative), dim_action), model->nuser_sensor);
   num_trajectory = GetNumberOrDefault(32, model, "gradient_num_trajectory");
+
+#if MJPC_GRADIENT_PLANNER_USE_CEM
+  // cross-entropy
+  cross_entropy_sampler.Initialize(model, task);
+#endif
+
+  // trajectory_order
+  trajectory_order.resize(kMaxTrajectory);
+  for (int i = 0; i < kMaxTrajectory; i++) {
+    trajectory_order[i] = i;
+  }
 }
 
 // allocate memory
@@ -99,6 +111,11 @@ void GradientPlanner::Allocate() {
   // scratch
   parameters_scratch.resize(model->nu * kMaxTrajectoryHorizon);
   times_scratch.resize(kMaxTrajectoryHorizon);
+
+#if MJPC_GRADIENT_PLANNER_USE_CEM
+  // cross-entropy
+  cross_entropy_sampler.Allocate();
+#endif
 }
 
 // reset memory to zeros
@@ -142,6 +159,11 @@ void GradientPlanner::Reset(int horizon, const double* initial_repeated_action) 
 
   // derivative skip
   derivative_skip_ = GetNumberOrDefault(0, model, "derivative_skip");
+
+#if MJPC_GRADIENT_PLANNER_USE_CEM
+  // cross-entropy
+  cross_entropy_sampler.Reset(horizon, initial_repeated_action);
+#endif
 }
 
 // set state
@@ -174,7 +196,8 @@ void GradientPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
     nominal_policy.CopyFrom(policy, policy.num_spline_points);
   }
 
-  // resample [nominal_policy] from [parameters_scratch]
+  // resample [nominal_policy]: update [parameters_scratch] & write it back to [nominal_policy]
+  // update [times_scratch] to curren time
   this->ResamplePolicy(horizon);
 
   // rollout [nominal_trajectory] by [nominal_policy]
@@ -190,7 +213,7 @@ void GradientPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
   // based on calculation of [model_derivative], [cost_derivative], [gradient]
   double c_best = c_prev;
   int skip = derivative_skip_;
-  for (int i = 0; i < settings.max_rollout; i++) {
+  for (int r = 0; r < settings.max_rollout; r++) {
     // ----- model derivatives ----- //
     // start timer
     auto model_derivative_start = std::chrono::steady_clock::now();
@@ -246,11 +269,6 @@ void GradientPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
     // start timer
     auto rollouts_start = std::chrono::steady_clock::now();
 
-    // copy [nominal_policy] -> [candidate_policy[k]]
-    for (int k = 1; k < num_trajectory; k++) {
-      candidate_policy[k].CopyFrom(nominal_policy, nominal_policy.num_spline_points);
-    }
-
     // improvement step sizes
     LogScale(linesearch_steps, 1.0, settings.min_linesearch_step, num_trajectory - 1);
     linesearch_steps[num_trajectory - 1] = 0.0;
@@ -258,20 +276,27 @@ void GradientPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
     // rollout all of [trajectory[]] on corresponding [candidate_policy[]] (parallel)
     this->Rollouts(horizon, pool);
 
-    // ----- evaluate rollouts ------ //
-    winner = num_trajectory - 1;
-    for (int j = num_trajectory - 1; j >= 0; j--) {
-      // compute cost
-      double c_sample = trajectory[j]->total_return;
-
-      // compare cost
-      if (c_sample < c_best) {
-        c_best = c_sample;
-        winner = j;
-      }
+    // sort candidate policies and trajectories by score
+    for (int i = 0; i < num_trajectory; i++) {
+      trajectory_order[i] = i;
     }
 
-    // update nominal with winner
+    // sort [trajectory_order[]] so that the first ncandidates elements are the best candidates, and
+    // the rest are in an unspecified order
+    std::partial_sort(trajectory_order.begin(), trajectory_order.begin() + num_trajectory,
+                      trajectory_order.begin() + num_trajectory, [&trajectory = trajectory](int a, int b) {
+                        return trajectory[a]->total_return < trajectory[b]->total_return;
+                      });
+
+#if MJPC_GRADIENT_PLANNER_USE_CEM
+    // update policy variance of elite [candidate_policy[]]
+    UpdatePolicyVariance();
+#endif
+
+    // ----- evaluate rollouts ------ //
+    winner = trajectory_order[0];
+
+    // update [nominal_policy] as [winner_policy()], to be used for gradient calculation for the next update
     if (winner != 0) {
       nominal_policy.CopyParametersFrom(winner_policy().parameters, winner_policy().times);
       nominal_trajectory = trajectory[winner];
@@ -285,11 +310,18 @@ void GradientPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
 
     // stop timer
     rollouts_time += GetDuration(rollouts_start);
-  }
+  }  // End settings.maxrollout
 
   // update nominal policy
   auto policy_update_start = std::chrono::steady_clock::now();
 
+#if MJPC_GRADIENT_PLANNER_USE_CEM
+  // copy [parameters_scratch, times_scratch] -> [policy] for [ActionFromPolicy()] & the next OptimizePolicy
+  {
+    const std::unique_lock<std::shared_mutex> lock(mtx_);
+    policy.CopyParametersFrom(cross_entropy_sampler.parameters_scratch_, times_scratch);
+  }
+#else
   // check for improvement
   if (c_best >= c_prev) {
     winner = num_trajectory - 1;
@@ -301,6 +333,7 @@ void GradientPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
     previous_policy = policy;
     policy.CopyParametersFrom(winner_policy().parameters, winner_policy().times);
   }
+#endif
 
   // stop timer
   policy_update_time += GetDuration(policy_update_start);
@@ -313,6 +346,58 @@ void GradientPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
   gradient_compute_time = gradient_time;
   policy_update_compute_time = policy_update_time;
 }
+
+#if MJPC_GRADIENT_PLANNER_USE_CEM
+void GradientPlanner::UpdatePolicyVariance() {
+  // n_elite_ might change in the GUI - keep constant for in this function
+  cross_entropy_sampler.n_elite_ = std::min(cross_entropy_sampler.n_elite_, num_trajectory);
+  int n_elite = std::min(cross_entropy_sampler.n_elite_, num_trajectory);
+
+  // dimensions
+  int num_spline_points = nominal_policy.num_spline_points;
+  int num_parameters = num_spline_points * model->nu;
+
+  // reset [sampling_parameters_scratch]
+  auto& sampling_parameters_scratch = cross_entropy_sampler.parameters_scratch_;
+  std::fill(sampling_parameters_scratch.begin(), sampling_parameters_scratch.end(), 0.0);
+
+  // update [sampling_parameters_scratch] with [candidate_policy[elite_i]]
+  for (int i = 0; i < n_elite; i++) {
+    // ordered trajectory index
+    int idx = trajectory_order[i];
+
+    // add parameters
+    for (int t = 0; t < num_spline_points; t++) {
+      for (int j = 0; j < model->nu; j++) {
+        sampling_parameters_scratch[t * model->nu + j] += candidate_policy[idx].parameters[j];
+      }
+    }
+  }
+
+  // normalize [sampling_parameters_scratch]
+  mju_scl(sampling_parameters_scratch.data(), sampling_parameters_scratch.data(), 1.0 / n_elite,
+          num_parameters);
+
+  // compute [variance_] (for noise added to [candidate_policy[]] during rollouts on the next batch)
+  // loop over elites (node values of candidate_policy[trajectory_order[0]])
+  auto& variance = cross_entropy_sampler.variance_;
+  std::fill(variance.begin(), variance.end(), 0.0);  // reset variance to zero
+  for (int i = 0; i < n_elite; i++) {
+    int idx = trajectory_order[i];
+    for (int t = 0; t < num_spline_points; t++) {
+      for (int j = 0; j < model->nu; j++) {
+        // average
+        const double p_avg = parameters_scratch[t * model->nu + j];
+
+        // candidate parameter
+        const double pi = candidate_policy[idx].parameters[j];
+        const double diff = pi - p_avg;
+        variance[t * model->nu + j] += (n_elite >= 1) ? (n_elite * pow(diff, 2)) / (n_elite - 1) : 0;
+      }
+    }
+  }
+}
+#endif
 
 // compute trajectory using nominal policy
 void GradientPlanner::NominalTrajectory(int horizon, ThreadPool& pool) {
@@ -362,17 +447,29 @@ void GradientPlanner::ResamplePolicy(int horizon) {
 
 // compute candidate trajectories
 void GradientPlanner::Rollouts(int horizon, ThreadPool& pool) {
+  // copy [nominal_policy] -> [candidate_policy[i]]
+  for (int i = 1; i < num_trajectory; ++i) {
+    candidate_policy[i].CopyFrom(nominal_policy, nominal_policy.num_spline_points);
+  }
+
   int count_before = pool.GetCount();
   for (int i = 0; i < num_trajectory; i++) {
-    pool.Schedule([&data = data_, &trajectory_i = trajectory[i], &candidate_policy_i = candidate_policy[i],
-                   &linesearch_steps_i = linesearch_steps[i], &model = this->model, &task = this->task,
-                   &state = this->state, &time = this->time, &mocap = this->mocap, horizon,
-                   &userdata = this->userdata]() {
-      // scale improvement: [parameters] += [parameter_update] * [linesearch_steps]
-      auto* parameters_i = candidate_policy_i.parameters.data();
-      auto* parameters_update_i = candidate_policy_i.parameter_update.data();
-      mju_addScl(parameters_i, parameters_i, parameters_update_i, linesearch_steps_i,
-                 model->nu * candidate_policy_i.num_spline_points);
+    pool.Schedule([this, i, &data = data_, &trajectory_i = trajectory[i],
+                   &candidate_policy_i = candidate_policy[i], &linesearch_steps_i = linesearch_steps[i],
+                   &model = this->model, &task = this->task, &state = this->state, &time = this->time,
+                   &mocap = this->mocap, horizon, &userdata = this->userdata]() {
+      {
+        const std::shared_lock<std::shared_mutex> lock(mtx_);
+        // scale improvement: [parameters] += [parameter_update] * [linesearch_steps]
+        auto* parameters_i = candidate_policy_i.parameters.data();
+        auto* parameters_update_i = candidate_policy_i.parameter_update.data();
+        mju_addScl(parameters_i, parameters_i, parameters_update_i, linesearch_steps_i,
+                   model->nu * candidate_policy_i.num_spline_points);
+
+#if MJPC_GRADIENT_PLANNER_USE_CEM
+        cross_entropy_sampler.AddNoiseToPolicy(candidate_policy_i, i);
+#endif
+      }
 
       // policy
       auto frun_feedback_policy = [&candidate_policy_i = candidate_policy_i](

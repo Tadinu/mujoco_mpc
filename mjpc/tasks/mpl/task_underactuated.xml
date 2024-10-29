@@ -1,0 +1,136 @@
+<mujoco model="Modular Prosthetic Limb">
+  <compiler angle="radian" texturedir="texture"/>
+  <include file="../../common.xml"/>
+
+  <size memory="100M"/>
+
+  <custom>
+    <numeric name="agent_planner" data="0" />
+    <numeric name="agent_horizon" data="2.0" />
+    <numeric name="agent_timestep" data="0.01"/>
+    <numeric name="agent_policy_width" data="0.0035" />
+    <numeric name="sampling_spline_points" data="5" />
+    <numeric name="sampling_exploration" data="0.1" />
+    <numeric name="sampling_representation" data="0" />
+    <numeric name="robust_xfrc" data="0.004" />
+  </custom>
+
+  <statistic extent="0.4" center="0.3 0.1 0"/>
+
+  <visual>
+    <quality shadowsize="8192"/>
+    <global azimuth="180" elevation="-30"/>
+  </visual>
+
+  <default>
+    <geom friction=".6"/>
+  </default>
+
+  <worldbody>
+    <site name="world"/>
+    <camera name="fixed" pos="0 -0.7 0.7" zaxis="0 -1 1" fovy="45" ipd="0.068"/>
+
+    <geom name="floor" pos="0 0 -0.2" size="0 0 0.05" type="plane" material="blue_grid"/>
+    <body name="target" mocap="true" pos="0.6 0.4 0.05">
+      <geom name="target"  type="box" size="0.025 0.021 0.025" contype="0" conaffinity="0" rgba=".5 .5 .5 .3"/>
+      <site name="target1" type="box" pos="0  .026 0" size="0.026 0.01 0.026" rgba="1 .1 .1 .3"/>
+      <site name="target2" type="box" pos="0 -.026 0" size="0.026 0.01 0.026" rgba=".1 .1 1 .3"/>
+    </body>
+
+    <body name="box" pos="0.4 0.5 0.2">
+      <freejoint/>
+      <geom name="box"  type="box" size="0.026 0.021 0.026" priority="1" condim="6" friction="1 .01 .003"/>
+      <site name="box1" type="box" pos="0  .026 0" size="0.026 0.01 0.026" rgba="1 .1 .1 1"/>
+      <site name="box2" type="box" pos="0 -.026 0" size="0.026 0.01 0.026" rgba=".1 .1 1 1"/>
+    </body>
+  </worldbody>
+
+  <sensor>
+    <user name="Reach" dim="3" user="2 2.5 0 5 0.01"/>
+    <user name="Pick" dim="7" user="0 1 0 1 0.003"/>
+    <framepos name="box" objtype="geom" objname="box"/>
+    <framepos name="box1" objtype="site" objname="box1"/>
+    <framepos name="box2" objtype="site" objname="box2"/>
+    <framepos name="target" objtype="geom" objname="target"/>
+    <framepos name="target1" objtype="site" objname="target1"/>
+    <framepos name="target2" objtype="site" objname="target2"/>
+
+    <!--
+    <user name="In Hand" dim="3" user="1 20 0 100 0.02 2"/>
+    <user name="Bring" dim="3" user="6 1 0 5 0.05"/>
+    <user name="Orientation" dim="3" user="0 5 0 10" />
+    <user name="Object Vel." dim="3" user="0 10 0 20" />
+    <user name="Actuator" dim="20" user="0 0.1 0.0 1.0" />
+    <user name="Grasp" dim="26" user="0 2.5 0.0 10.0" />
+    <user name="Joint Vel." dim="26" user="0 1.0e-4 0.0 1.0e-1" />
+    -->
+
+    <!-- Hand -->
+    <framepos name="palm_thumb_pos" objtype="site" objname="palm_thumb"/>
+    <framelinvel name="palm_thumb_linear_vel" objtype="site" objname="palm_thumb"/>
+    <framelinacc name="palm_thumb_linear_acc" objtype="site" objname="palm_thumb"/>
+    <frameangvel name="palm_thumb_angular_vel" objtype="site" objname="palm_thumb"/>
+    <frameangacc name="palm_thumb_angular_acc" objtype="site" objname="palm_thumb"/>
+    <framepos name="trace0" objtype="site" objname="palm_thumb"/>
+
+    <framepos name="palm_pinky_pos" objtype="site" objname="palm_pinky"/>
+    <framelinvel name="palm_pinky_linear_vel" objtype="site" objname="palm_pinky"/>
+    <framelinacc name="palm_pinky_linear_acc" objtype="site" objname="palm_pinky"/>
+    <frameangvel name="palm_pinky_angular_vel" objtype="site" objname="palm_pinky"/>
+    <frameangacc name="palm_pinky_angular_acc" objtype="site" objname="palm_pinky"/>
+    <framepos name="trace1" objtype="site" objname="palm_pinky"/>
+
+    <!-- Thumb -->
+    <framepos name="thumb_distal_pos" objtype="site" objname="thumb_distal"/>
+    <framelinvel name="thumb_distal_linear_vel" objtype="site" objname="thumb_distal"/>
+    <framelinacc name="thumb_distal_linear_acc" objtype="site" objname="thumb_distal"/>
+    <frameangvel name="thumb_distal_angular_vel" objtype="site" objname="thumb_distal"/>
+    <frameangacc name="thumb_distal_angular_acc" objtype="site" objname="thumb_distal"/>
+    <framepos name="trace2" objtype="site" objname="thumb_distal"/>
+
+    <!-- Index -->
+    <framepos name="index_distal_pos" objtype="site" objname="index_distal"/>
+    <framelinvel name="index_distal_linear_vel" objtype="site" objname="index_distal"/>
+    <framelinacc name="index_distal_linear_acc" objtype="site" objname="index_distal"/>
+    <frameangvel name="index_distal_angular_vel" objtype="site" objname="index_distal"/>
+    <frameangacc name="index_distal_angular_acc" objtype="site" objname="index_distal"/>
+    <framepos name="trace3" objtype="site" objname="index_distal"/>
+
+    <!-- Middle -->
+    <framepos name="middle_distal_pos" objtype="site" objname="middle_distal"/>
+    <framelinvel name="middle_distal_linear_vel" objtype="site" objname="middle_distal"/>
+    <framelinacc name="middle_distal_linear_acc" objtype="site" objname="middle_distal"/>
+    <frameangvel name="middle_distal_angular_vel" objtype="site" objname="middle_distal"/>
+    <frameangacc name="middle_distal_angular_acc" objtype="site" objname="middle_distal"/>
+    <framepos name="trace4" objtype="site" objname="middle_distal"/>
+
+    <!-- Ring -->
+    <framepos name="ring_distal_pos" objtype="site" objname="ring_distal"/>
+    <framelinvel name="ring_distal_linear_vel" objtype="site" objname="ring_distal"/>
+    <framelinacc name="ring_distal_linear_acc" objtype="site" objname="ring_distal"/>
+    <frameangvel name="ring_distal_angular_vel" objtype="site" objname="ring_distal"/>
+    <frameangacc name="ring_distal_angular_acc" objtype="site" objname="ring_distal"/>
+    <framepos name="trace5" objtype="site" objname="ring_distal"/>
+
+    <!-- Pinky -->
+    <framepos name="pinky_distal_pos" objtype="site" objname="pinky_distal"/>
+    <framelinvel name="pinky_distal_linear_vel" objtype="site" objname="pinky_distal"/>
+    <framelinacc name="pinky_distal_linear_acc" objtype="site" objname="pinky_distal"/>
+    <frameangvel name="pinky_distal_angular_vel" objtype="site" objname="pinky_distal"/>
+    <frameangacc name="pinky_distal_angular_acc" objtype="site" objname="pinky_distal"/>
+    <framepos name="trace6" objtype="site" objname="pinky_distal"/>
+  </sensor>
+
+<!-- from: common_assets -->
+  <include file="panda_mpl_underactuated.xml"/>
+
+  <keyframe>
+    <key name="grasp" qpos="0 0 0 0 0 0 0
+    1 0 0 0 0.33326
+    -0.00362331 0.0375343 0.707635 0.70405 0.0500937
+    -0.0325089 5.55212e-10 -0.235248 -0.178041 0.480484
+    0.730515 0.6284 -0.059347 0.535468 0.746225
+    0.56556 -0.03491 0.544632 0.53414 0.793355
+    0.384846 0 0 0"/>
+  </keyframe>
+</mujoco>

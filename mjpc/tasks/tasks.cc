@@ -43,10 +43,13 @@
 #include "mjpc/tasks/swimmer/swimmer.h"
 #include "mjpc/tasks/walker/walker.h"
 #include "planar_robot/planar_robot.h"
+// EXTRA
+#include "mjpc/tasks/mpl/mpl.h"
 
 namespace mjpc {
 std::vector<std::shared_ptr<Task>> GetTasks() {
   return {
+      std::make_shared<MPL>(),
       std::make_shared<manipulation_x::Bring>(),
       std::make_shared<manipulation::Bring>(),
       std::make_shared<PlanarRobot>(),

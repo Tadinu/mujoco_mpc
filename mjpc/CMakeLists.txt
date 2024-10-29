@@ -26,9 +26,11 @@ find_package(casadi REQUIRED)
 if (${casadi_FOUND})
     message("Found CasADi [x]")
 else ()
-    message(WARNING "CasADi is not found, the corresponding interface and examples will not be built")
-    #set(CASADI_INCLUDE_DIR "")
+    message(WARNING "CasADi is not found!")
 endif ()
+
+# Autodiff
+find_package(autodiff REQUIRED)
 
 add_library(threadpool STATIC)
 target_sources(
@@ -47,6 +49,9 @@ set(LIB_MJPC_HEADERS
         agent.h
         trajectory.h
         utilities.h
+        optimizers/base_optimizer.h
+        optimizers/second_order_optimizer.h
+        optimizers/stochastic_optimizer.h
         tasks/tasks.h
         casadi/casadi_common.h
 	    casadi/casadi_function.h
@@ -58,6 +63,8 @@ set(LIB_MJPC_HEADERS
         tasks/cartpole/cartpole.h
         tasks/fingers/fingers.h
         tasks/grippers/grippers.h
+        tasks/mpl/mpl.h
+        tasks/mpl/mpl_cost.h
         tasks/humanoid/stand/stand.h
         tasks/humanoid/tracking/tracking.h
         tasks/humanoid/walk/walk.h
@@ -93,6 +100,7 @@ set(LIB_MJPC_HEADERS
         planners/sampling/policy.h
         planners/gradient/gradient.h
         planners/gradient/planner.h
+        planners/gradient/cem_sampler.h
         planners/gradient/spline_mapping.h
         planners/ilqg/policy.h
         estimators/batch.h
@@ -144,7 +152,6 @@ set(LIB_MJPC_HEADERS
         planners/fabrics/include/casadi_gen/fab_task_panda_dynamic_func.h
         planners/fabrics/include/casadi_gen/fab_task_panda_dynamic_python_func.h
         planners/cio/cio_common.h
-        planners/cio/cio_trajectory.h
         planners/cio/cio_planner.h
         planners/cio/cio_util.h
         urdf_parser/include/common.h
@@ -173,6 +180,8 @@ add_library(
         agent.cc
         trajectory.cc
         utilities.cc
+        optimizers/second_order_optimizer.cc
+        optimizers/stochastic_optimizer.cc
         tasks/tasks.cc
         tasks/acrobot/acrobot.cc
         tasks/allegro/allegro.cc
@@ -184,6 +193,7 @@ add_library(
         tasks/cartpole/cartpole.cc
         tasks/fingers/fingers.cc
         tasks/grippers/grippers.cc
+        tasks/mpl/mpl.cc
   tasks/humanoid/interact/interact.cc
   tasks/humanoid/interact/interact.h
   tasks/humanoid/interact/contact_keyframe.cc
@@ -218,6 +228,7 @@ add_library(
         planners/gradient/gradient.cc
         planners/gradient/planner.cc
         planners/gradient/policy.cc
+        planners/gradient/cem_sampler.cc
         planners/gradient/spline_mapping.cc
         planners/ilqg/backward_pass.cc
         planners/ilqg/planner.cc
@@ -232,6 +243,7 @@ add_library(
         planners/fabrics/src/fab_planner.cpp
         planners/fabrics/src/fab_casadi_function.cpp
         planners/cio/cio_common.cc
+        planners/cio/cio_planner.cc
         urdf_parser/common.cpp
         urdf_parser/geometry.cpp
         urdf_parser/joint.cpp
@@ -274,13 +286,18 @@ target_link_libraries(
         casadi
         ${Ipopt_LIBRARIES}
         lbfgspp
+        autodiff::autodiff
+        ${MCMC_DIR}/lib/libmcmc.so
 )
+message("MCMC_DIR  ${MCMC_DIR}")
 target_include_directories(libmjpc
         PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/..
         ${CMAKE_CURRENT_BINARY_DIR}/..
         ${casadi_INCLUDE_DIR}
         ${Ipopt_INCLUDE_DIR}
+        #${autodiff_INCLUDE_DIR}
+        ${MCMC_DIR}/include/mcmc
 )
 
 add_executable(

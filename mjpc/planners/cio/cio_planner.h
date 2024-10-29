@@ -1,5 +1,6 @@
 #pragma once
 
+#include <absl/random/random.h>
 #include <mujoco/mujoco.h>
 
 #include <Eigen/Core>
@@ -10,83 +11,29 @@
 #include <shared_mutex>
 #include <vector>
 
-// LBFGSB
-#include <LBFGSB.h>
-
 // mjpc
+#include "mjpc/optimizers/second_order_optimizer.h"
+#include "mjpc/optimizers/stochastic_optimizer.h"
 #include "mjpc/planners/cio/cio_common.h"
-#include "mjpc/planners/cio/cio_trajectory.h"
 #include "mjpc/planners/cio/cio_util.h"
-#include "mjpc/planners/cross_entropy/planner.h"
+#include "mjpc/planners/gradient/planner.h"
+#include "mjpc/planners/planner.h"
+#include "mjpc/tasks/mpl/mpl_cost.h"
 #include "mjpc/utilities.h"
-
-class CIOptimizer {
-public:
-  static constexpr int START_STAGE = 0;
-  CIOptimizer() = default;
-  CIOptimizer(mjModel* mj_model, mjData* mj_data, mjpc::Task* mj_task)
-      : mj_model_(mj_model), mj_data_(mj_data), mj_task_(mj_task) {}
-
-  Eigen::VectorXd opt_x() const { return x_; }
-  double cost() const { return 0; }
-  double operator()(const Eigen::VectorXd& x, Eigen::VectorXd& grad) { return cost(); }
-
-  void optimize() {
-    LBFGSpp::LBFGSBParam<double> param;
-    LBFGSpp::LBFGSBSolver<double> solver(param);
-
-    // Optimize
-    {
-      // Update [traj_, goals, x_, stage_idx_]
-#if 0
-      // Calculate [x_]
-      if (START_STAGE == stage_idx_) {
-        const std::vector<double> init = traj->GetObservationsData();
-        x_ = Eigen::VectorXd::Map(init.data(), init.size());
-      }
-#endif
-
-      // Variable bounds
-      const int n = x_.size();
-      Eigen::VectorXd lb = Eigen::VectorXd::Constant(n, 0);  // lower
-      Eigen::VectorXd ub = Eigen::VectorXd::Constant(n, 1);  // upper
-
-      // Invoke operator(), optimizing batch of [stage_]
-      double fx;
-      int niter = solver.minimize(*this, x_, fx, lb, ub);
-
-      std::cout << niter << " iterations" << std::endl;
-      std::cout << "x_ = \n" << x_.transpose() << std::endl;
-      std::cout << "f(x) = " << fx << std::endl;
-      std::cout << "grad = " << solver.final_grad().transpose() << std::endl;
-      std::cout << "projected grad norm = " << solver.final_grad_norm() << std::endl;
-    }
-  }
-
-private:
-  mjModel* mj_model_ = nullptr;
-  mjData* mj_data_ = nullptr;
-  mjpc::Task* mj_task_ = nullptr;
-
-  // cio
-  int stage_idx_ = 0;
-  Eigen::VectorXd x_;
-};
-using CIOptimizerPtr = std::shared_ptr<CIOptimizer>;
 
 namespace mjpc {
 using mjpc::spline::SplineInterpolation;
 using mjpc::spline::TimeSpline;
 
-class CIOPlanner : public mjpc::CrossEntropyPlanner {
+class CIOPlanner : public mjpc::GradientPlanner {
 public:
-  CIOPlanner() = default;
+  CIOPlanner() {}
   ~CIOPlanner() override = default;
   // =========================================================================================================
   // MJPC-PLANNER IMPL --
   //
   void Initialize(mjModel* model, const mjpc::Task& _task) override {
-    CrossEntropyPlanner::Initialize(model, _task);
+    GradientPlanner::Initialize(model, _task);
 
     // Init task CIO
     if (task->IsCIOSupported()) {
@@ -95,47 +42,71 @@ public:
   }
 
   void InitTaskCIO() {
-    optimizer_ = std::make_shared<CIOptimizer>(model, task->data_, const_cast<Task*>(task));
+    optimizer_ = std::make_shared<SecondOrderOptimizer>(model, task->data_, const_cast<Task*>(task), this);
   }
 
-  CIOptimizerPtr optimizer() const { return optimizer_; }
-  void Plan() {
+  SecondOrderOptimizerPtr optimizer() const { return optimizer_; }
+  void Plan(int horizon, mjpc::ThreadPool& pool) {
 #if CIO_USE_LBFGSB
-    // Loop optimizing over multiple stages
-    optimizer_->optimize();
-    // Copy [optimizer_->opt_x()] -> [action_]
-    const auto opt = optimizer_->opt_x();
-    // Finger0 vel
-    action_[0] = opt[26];
-    action_[1] = opt[27];
-    action_[2] = opt[28];
-    // Finger1 vel
-    action_[3] = opt[45];
-    action_[4] = opt[46];
-    action_[5] = opt[47];
+    horizon_ = horizon;
+    pool_ = &pool;
+
+    if (optimizer_) {
+      // Optimize [nominal_policy] by rolling out [nominal_trajectory] here-in
+      optimizer_->optimize();
+    }
 #endif
+  }
+
+  std::vector<double> GetNominalPolicyValues(bool with_noise) override {
+#if 1
+    // Resample [nominal_policy]
+    ResamplePolicy(horizon_);
+    if (with_noise) {
+      // Perturb [nominal_policy]
+      AddNoiseToPolicy(nominal_policy);
+    }
+    return nominal_policy.parameters;
+#else
+    return nominal_trajectory->actions;
+#endif
+  }
+
+  double RolloutNominalTrajectory(const Eigen::VectorXd& x) {
+    // 0- [parameters_scratch], [times_scratch]
+    ResamplePolicy(horizon_);
+    parameters_scratch = std::vector<double>(x.data(), x.data() + x.size());
+
+    // 1- Update [nominal_policy] with [times_scratch] + [parameters_scratch] of all [candidate_policy[]]
+    const std::unique_lock<std::shared_mutex> lock(mtx_);
+    {
+      mju_copy(nominal_policy.parameters.data(), parameters_scratch.data(), nominal_policy.num_parameters);
+      mju_copy(nominal_policy.times.data(), times_scratch.data(), nominal_policy.num_spline_points);
+    }
+
+    // 2- Rollout [nominal_policy] by [nominal_trajectory]
+    auto frun_nominal_policy = [&cp = nominal_policy](double* action, const double* state, double time) {
+      cp.Action(action, state, time);
+    };
+    nominal_trajectory->Rollout(frun_nominal_policy, task, model, data_[0].get(), state.data(), time,
+                                mocap.data(), userdata.data(), horizon_);
+
+    return nominal_trajectory->total_return;
   }
 
   // =========================================================================================================
   // MJPC-PLANNER IMPL --
   //
-  // init trajectories
-  void InitTrajectory() override {
-    for (auto& traj : trajectory) {
-      traj = std::make_shared<CIOTrajectory>();
-    }
-  }
-
-  void Allocate() override { CrossEntropyPlanner::Allocate(); }
+  void Allocate() override { GradientPlanner::Allocate(); }
 
   // visualize planner-specific traces
   void Traces(mjvScene* scn) override {
-    // CrossEntropyPlanner::Traces(scn);
+    GradientPlanner::Traces(scn);
 #if 0
     static constexpr float RED[] = {1.0, 0.0, 0.0, 1.0};
     auto scene = scn ? scn : task->scene_;
     for (const auto& i : trajectory) {
-      const auto cio_traj = std::dynamic_pointer_cast<CIOTrajectory>(i);
+      const auto cio_traj = std::dynamic_pointer_cast<MPLCostCalculator>(i);
       if (!cio_traj) {
         continue;
       }
@@ -170,24 +141,144 @@ public:
 #endif
   }
 
-  void ClearTrace() override { CrossEntropyPlanner::ClearTrace(); }
+  void ClearTrace() override { GradientPlanner::ClearTrace(); }
 
   // planner-specific GUI elements
-  void GUI(mjUI& ui) override { CrossEntropyPlanner::GUI(ui); }
+  void GUI(mjUI& ui) override { GradientPlanner::GUI(ui); }
 
   // optimize nominal policy
   void OptimizePolicy(int horizon, mjpc::ThreadPool& pool) override {
-    CrossEntropyPlanner::OptimizePolicy(horizon, pool);
+#if CIO_USE_LBFGSB
+    ResizeMjData(model, pool.NumThreads());
+
+    // maximum number of trajectories in linesearch
+    num_trajectory = mju_min(num_trajectory, kMaxTrajectory);
+
+    // copy [policy] (as the latest best) -> [nominal_policy]
+    policy.num_parameters = model->nu * policy.num_spline_points;
+    {
+      const std::shared_lock<std::shared_mutex> lock(mtx_);
+      nominal_policy.CopyFrom(policy, policy.num_spline_points);
+    }
+
+    // previous best cost
+    double c_prev = nominal_trajectory->total_return;
+    double c_best = c_prev;
+
+    // CIO plan optimizing, rolling out [nominal_trajectory] here-in
+    Plan(horizon, pool);
+
+    // Rollout [candidate_policy[]]
+    for (int r = 0; r < settings.max_rollout; r++) {
+      // copy [nominal_policy] -> [candidate_policy[k]]
+      for (int k = 1; k < num_trajectory; k++) {
+        candidate_policy[k].CopyFrom(nominal_policy, nominal_policy.num_spline_points);
+      }
+
+      // rollout all of [trajectory[]] on corresponding [candidate_policy[]] (parallel)
+      int count_before = pool.GetCount();
+      for (int i = 0; i < num_trajectory; i++) {
+        pool.Schedule([&data = data_, &trajectory_i = trajectory[i],
+                       &candidate_policy_i = candidate_policy[i], &model = this->model, &task = this->task,
+                       &state = this->state, &time = this->time, &mocap = this->mocap, horizon,
+                       &userdata = this->userdata]() {
+          auto frun_feedback_policy = [&candidate_policy_i = candidate_policy_i](
+                                          double* action, const double* state, double time) {
+            candidate_policy_i.Action(action, state, time);
+          };
+
+          // rollout [candidate_policy_i] on [trajectory_i], calculating its [total_return]
+          trajectory_i->Rollout(frun_feedback_policy, task, model, data[ThreadPool::WorkerId()].get(),
+                                state.data(), time, mocap.data(), userdata.data(), horizon);
+        });
+      }
+      pool.WaitCount(count_before + num_trajectory);
+      pool.ResetCount();
+
+      // ----- evaluate rollouts ------ //
+      winner = num_trajectory - 1;
+      for (int j = num_trajectory - 1; j >= 0; j--) {
+        // compute cost
+        double c_sample = trajectory[j]->total_return;
+
+        // compare cost
+        if (c_sample < c_best) {
+          c_best = c_sample;
+          winner = j;
+        }
+      }
+
+      // update nominal with winner
+      if (winner != 0) {
+        nominal_policy.CopyParametersFrom(winner_policy().parameters, winner_policy().times);
+        nominal_trajectory = trajectory[winner];
+      }
+
+      // improvement
+      action_step = linesearch_steps[winner];
+      expected = -action_step * (gradient.dV[0]) - 1.0e-16;
+      improvement = c_prev - c_best;
+      surprise = mju_min(mju_max(0, improvement / expected), 2);
+    }
+
+    // check for improvement
+    if (c_best >= c_prev) {
+      winner = num_trajectory - 1;
+    }
+
+    // copy [winner_policy()] -> [policy] to be used in [ActionFromPolicy()]
+    {
+      const std::shared_lock<std::shared_mutex> lock(mtx_);
+      previous_policy = policy;
+      policy.CopyParametersFrom(winner_policy().parameters, winner_policy().times);
+    }
+#else
+    // Rollout policies & calculate [trajectories' total_return], including [nominal_trajectory]
+    GradientPlanner::OptimizePolicy(horizon, pool);
+#endif
   }
 
-  // compute trajectory using nominal policy
-  void NominalTrajectory(int horizon, mjpc::ThreadPool& pool) override {
-    CrossEntropyPlanner::NominalTrajectory(horizon, pool);
+  void ComputeDerivatives() {
+    // compute model and sensor Jacobians from [nominal_trajectory] rolled out above
+    model_derivative.Compute(model, data_, nominal_trajectory->states.data(),
+                             nominal_trajectory->actions.data(), nominal_trajectory->times.data(), dim_state,
+                             dim_state_derivative, dim_action, dim_sensor, horizon_, settings.fd_tolerance,
+                             settings.fd_mode, *pool_, false);
+
+    // compute cost derivatives from [nominal_trajectory] & [model_derivative]
+    cost_derivative.Compute(nominal_trajectory->residual.data(), model_derivative.C.data(),
+                            model_derivative.D.data(), dim_state_derivative, dim_action, dim_max, dim_sensor,
+                            task->num_residual, task->dim_norm_residual.data(), task->num_term,
+                            task->weight.data(), task->norm.data(), task->norm_parameter.data(),
+                            task->num_norm_parameter.data(), task->risk, horizon_, *pool_);
   }
+
+  void AddNoiseToPolicy(GradientPolicy& in_policy) {
+    // sampling token
+    absl::BitGen gen_;
+
+    // get standard deviation, fixed or mixture of noise_exploration[0,1]
+    double std = noise_exploration[0];
+    constexpr double kStd2Proportion = 0.2;  // hardcoded proportion of 2nd std
+    if (noise_exploration[1] > 0 && absl::Bernoulli(gen_, kStd2Proportion)) {
+      std = noise_exploration[1];
+    }
+
+    for (auto t = 0; t < in_policy.num_spline_points; ++t) {
+      for (int k = 0; k < model->nu; ++k) {
+        double scale = 0.5 * (model->actuator_ctrlrange[2 * k + 1] - model->actuator_ctrlrange[2 * k]);
+        double noise = absl::Gaussian<double>(gen_, 0.0, scale * std);
+        in_policy.parameters[t * model->nu + k] += noise;
+      }
+      Clamp(in_policy.parameters.data(), model->actuator_ctrlrange, model->nu);
+    }
+  }
+
+  const Trajectory* BestTrajectory() override { return nominal_trajectory.get(); }
 
   // set action from policy
   void ActionFromPolicy(double* action, const double* state, double time, bool use_previous) override {
-#if CIO_USE_LBFGSB
+#if 0  // CIO_USE_LBFGSB
     const std::shared_lock<std::shared_mutex> lock(policy_mutex_);
 
     // WAIT ACTION TO BE COMPUTED
@@ -204,12 +295,20 @@ public:
     // Clamp controls on outputted [action]
     mjpc::Clamp(action, model->actuator_ctrlrange, model->nu);
 #else
-    CrossEntropyPlanner::ActionFromPolicy(action, state, time, use_previous);
+    GradientPlanner::ActionFromPolicy(action, state, time, use_previous);
 #endif
   }
 
 private:
-  CIOptimizerPtr optimizer_ = nullptr;
+  SecondOrderOptimizerPtr optimizer_ = nullptr;
+
+  int horizon_ = 0;
+  mjpc::ThreadPool* pool_ = nullptr;
+
+  // noise
+  double noise_exploration[2] = {0, 0.01};  // stds for sampling: N(0, exploration)
+  std::vector<double> noise;
+  mjpc::spline::SplineInterpolation interpolation_ = mjpc::spline::SplineInterpolation::kZeroSpline;
 
   // mjpc
   mutable std::shared_mutex policy_mutex_;

@@ -112,6 +112,7 @@ public:
   // CIO
   void InitCIO() {}
   virtual bool IsCIOSupported() const { return false; }
+  virtual std::vector<double> GetObservationsData(bool with_noise = true) const { return {}; }
 
   // Idto
   virtual void CreateDrakePlantModel(drake::multibody::MultibodyPlant<double>* plant) const {}
@@ -390,13 +391,16 @@ public:
     return nullptr;
   }
 
-  std::vector<double> QueryGeomSize(const char* geom_name) const {
+  std::vector<double> QueryGeomSize(int geom_id) const {
     std::vector<double> size(3, 0.0);
-    int geom_id = QueryGeomId(geom_name);
     if (geom_id > -1) {
       mju_copy3(size.data(), &model_->geom_size[3 * geom_id]);
     }
     return size;
+  }
+
+  std::vector<double> QueryGeomSize(const char* site_name) const {
+    return QueryGeomSize(QueryGeomId(site_name));
   }
 
   double QueryGeomSizeMax(const char* geom_name) const {
@@ -417,6 +421,48 @@ public:
     if (scene_ && (geom_id < model_->ngeom)) {
       memcpy(scene_->geoms[geom_id].rgba, rgba, sizeof(float) * 4);
     }
+  }
+
+  // Site
+  int QuerySiteId(const char* site_name) const {
+    return model_ ? mj_name2id(model_, mjOBJ_SITE, site_name) : -1;
+  }
+
+  mjtNum* QuerySitePos(const char* site_name) const {
+    if (data_) {
+      const int site_id = QueryGeomId(site_name);
+      return (site_id > -1) ? &data_->site_xpos[3 * site_id] : nullptr;
+    }
+    return nullptr;
+  }
+
+  mjtNum* QuerySiteQuat(const char* site_name) const {
+    if (data_) {
+      const int site_id = QuerySiteId(site_name);
+      if (site_id > -1) {
+        static mjtNum quat[4];
+        mju_mat2Quat(quat, &data_->site_xmat[9 * site_id]);
+        return &quat[0];
+      }
+    }
+    return nullptr;
+  }
+
+  std::vector<double> QuerySiteSize(int site_id) const {
+    std::vector<double> size(3, 0.0);
+    if (site_id > -1) {
+      mju_copy3(size.data(), &model_->site_size[3 * site_id]);
+    }
+    return size;
+  }
+
+  std::vector<double> QuerySiteSize(const char* site_name) const {
+    return QuerySiteSize(QuerySiteId(site_name));
+  }
+
+  double QuerySiteSizeMax(const char* geom_name) const {
+    const auto size = QuerySiteSize(geom_name);
+    return std::max({size[0], size[1], size[2]});
   }
 
   // mode

@@ -20,6 +20,8 @@ cmake .. -G Ninja \
                  -Dcasadi_DIR=$MEDIA_EXT_DRIVE/MUJOCO/CASADI/casadi/release/lib/cmake/casadi \
 		 -Ddrake_DIR=$MEDIA_EXT_DRIVE/11_MPC/DRAKE_MPC/drake/release/lib/cmake/drake \
                  -DCMAKE_ISPC_COMPILER=$MEDIA_EXT_DRIVE/ISPC/bin/ispc \
+		 -Dautodiff_DIR:PATH=/home/tad/11_AUTODIFF/autodiff/release/lib/cmake/autodiff \
+                 -DMCMC_DIR:PATH=/home/tad/10_MCMC/mcmc/release
                  #-DCMAKE_CXX_FLAGS:STRING="-stdlib=libc++ -D_GLIBCXX_USE_CXX11_ABI=1" \
                  #-DCMAKE_EXE_LINKER_FLAGS:STRING="-Wl,--no-as-needed -stdlib=libc++"
 

@@ -1,7 +1,7 @@
 # drake
 find_package(drake CONFIG REQUIRED)
 # /opt/drake/lib/cmake/drake/drake-config.cmake
-message("DRAKE: ${drake_VERSION}")
+message("IDTO DRAKE: ${drake_VERSION}")
 
 set(IDTO_HEADERS
         idto_common.h

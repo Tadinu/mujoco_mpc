@@ -21,6 +21,7 @@
 #include <shared_mutex>
 #include <vector>
 
+#include "cem_sampler.h"
 #include "mjpc/planners/cost_derivatives.h"
 #include "mjpc/planners/gradient/gradient.h"
 #include "mjpc/planners/gradient/policy.h"
@@ -32,6 +33,8 @@
 #include "mjpc/task.h"
 #include "mjpc/threadpool.h"
 #include "mjpc/trajectory.h"
+
+#define MJPC_GRADIENT_PLANNER_USE_CEM (1)
 
 namespace mjpc {
 
@@ -107,8 +110,15 @@ public:
   GradientPolicy& nominal_policy = candidate_policy[0];
   GradientPolicy winner_policy() const { return candidate_policy[winner]; }
 
+#if MJPC_GRADIENT_PLANNER_USE_CEM
+  void UpdatePolicyVariance();
+#endif
+
   // nominal trajectory
   TrajectoryPtr& nominal_trajectory = trajectory[0];
+
+  // order of indices of rolled out trajectories, ordered by total return
+  std::vector<int> trajectory_order;
 
   // scratch
   std::vector<double> parameters_scratch;
@@ -162,6 +172,9 @@ public:
 protected:
   mutable std::shared_mutex mtx_;
   int derivative_skip_ = 0;
+#if MJPC_GRADIENT_PLANNER_USE_CEM
+  CEMSampler cross_entropy_sampler;
+#endif
 };
 
 }  // namespace mjpc
