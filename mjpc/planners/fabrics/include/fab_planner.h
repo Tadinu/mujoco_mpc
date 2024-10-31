@@ -638,7 +638,7 @@ public:
    * The variables passed are the joint states, and the goal position.
    * The action is nullified if its magnitude is very large or very small.
    */
-  CaSX compute_action(const FabCasadiArgMap& kwargs) const {
+  CaSX compute_action(const CasadiArgMap& kwargs) const {
     if (!cafunc_) {
       return {};
     }
@@ -827,7 +827,7 @@ protected:
   int8_t ref_sign_ = 1;
 
   // Arguments to compute action
-  FabCasadiArgMap arguments_;
+  CasadiArgMap arguments_;
 
   // [FabParamTuner] is forward-declared above, so cannot be initialized here (even to nullptr)
   std::unique_ptr<FabParamTuner> param_tuner_;

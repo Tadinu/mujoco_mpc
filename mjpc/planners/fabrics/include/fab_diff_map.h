@@ -46,7 +46,7 @@ public:
                                                 CaSXDict{{"phi", phi_}, {"J", J_}, {"Jdot", Jdot_}});
   }
 
-  virtual CaSXDict forward(const FabCasadiArgMap& kwargs) {
+  virtual CaSXDict forward(const CasadiArgMap& kwargs) {
     if (func_) {
       auto eval = func_->evaluate(kwargs);
       return {{"phi", eval["phi"]}, {"J", eval["J"]}, {"Jdot", eval["Jdot"]}};
@@ -108,7 +108,7 @@ public:
         name_ + "_func", *this->vars_, CaSXDict{{"x_rel", this->phi_}, {"xdot_rel", phi_dot_}});
   }
 
-  CaSXDict forward(const FabCasadiArgMap& kwargs) override {
+  CaSXDict forward(const CasadiArgMap& kwargs) override {
     if (this->func_) {
       auto eval = this->func_->evaluate(kwargs);
       return {{"x_rel", eval["x_rel"]}, {"xdot_rel", eval["xdot_rel"]}};

@@ -20,68 +20,68 @@
 
 struct CIOPose {
   CIOPose() = default;
-  explicit CIOPose(const Eigen::Vector3d& position) : trans(position) {}
-  explicit CIOPose(const Eigen::Quaterniond& orientation) : quat(orientation) {}
-  CIOPose(const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation)
+  CIOPose(const CaSX& position, const CaSX& orientation = mjpc_casadi::CASX_ORIENTATION_ZERO)
       : trans(position), quat(orientation) {}
-  Eigen::Vector3d position() const { return trans.vector(); }
-  Eigen::Quaterniond orientation() const { return quat; }
+  CaSX position() const { return trans; }
+  CaSX orientation() const { return quat; }
   Eigen::Vector3d rpy() const {
-    Eigen::Vector3d eulerAngles = quat.toRotationMatrix().eulerAngles(2, 1, 0);  // ZYX order
+    const Eigen::Quaterniond eigen_quat = {(double)quat(0).scalar(), (double)quat(1).scalar(),
+                                           (double)quat(2).scalar(), (double)quat(3).scalar()};
+    Eigen::Vector3d eulerAngles = eigen_quat.toRotationMatrix().eulerAngles(2, 1, 0);  // ZYX order
     return {eulerAngles(2), eulerAngles(1), eulerAngles(0)};
   }
 
-  Eigen::Translation3d trans;
-  Eigen::Quaterniond quat;
+  CaSX trans = mjpc_casadi::CASX_POSITION_ZERO;
+  CaSX quat = mjpc_casadi::CASX_ORIENTATION_ZERO;  // wxyz
   void add_noise();
   constexpr int size() const { return size_byte() / sizeof(double); }
   constexpr int size_byte() const { return sizeof(trans) + sizeof(quat); }
   std::vector<double> data() const {
     std::vector<double> out(size());
-    std::memcpy(out.data(), trans.translation().data(), sizeof(trans));
-    std::memcpy(out.data() + (sizeof(trans) / sizeof(double)), quat.coeffs().data(), sizeof(quat));
+    std::memcpy(out.data(), trans.ptr(), sizeof(trans));
+    std::memcpy(out.data() + (sizeof(trans) / sizeof(double)), quat.ptr(), sizeof(quat));
     return out;
   }
 
   void from_data(const double* data) {
-    std::memcpy(trans.translation().data(), data, sizeof(trans));
-    std::memcpy(quat.coeffs().data(), data + (sizeof(trans) / sizeof(double)), sizeof(quat));
+    std::memcpy(trans.ptr(), data, sizeof(trans));
+    std::memcpy(quat.ptr(), data + (sizeof(trans) / sizeof(double)), sizeof(quat));
   }
 };
 
 struct CIOVelocity {
-  Eigen::Vector3d linear_vel = Eigen::Vector3d::Zero();
-  Eigen::Vector3d angular_vel = Eigen::Vector3d::Zero();
+  CaSX linear_vel = mjpc_casadi::CASX_3D_ZERO;
+  CaSX angular_vel = mjpc_casadi::CASX_3D_ZERO;
   void add_noise();
   constexpr int size() const { return size_byte() / sizeof(double); }
   constexpr int size_byte() const { return sizeof(linear_vel) + sizeof(angular_vel); }
   std::vector<double> data() const {
     std::vector<double> out(size());
-    std::memcpy(out.data(), linear_vel.data(), sizeof(linear_vel));
-    std::memcpy(out.data() + (sizeof(linear_vel) / sizeof(double)), angular_vel.data(), sizeof(angular_vel));
+    std::memcpy(out.data(), linear_vel.ptr(), sizeof(linear_vel));
+    std::memcpy(out.data() + (sizeof(linear_vel) / sizeof(double)), angular_vel.ptr(), sizeof(angular_vel));
     return out;
   }
   void from_data(const double* data) {
-    std::memcpy(linear_vel.data(), data, sizeof(linear_vel));
-    std::memcpy(angular_vel.data(), data + (sizeof(linear_vel) / sizeof(double)), sizeof(angular_vel));
+    std::memcpy(linear_vel.ptr(), data, sizeof(linear_vel));
+    std::memcpy(angular_vel.ptr(), data + (sizeof(linear_vel) / sizeof(double)), sizeof(angular_vel));
   }
 };
 
 struct CIOAcceleration {
-  Eigen::Vector3d linear_acc = Eigen::Vector3d::Zero();
-  Eigen::Vector3d angular_acc = Eigen::Vector3d::Zero();
+  CaSX linear_acc = mjpc_casadi::CASX_3D_ZERO;
+  CaSX angular_acc = mjpc_casadi::CASX_3D_ZERO;
   void add_noise();
   constexpr int size() const { return size_byte() / sizeof(double); }
   constexpr int size_byte() const { return sizeof(linear_acc) + sizeof(angular_acc); }
   std::vector<double> data() const {
     std::vector<double> out(size());
-    std::memcpy(out.data(), linear_acc.data(), sizeof(linear_acc));
-    std::memcpy(out.data() + (sizeof(linear_acc) / sizeof(double)), angular_acc.data(), sizeof(angular_acc));
+    std::memcpy(out.data(), linear_acc.ptr(), sizeof(linear_acc));
+    std::memcpy(out.data() + (sizeof(linear_acc) / sizeof(double)), angular_acc.ptr(), sizeof(angular_acc));
     return out;
   }
   void from_data(const double* data) {
-    std::memcpy(linear_acc.data(), data, sizeof(linear_acc));
-    std::memcpy(angular_acc.data(), data + (sizeof(linear_acc) / sizeof(double)), sizeof(angular_acc));
+    std::memcpy(linear_acc.ptr(), data, sizeof(linear_acc));
+    std::memcpy(angular_acc.ptr(), data + (sizeof(linear_acc) / sizeof(double)), sizeof(angular_acc));
   }
 };
 
@@ -91,39 +91,45 @@ struct CIOGoal {
   // CIOAcceleration acc;
 };
 
+struct CIOContactMeta {
+  const char* site_name = nullptr;
+  const char* site_geom_name = nullptr;
+  bool active = false;
+};
+
 struct CIOContact {
   int id = 0;
   // Contact force
-  Eigen::Vector3d f = Eigen::Vector3d::Zero();
+  CaSX f = mjpc_casadi::CASX_3D_ZERO;
   // Position of applied force in the frame of the manipulated object
-  Eigen::Vector3d ro = Eigen::Vector3d::Zero();
+  CaSX ro = mjpc_casadi::CASX_3D_ZERO;
   // [0,1]: Probability of being in contact
   double c = 0;
 
   // Position of applied force in world frame
-  Eigen::Vector3d r = Eigen::Vector3d::Zero();
-  // Projection of applied force onto object
-  Eigen::Vector3d pi_O_ = Eigen::Vector3d::Zero();
+  CaSX r = mjpc_casadi::CASX_3D_ZERO;
+  // Projection of ro onto object
+  CaSX pi_O_ = mjpc_casadi::CASX_3D_ZERO;
   // Projection of applied force onto hand
-  Eigen::Vector3d pi_H_ = Eigen::Vector3d::Zero();
-  Eigen::Vector3d e_O_ = Eigen::Vector3d::Zero();
-  Eigen::Vector3d e_H_ = Eigen::Vector3d::Zero();
-  Eigen::Vector3d e_dot_O_ = Eigen::Vector3d::Zero();
-  Eigen::Vector3d e_dot_H_ = Eigen::Vector3d::Zero();
-  bool empty() const { return f.isZero() && ro.isZero() && (c == 0); }
+  CaSX pi_H_ = mjpc_casadi::CASX_3D_ZERO;
+  CaSX e_O_ = mjpc_casadi::CASX_3D_ZERO;
+  CaSX e_H_ = mjpc_casadi::CASX_3D_ZERO;
+  CaSX e_dot_O_ = mjpc_casadi::CASX_3D_ZERO;
+  CaSX e_dot_H_ = mjpc_casadi::CASX_3D_ZERO;
+  bool empty() const { return f.is_zero() && ro.is_zero() && (c == 0); }
   void add_noise();
   constexpr int size() const { return size_byte() / sizeof(double); }
   constexpr int size_byte() const { return sizeof(f) + sizeof(ro) + sizeof(c); }
   std::vector<double> data() const {
     std::vector<double> out(size());
-    std::memcpy(out.data(), f.data(), sizeof(f));
-    std::memcpy(out.data() + (sizeof(f) / sizeof(double)), ro.data(), sizeof(ro));
+    std::memcpy(out.data(), f.ptr(), sizeof(f));
+    std::memcpy(out.data() + (sizeof(f) / sizeof(double)), ro.ptr(), sizeof(ro));
     std::memcpy(out.data() + ((sizeof(f) + sizeof(ro)) / sizeof(double)), &c, sizeof(c));
     return out;
   }
   void from_data(const double* data) {
-    std::memcpy(f.data(), data, sizeof(f));
-    std::memcpy(ro.data(), data + (sizeof(f) / sizeof(double)), sizeof(ro));
+    std::memcpy(f.ptr(), data, sizeof(f));
+    std::memcpy(ro.ptr(), data + (sizeof(f) / sizeof(double)), sizeof(ro));
     std::memcpy(&c, data + ((sizeof(f) + sizeof(ro)) / sizeof(double)), sizeof(c));
   }
 };
@@ -195,48 +201,57 @@ struct CIOConfig {
 class CIOObject {
 public:
   CIOObject() = default;
-  CIOObject(int body_id, int geom_id, double step_size = 0.5)
-      : body_id_(body_id), geom_id_(geom_id), step_size_(step_size) {}
+  CIOObject(mjtObj type, int id, int geom_id, double step_size = 0.5)
+      : type_(type), id_(id), geom_id_(geom_id), step_size_(step_size) {}
 
   void set_mj_info(const mjModel* model, const mjData* data, const mjpc::Task* task) {
     mj_model_ = model;
     mj_data_ = data;
     mj_task_ = task;
   }
-  int id() const { return body_id_; }
-  int geom_id() const { return geom_id_; }
-  double mass() const { return mj_task_->QueryBodyMass(id()); }
+  mjtObj type() const { return type_; }
+  int id() const { return id_; }
+  int body_id() const {
+    return (mjOBJ_BODY == type_) ? id_ : (mjOBJ_SITE == type_) ? mj_model_->site_bodyid[id_] : -1;
+  }
+  int geom_id() const { return (mjOBJ_GEOM == type_) ? id_ : (mjOBJ_SITE == type_) ? geom_id_ : -1; }
+  double mass() const { return mj_task_->QueryBodyMass(body_id()); }
   CIOPose pose() const {
-    return CIOPose(Eigen::Vector3d(mj_task_->QueryBodyPos(id())),
-                   Eigen::Quaterniond(mj_task_->QueryBodyQuat(id())));
+    const int _body_id_ = body_id();
+    return CIOPose(mjpc_casadi::from_mjpos(mj_task_->QueryBodyPos(_body_id_)),
+                   mjpc_casadi::from_mjquat(mj_task_->QueryBodyQuat(_body_id_)));
   }
   CIOVelocity vel() const {
-    return CIOVelocity{.linear_vel = Eigen::Vector3d(mj_task_->QueryBodyVel(id())),
-                       .angular_vel = Eigen::Vector3d(mj_task_->QueryBodyVel(id(), false))};
+    const int _body_id_ = body_id();
+    return CIOVelocity{
+        .linear_vel = mjpc_casadi::from_mjvel(mj_task_->QueryBodyVel(_body_id_)),
+        .angular_vel = mjpc_casadi::from_mjvel(mj_task_->QueryBodyVel(_body_id_, nullptr, false))};
   }
 
   CIOAcceleration acc() const {
-    return CIOAcceleration{.linear_acc = Eigen::Vector3d(mj_task_->QueryBodyAcc(id())),
-                           .angular_acc = Eigen::Vector3d(mj_task_->QueryBodyAcc(id(), false))};
+    const int _body_id_ = body_id();
+    return CIOAcceleration{
+        .linear_acc = mjpc_casadi::from_mjacc(mj_task_->QueryBodyAcc(_body_id_)),
+        .angular_acc = mjpc_casadi::from_mjacc(mj_task_->QueryBodyAcc(_body_id_, nullptr, false))};
   }
 
-  Eigen::Vector3d get_surface_normal(const Eigen::Vector3d& point) const {
-    return (point - pose().position()).normalized();
+  CaSX get_surface_normal(const CaSX& point) const {
+    const auto delta = point - pose().position();
+    return delta / CaSX::norm_2(delta);
   }
 
-  virtual Eigen::Vector3d project_point(const Eigen::Vector3d& point) const {
-    return Eigen::Vector3d::Zero();
-  }
+  virtual CaSX project_point(const CaSX& point) const { return mjpc_casadi::CASX_POSITION_ZERO; }
   virtual void discretize() {}
-  virtual bool check_inside(const Eigen::Vector3d& point) { return false; }
+  virtual bool check_inside(const CaSX& point) { return false; }
 
 protected:
   const mjModel* mj_model_ = nullptr;
   const mjData* mj_data_ = nullptr;
   const mjpc::Task* mj_task_ = nullptr;
-  int body_id_ = 0;
+  mjtObj type_ = mjOBJ_UNKNOWN;
+  int id_ = 0;
   int geom_id_ = 0;
-  double step_size_ = 0.001;
+  double step_size_ = 1e-3;
   double rad_bounds_ = 1e-1;
 };
 using CIOObjectPtr = std::shared_ptr<CIOObject>;
@@ -246,105 +261,102 @@ using CIOObjectPtr = std::shared_ptr<CIOObject>;
 class CIOLine {
 public:
   CIOLine() = default;
-  CIOLine(Eigen::Vector3d p1, Eigen::Vector3d p2) : p1_(std::move(p1)), p2_(std::move(p2)) {}
+  CIOLine(const CaSX& p1, const CaSX& p2) : p1_(p1), p2_(p2) {}
 
-  Eigen::Vector3d p1() const { return p1_; }
-  Eigen::Vector3d p2() const { return p2_; }
+  CaSX p1() const { return p1_; }
+  CaSX p2() const { return p2_; }
 
-  Eigen::Vector3d direction() const { return (p2_ - p1_); }
+  CaSX direction() const { return (p2_ - p1_); }
 
-  CIOLine directionCast(Eigen::Vector3d origin, Eigen::Vector3d direction) {
-    return CIOLine(std::move(origin), origin + std::move(direction));
+  CIOLine direction_cast(const CaSX& origin, const CaSX& direction) const {
+    return CIOLine(origin, origin + direction);
   }
 
-  Eigen::Vector3d project_point(const Eigen::Vector3d& p) const {
+  CaSX project_point(const CaSX& p) const {
     const auto p1p = p - p1_;
     const auto p12 = p2_ - p1_;
-    return p1_ + p1p.dot(p12) / p12.dot(p12) * p12;
+    return p1_ + CaSX::dot(p1p, p12) / CaSX::dot(p12, p12) * p12;
   }
 
 private:
-  Eigen::Vector3d p1_ = Eigen::Vector3d::Zero();
-  Eigen::Vector3d p2_ = Eigen::Vector3d::Zero();
+  CaSX p1_ = mjpc_casadi::CASX_POSITION_ZERO;
+  CaSX p2_ = mjpc_casadi::CASX_POSITION_ZERO;
 };
 
 class CIOTriangle {
 public:
-  CIOTriangle(Eigen::Vector3d p1, Eigen::Vector3d p2, Eigen::Vector3d p3)
-      : p1_(std::move(p1)), p2_(std::move(p2)), p3_(std::move(p3)) {}
+  CIOTriangle(const CaSX& p1, const CaSX& p2, const CaSX& p3) : p1_(p1), p2_(p2), p3_(p3) {}
 
-  Eigen::Vector3d p1() const { return p1_; }
-  Eigen::Vector3d p2() const { return p2_; }
-  Eigen::Vector3d p3() const { return p3_; }
+  CaSX p1() const { return p1_; }
+  CaSX p2() const { return p2_; }
+  CaSX p3() const { return p3_; }
 
-  Eigen::Vector3d normal() const {
-    Eigen::Vector3d n;
-    n = (p2_ - p1_).cross(p3_ - p1_);
-    return n.normalized();
+  CaSX normal() const {
+    const CaSX n = CaSX::cross(p2_ - p1_, p3_ - p1_);
+    return n / CaSX::norm_2(n);
   }
 
-  Eigen::Vector3d center() const { return (p1_ + p2_ + p3_) / 3.0; }
+  CaSX center() const { return (p1_ + p2_ + p3_) / 3.0; }
 
-  std::vector<Eigen::Vector3d> vertices() const {
-    std::vector<Eigen::Vector3d> vertices;
+  std::vector<CaSX> vertices() const {
+    std::vector<CaSX> vertices;
     vertices.push_back(p1_);
     vertices.push_back(p2_);
     vertices.push_back(p3_);
     return vertices;
   }
 
-  Eigen::Vector3d intersection_ray(const CIOLine& r, double epsilon) const {
+  CaSX intersection_ray(const CIOLine& r, double epsilon) const {
     // The Möller–Trumbore algorithm
     // https://en.wikipedia.org/wiki/M%C3%B6ller%E2%80%93Trumbore_intersection_algorithm
-    Eigen::Vector3d v1 = p2_ - p1_;
-    Eigen::Vector3d v2 = p3_ - p1_;
-    Eigen::Vector3d h = r.direction().cross(v2);
-    double res = v1.dot(h);
+    CaSX v1 = p2_ - p1_;
+    CaSX v2 = p3_ - p1_;
+    CaSX h = CaSX::cross(r.direction(), v2);
+    double res = (double)CaSX::dot(v1, h).scalar();
     if (res > -epsilon && res < epsilon) {
-      return Eigen::Vector3d::Zero();
+      return mjpc_casadi::CASX_POSITION_ZERO;
     }
     double f = 1.0 / res;
-    Eigen::Vector3d s = r.p1() - p1_;
-    double u = f * s.dot(h);
+    CaSX s = r.p1() - p1_;
+    double u = f * (double)CaSX::dot(s, h);
     if (u < 0.0 || u > 1.0) {
-      return Eigen::Vector3d::Zero();
+      return mjpc_casadi::CASX_POSITION_ZERO;
     }
-    Eigen::Vector3d q = s.cross(v1);
-    double v = f * r.direction().dot(q);
+    CaSX q = CaSX::cross(s, v1);
+    double v = f * (double)CaSX::dot(r.direction(), q).scalar();
     if (v < 0.0 || u + v > 1.0) {
-      return Eigen::Vector3d::Zero();
+      return mjpc_casadi::CASX_POSITION_ZERO;
     }
-    double t = f * v2.dot(q);
+    double t = f * (double)CaSX::dot(v2, q).scalar();
     if (t > epsilon) {
-      Eigen::Vector3d ret = r.p1() + r.direction() * t;
-      return ret;
+      return r.p1() + r.direction() * t;
     }
-    return Eigen::Vector3d::Zero();
+    return mjpc_casadi::CASX_POSITION_ZERO;
   }
 
-  Eigen::Vector3d p1_ = Eigen::Vector3d(0, 0, 0);
-  Eigen::Vector3d p2_ = Eigen::Vector3d(1, 0, 0);
-  Eigen::Vector3d p3_ = Eigen::Vector3d(0, 0, 1);
+  CaSX p1_ = mjpc_casadi::CASX_UNIT_X;
+  CaSX p2_ = mjpc_casadi::CASX_UNIT_Y;
+  CaSX p3_ = mjpc_casadi::CASX_UNIT_Z;
 };
 
 class CIORectangle {
 public:
-  CIORectangle(Eigen::Vector3d p1, Eigen::Vector3d p2, Eigen::Vector3d p3, Eigen::Vector3d p4)
-      : p1_(std::move(p1)), p2_(std::move(p2)), p3_(std::move(p3)), p4_(std::move(p4)) {}
-  CIORectangle(std::vector<Eigen::Vector3d> points)
-      : p1_(std::move(points[0])),
-        p2_(std::move(points[1])),
-        p3_(std::move(points[2])),
-        p4_(std::move(points[3])) {}
-  Eigen::Vector3d p1() const { return p1_; }
-  Eigen::Vector3d p2() const { return p2_; }
-  Eigen::Vector3d p3() const { return p3_; }
-  Eigen::Vector3d p4() const { return p4_; }
-  Eigen::Vector3d center() const { return 0.25 * (p1_ + p2_ + p3_ + p4_); }
-  Eigen::Vector3d normal() const { return ((p2_ - p1_).cross(p4_ - p1_)).normalized(); }
+  CIORectangle(const CaSX& p1, const CaSX& p2, const CaSX& p3, const CaSX& p4)
+      : p1_(p1), p2_(p2), p3_(p3), p4_(p4) {}
+  explicit CIORectangle(const std::vector<CaSX>& points)
+      : p1_(points[0]), p2_(points[1]), p3_(points[2]), p4_(points[3]) {}
+  CaSX p1() const { return p1_; }
+  CaSX p2() const { return p2_; }
+  CaSX p3() const { return p3_; }
+  CaSX p4() const { return p4_; }
+  CaSX center() const { return 0.25 * (p1_ + p2_ + p3_ + p4_); }
+  CaSX normal() const {
+    const auto n = CaSX::cross(p2_ - p1_, p4_ - p1_);
+    return n / CaSX::norm_2(n);
+  }
 
-  std::vector<Eigen::Vector3d> vertices() const {
-    std::vector<Eigen::Vector3d> vertices;
+  std::vector<CaSX> vertices() const {
+    std::vector<CaSX> vertices;
     vertices.push_back(p1_);
     vertices.push_back(p2_);
     vertices.push_back(p3_);
@@ -362,54 +374,51 @@ public:
     return triangles;
   }
 
-  Eigen::Vector3d intersection_ray(const CIOLine& r, double epsilon) const {
+  CaSX intersection_ray(const CIOLine& r, double epsilon) const {
     CIOTriangle t1 = triangles()[0];
     CIOTriangle t2 = triangles()[1];
     auto result = t1.intersection_ray(r, epsilon);
-    if (result != Eigen::Vector3d::Zero()) {
+    if (!result.is_zero()) {
       return result;
     }
     return t2.intersection_ray(r, epsilon);
   }
 
-  bool is_facing(const Eigen::Vector3d& point) const {
-    Eigen::Vector3d towards_point = point - center();
-    double dot_product = towards_point.dot(normal());
+  bool is_facing(const CaSX& point) const {
+    CaSX towards_point = point - center();
+    double dot_product = (double)CaSX::dot(towards_point, normal()).scalar();
     return dot_product > 0;
   }
 
-  Eigen::Vector3d project_point(const Eigen::Vector3d& point) const {
+  CaSX project_point(const CaSX& point) const {
     const auto rect_normal = normal();
-    return point - (rect_normal.dot(point) * rect_normal);
+    return point - CaSX::dot(rect_normal, point) * rect_normal;
   }
 
 private:
-  Eigen::Vector3d p1_ = Eigen::Vector3d(0, 0, 0);
-  Eigen::Vector3d p2_ = Eigen::Vector3d(1, 0, 0);
-  Eigen::Vector3d p3_ = Eigen::Vector3d(1, 1, 0);
-  Eigen::Vector3d p4_ = Eigen::Vector3d(0, 1, 0);
+  CaSX p1_ = mjpc_casadi::CASX_POSITION_ZERO;
+  CaSX p2_ = mjpc_casadi::CASX_UNIT_X;
+  CaSX p3_ = mjpc_casadi::CASX_UNIT_Y;
+  CaSX p4_ = mjpc_casadi::CASX_UNIT_Z;
 };
 
 class CIOEllipse {
 public:
   CIOEllipse() = default;
-  CIOEllipse(Eigen::Vector3d center, Eigen::Quaterniond orientation, double a, double b)
-      : center_point_(std::move(center)),
-        absolute_orientation_(std::move(orientation)),
-        major_semi_(a),
-        minor_semi_(b) {}
+  CIOEllipse(const CaSX& center, const CaSX& orientation, double a, double b)
+      : center_point_(center), absolute_orientation_(orientation), major_semi_(a), minor_semi_(b) {}
 
   double p1() const { return major_semi_; }
   double p2() const { return minor_semi_; }
 
-  const Eigen::Vector3d center() const { return center_point_; }
-  const Eigen::Quaterniond orientation() const { return absolute_orientation_; }
+  const CaSX center() const { return center_point_; }
+  const CaSX orientation() const { return absolute_orientation_; }
 
 private:
   double major_semi_ = 0;
   double minor_semi_ = 0;
-  Eigen::Vector3d center_point_ = Eigen::Vector3d::Zero();
-  Eigen::Quaterniond absolute_orientation_ = Eigen::Quaterniond::Identity();
+  CaSX center_point_ = mjpc_casadi::CASX_POSITION_ZERO;
+  CaSX absolute_orientation_ = mjpc_casadi::CASX_ORIENTATION_ZERO;
 };
 
 class CIOCuboid : public CIOObject {
@@ -422,70 +431,73 @@ public:
     BOTTOM = 4,
     TOP = 5,
   };
-  CIOCuboid(int body_id, int geom_id) : CIOObject(body_id, geom_id) {
-    for (int i = 0; i < 8; i++) {
-      points_.emplace_back(Eigen::Vector3d::Zero());
-    }
+  CIOCuboid(mjtObj type, int id, int geom_id) : CIOObject(type, id, geom_id) {}
+  CIOCuboid(mjtObj type, int id, int geom_id, const CaSX& center, const CaSX& radius, const CaSX& orientation)
+      : CIOObject(type, id, geom_id) {
+    // set_points(center, radius, orientation);
   }
 
-  CIOCuboid(int body_id, int geom_id, Eigen::Vector3d p0, Eigen::Vector3d p1, Eigen::Vector3d p2,
-            Eigen::Vector3d p3, Eigen::Vector3d p4, Eigen::Vector3d p5, Eigen::Vector3d p6,
-            Eigen::Vector3d p7)
-      : CIOObject(body_id, geom_id) {
-    points_.emplace_back(std::move(p0));
-    points_.emplace_back(std::move(p1));
-    points_.emplace_back(std::move(p2));
-    points_.emplace_back(std::move(p3));
-    points_.emplace_back(std::move(p4));
-    points_.emplace_back(std::move(p5));
-    points_.emplace_back(std::move(p6));
-    points_.emplace_back(std::move(p7));
-  }
+  void set_points(const CaSX& center, const CaSX& radius, const CaSX& orientation) {
+    const auto x = (double)radius(0).scalar();
+    const auto y = (double)radius(1).scalar();
+    const auto z = (double)radius(2).scalar();
 
-  CIOCuboid(int body_id, int geom_id, std::vector<Eigen::Vector3d> points)
-      : CIOObject(body_id, geom_id), points_(std::move(points)) {}
+    const Eigen::Quaterniond quat = mjpc_casadi::to_eigen_quat(orientation);
+    CaSX p0 = CaSX{x, -y, z};
+    auto p0_quat = quat * Eigen::Vector3d{x, -y, z};
+    CaSX p0_ori = CaSX{p0_quat[0], p0_quat[1], p0_quat[2]};
 
-  CIOCuboid(int body_id, int geom_id, const Eigen::Vector3d& center, const Eigen::Vector3d& radius,
-            const Eigen::Quaterniond& orientation)
-      : CIOObject(body_id, geom_id) {
-    set_points(center, radius, orientation);
-  }
+    CaSX p1 = CaSX{x, y, -z};
+    auto p1_quat = quat * Eigen::Vector3d{x, y, -z};
+    CaSX p1_ori = CaSX{p1_quat[0], p1_quat[1], p1_quat[2]};
 
-  void set_points(const Eigen::Vector3d& center, const Eigen::Vector3d& radius,
-                  const Eigen::Quaterniond& orientation) {
-    Eigen::Vector3d p0(radius.x(), -radius.y(), -radius.z());
-    Eigen::Vector3d p1(radius.x(), radius.y(), -radius.z());
-    Eigen::Vector3d p2(radius.x(), radius.y(), radius.z());
-    Eigen::Vector3d p3(radius.x(), -radius.y(), radius.z());
+    CaSX p2 = CaSX{x, y, z};
+    auto p2_quat = quat * Eigen::Vector3d{x, y, z};
+    CaSX p2_ori = CaSX{p2_quat[0], p2_quat[1], p2_quat[2]};
 
-    Eigen::Vector3d p4(-radius.x(), radius.y(), -radius.z());
-    Eigen::Vector3d p5(-radius.x(), -radius.y(), -radius.z());
-    Eigen::Vector3d p6(-radius.x(), -radius.y(), radius.z());
-    Eigen::Vector3d p7(-radius.x(), radius.y(), radius.z());
+    CaSX p3 = CaSX{x, -y, z};
+    auto p3_quat = quat * Eigen::Vector3d{x, -y, z};
+    CaSX p3_ori = CaSX{p3_quat[0], p3_quat[1], p3_quat[2]};
 
-    p0 = center + orientation * p0;
-    p1 = center + orientation * p1;
-    p2 = center + orientation * p2;
-    p3 = center + orientation * p3;
+    CaSX p4 = CaSX{-x, y, z};
+    auto p4_quat = quat * Eigen::Vector3d{-x, y, z};
+    CaSX p4_ori = CaSX{p4_quat[0], p4_quat[1], p4_quat[2]};
 
-    p4 = center + orientation * p4;
-    p5 = center + orientation * p5;
-    p6 = center + orientation * p6;
-    p7 = center + orientation * p7;
+    CaSX p5 = CaSX{-x, -y, -z};
+    auto p5_quat = quat * Eigen::Vector3d{-x, -y, -z};
+    CaSX p5_ori = CaSX{p5_quat[0], p5_quat[1], p5_quat[2]};
+
+    CaSX p6 = CaSX{-x, -y, z};
+    auto p6_quat = quat * Eigen::Vector3d{-x, -y, z};
+    CaSX p6_ori = CaSX{p6_quat[0], p6_quat[1], p6_quat[2]};
+
+    CaSX p7 = CaSX{-x, y, z};
+    auto p7_quat = quat * Eigen::Vector3d{-x, y, z};
+    CaSX p7_ori = CaSX{p7_quat[0], p7_quat[1], p7_quat[2]};
+
+    p0 = center + p0_ori;
+    p1 = center + p1_ori;
+    p2 = center + p2_ori;
+    p3 = center + p3_ori;
+
+    p4 = center + p4_ori;
+    p5 = center + p5_ori;
+    p6 = center + p6_ori;
+    p7 = center + p7_ori;
 
     points_.clear();
-    points_.emplace_back(std::move(p0));
-    points_.emplace_back(std::move(p1));
-    points_.emplace_back(std::move(p2));
-    points_.emplace_back(std::move(p3));
-    points_.emplace_back(std::move(p4));
-    points_.emplace_back(std::move(p5));
-    points_.emplace_back(std::move(p6));
-    points_.emplace_back(std::move(p7));
+    points_.push_back(p0);
+    points_.push_back(p1);
+    points_.push_back(p2);
+    points_.push_back(p3);
+    points_.push_back(p4);
+    points_.push_back(p5);
+    points_.push_back(p6);
+    points_.push_back(p7);
   }
 
-  std::vector<Eigen::Vector3d> lookup_points(int face_idx) const {
-    std::vector<Eigen::Vector3d> lookup;
+  std::vector<CaSX> lookup_points(int face_idx) const {
+    std::vector<CaSX> lookup;
     switch (face_idx) {
       case FRONT:
         lookup.push_back(points_[0]);
@@ -527,48 +539,48 @@ public:
     return lookup;
   }
 
-  std::vector<Eigen::Vector3d> vertices() const { return points_; }
+  std::vector<CaSX> vertices() const { return points_; }
 
-  CIORectangle get_rectangle(int face_idx) const { return {lookup_points(face_idx)}; }
+  CIORectangle get_rectangle(int face_idx) const { return CIORectangle{lookup_points(face_idx)}; }
 
-  Eigen::Vector3d center() const {
-    Eigen::Vector3d point_sum = points_[0];
+  CaSX center() const {
+    CaSX point_sum = points_[0];
     for (int i = 1; i < 8; i++) {
       point_sum += points_[i];
     }
     return point_sum / 8.0;
   }
 
-  std::vector<Eigen::Vector3d> intersection_ray(const CIOLine& r, double epsilon) const {
-    std::vector<Eigen::Vector3d> ret;
+  std::vector<CaSX> intersection_ray(const CIOLine& r, double epsilon) const {
+    std::vector<CaSX> ret;
     for (int i = 0; i < 6; i++) {
       CIORectangle side = get_rectangle(i);
       auto side_intersect = side.intersection_ray(r, epsilon);
-      if (side_intersect != Eigen::Vector3d::Zero()) {
+      if (!side_intersect.is_zero()) {
         ret.push_back(side_intersect);
       }
     }
     return ret;
   }
 
-  Eigen::Vector3d project_point(const Eigen::Vector3d& point) const override {
+  CaSX project_point(const CaSX& point) const override {
     static constexpr float k = 1.e4;
     static constexpr int num_faces = 6;
 
     // Initialize p_nearest as a zero matrix
-    Eigen::MatrixXd p_nearest = Eigen::MatrixXd::Zero(num_faces, 3);
+    CaSX p_nearest = CaSX::zeros(num_faces, 3);
     for (auto j = 0; j < num_faces; ++j) {
-      p_nearest.row(j) = get_rectangle(j).project_point(point);
+      p_nearest(j) = get_rectangle(j).project_point(point);
     }
 
     // Transpose the point and tile it
-    Eigen::MatrixXd p_mat = Eigen::MatrixXd::Zero(num_faces, 3);
+    CaSX p_mat = CaSX::zeros(num_faces, 3);
     for (auto j = 0; j < num_faces; ++j) {
-      p_mat.row(j) = point;
+      p_mat(j) = point;
     }
 
     // Create ones vector
-    const auto ones_vec = Eigen::VectorXd::Ones(num_faces);
+    const auto ones_vec = CaSX::ones(num_faces);
 
     // Calculate nu, using a softmin instead of a hardmin to make function smooth
     // https://research.cs.wisc.edu/zhu/space2/TTP2/advanced_image_selection/bin/toolbox/doc/classify/softmin.html
@@ -577,27 +589,28 @@ public:
     // The softmin is a way of taking a dissimilarity(distance) vector d and
     // converting it to a similarity vector s,
     // such that sum(s) == 1.
-    const auto d = (p_mat - p_nearest).rowwise().squaredNorm();
+    const auto d = CaSX::norm_1(CaSX::sq(p_mat - p_nearest));
 #if 1
     const auto sigma = k;
-    Eigen::VectorXd nu = (-d.array() / (sigma * sigma)).exp();
+    CaSX nu = CaSX::exp(-CaSX::vec(d) / (sigma * sigma));
 #else
-    Eigen::VectorXd nu = ones_vec.array() / (ones_vec.array() + d.array() * k);
+    CaSX nu = CaSX::vec(ones_vec) / (CaSX::vec(ones_vec) + CaSX::vec(d) * k);
 #endif
 
     // Normalize nu
-    nu /= nu.sum();
+    nu /= CaSX::norm_2(nu);
 
     // Tile nu for broadcasting
-    Eigen::MatrixXd nu_tiled = nu.replicate(1, 3);
+    // CaSX nu_tiled = nu.replicate(1, 3);
+    CaSX nu_tiled = CaSX::repmat(nu, 1, 3);
 
     // Calculate closest point
-    const auto closest_point = (nu_tiled.array() * p_nearest.array()).colwise().sum();
+    const auto closest_point = CaSX::sum2(CaSX::vec(nu_tiled) * CaSX::vec(p_nearest));
     return closest_point;
   }
 
 private:
-  std::vector<Eigen::Vector3d> points_;
+  std::vector<CaSX> points_ = std::vector<CaSX>(8, mjpc_casadi::CASX_POSITION_ZERO);
 };
 
 class CIOCylinder : public CIOObject {
@@ -606,28 +619,25 @@ public:
     BOTTOM = 0,
     TOP = 1,
   };
-  CIOCylinder(Eigen::Vector3d center, double radius, double height, Eigen::Quaterniond orientation)
-      : center_point_(std::move(center)),
-        radius_(radius),
-        height_(height),
-        absolute_orientation_(std::move(orientation)) {}
+  CIOCylinder(const CaSX& center, double radius, double height, const CaSX& orientation)
+      : center_point_(center), radius_(radius), height_(height), absolute_orientation_(orientation) {}
 
-  Eigen::Vector3d center() const { return center_point_; }
-  Eigen::Quaterniond orientation() const { return absolute_orientation_; }
+  CaSX center() const { return center_point_; }
+  CaSX orientation() const { return absolute_orientation_; }
 
   double r() const { return radius_; }
   double h() const { return height_; }
 
   CIOEllipse get_cap(int index) const {
     CIOEllipse e;
-    Eigen::Vector3d ellipse_center;
+    CaSX ellipse_center;
     switch (index) {
       case BOTTOM:
-        ellipse_center = center() - orientation() * (0.5 * h() * Eigen::Vector3d::UnitZ());
+        ellipse_center = center() - orientation() * (0.5 * h() * mjpc_casadi::CASX_UNIT_Z);
         e = CIOEllipse(ellipse_center, orientation(), r(), r());
         break;
       case TOP:
-        ellipse_center = center() + orientation() * (0.5 * h() * Eigen::Vector3d::UnitZ());
+        ellipse_center = center() + orientation() * (0.5 * h() * mjpc_casadi::CASX_UNIT_Z);
         e = CIOEllipse(ellipse_center, orientation(), r(), r());
         break;
     }
@@ -635,79 +645,82 @@ public:
   }
 
 private:
-  Eigen::Vector3d center_point_ = Eigen::Vector3d::Zero();
+  CaSX center_point_ = mjpc_casadi::CASX_POSITION_ZERO;
   double radius_ = 0;
   double height_ = 0;
-  Eigen::Quaterniond absolute_orientation_ = Eigen::Quaterniond::Identity();
+  CaSX absolute_orientation_ = mjpc_casadi::CASX_ORIENTATION_ZERO;
 };
 
 class CIOCone : public CIOObject {
 public:
-  CIOCone(Eigen::Vector3d origin_point, double angle, double height,
-          const Eigen::Vector3d& absolute_direction)
-      : origin_point_(std::move(origin_point)),
+  CIOCone(const CaSX& origin_point, double angle, double height, const CaSX& absolute_direction)
+      : origin_point_(origin_point),
         angle_(angle),
         height_(height),
-        absolute_direction_(absolute_direction.normalized()) {}
-  Eigen::Vector3d origin() const { return origin_point_; }
-  Eigen::Vector3d direction() const { return absolute_direction_; }
-  Eigen::Vector3d center() const { return origin() + (0.5 * h()) * direction(); }
+        absolute_direction_(CaSX::norm_2(absolute_direction)) {}
+  CaSX origin() const { return origin_point_; }
+  CaSX direction() const { return absolute_direction_; }
+  CaSX center() const { return origin() + (0.5 * h()) * direction(); }
 
   double theta() const { return angle_; }
   double h() const { return height_; }
 
   CIOEllipse get_cap() const {
-    Eigen::Vector3d ellipse_center = origin() + direction() * h();
-    Eigen::Quaterniond ellipse_orientation =
-        Eigen::Quaterniond::FromTwoVectors(Eigen::Vector3d::UnitZ(), direction());
+    const CaSX ellipse_center = origin() + direction() * h();
+    const auto ellipse_orientation = Eigen::Quaterniond::FromTwoVectors(
+        Eigen::Vector3d::UnitZ(), mjpc_casadi::to_eigen_vector(direction(), 3));
     double cap_radius = std::tan(theta()) * h();
-    CIOEllipse e(ellipse_center, ellipse_orientation, cap_radius, cap_radius);
+    CIOEllipse e(ellipse_center, mjpc_casadi::from_eigen_quat(ellipse_orientation), cap_radius, cap_radius);
     return e;
   }
 
-  Eigen::Vector3d project_point(const Eigen::Vector3d& point) const override {
-    Eigen::Vector3d point_vec = point - origin();
-    double point_axis_angle = acos((point_vec.dot(direction())) / (point_vec.norm() * direction().norm()));
+  CaSX project_point(const CaSX& point) const override {
+    const CaSX point_vec = point - origin();
+    double point_axis_angle = (double)CaSX::acos(CaSX::dot(point_vec, direction()) /
+                                                 (CaSX::norm_2(point_vec) * CaSX::norm_2(direction())))
+                                  .scalar();
 
-    /* Eigen::Vector3d axis_projection = this->cone_axis_projector * point_vec + origin(); */
+    /* CaSX axis_projection = this->cone_axis_projector * point_vec + origin(); */
 
-    Eigen::Vector3d axis_rot = direction().cross(point_vec);
-    axis_rot.normalize();
+    CaSX rot_axis = CaSX::cross(direction(), point_vec);
+    rot_axis = rot_axis / CaSX::norm_2(rot_axis);
 
-    Eigen::AngleAxis<double> my_quat(this->angle_ - point_axis_angle, axis_rot);
+    Eigen::AngleAxis<double> quat(this->angle_ - point_axis_angle, mjpc_casadi::to_eigen_vector3(rot_axis));
 
-    Eigen::Vector3d point_on_cone = my_quat * point_vec + origin();
+    const CaSX point_on_cone = mjpc_casadi::from_eigen_vector3(Eigen::Vector3d(
+        quat * mjpc_casadi::to_eigen_vector3(point_vec) + mjpc_casadi::to_eigen_vector3(origin())));
 
-    Eigen::Vector3d vec_point_on_cone = point_on_cone - origin();
-    vec_point_on_cone.normalize();
+    CaSX vec_point_on_cone = point_on_cone - origin();
+    vec_point_on_cone = vec_point_on_cone / CaSX::norm_2(vec_point_on_cone);
 
     double beta = this->angle_ - point_axis_angle;
 
     if (point_axis_angle < this->angle_) {
-      return origin() + vec_point_on_cone * cos(beta) * point_vec.norm();
+      return origin() + vec_point_on_cone * CaSX::cos(beta) * CaSX::norm_2(point_vec);
     } else if ((point_axis_angle >= this->angle_) &&
                (point_axis_angle - this->angle_) <= M_PI_2) {  // TODO: is this condition correct?
-      return origin() + vec_point_on_cone * cos(point_axis_angle - this->angle_) * point_vec.norm();
+      return origin() +
+             vec_point_on_cone * CaSX::cos(point_axis_angle - this->angle_) * CaSX::norm_2(point_vec);
     } else {
-      return Eigen::Vector3d::Zero();
+      return mjpc_casadi::CASX_POSITION_ZERO;
     }
   }
 
 private:
-  Eigen::Vector3d origin_point_ = Eigen::Vector3d::Zero();
+  CaSX origin_point_ = mjpc_casadi::CASX_POSITION_ZERO;
   double angle_ = 0;
   double height_ = 0;
-  Eigen::Vector3d absolute_direction_ = Eigen::Vector3d::Zero();
+  CaSX absolute_direction_ = mjpc_casadi::CASX_ORIENTATION_ZERO;
 };
 
 class CIOSphere : public CIOObject {
 public:
   CIOSphere() = default;
-  CIOSphere(int body_id, int geom_id, double radius, double step_size = 0.5)
-      : CIOObject(body_id, geom_id, step_size), radius_(radius) {}
+  CIOSphere(mjtObj type, int id, int geom_id, double step_size = 0.5)
+      : CIOObject(type, id, geom_id, step_size), radius_(mj_model_ ? mj_model_->geom_size[geom_id] : 0) {}
 
   // Projects the given point onto the surface of this object
-  Eigen::Vector3d project_point(const Eigen::Vector3d& point) const override {
+  CaSX project_point(const CaSX& point) const override {
     return pose().position() + (radius_ * get_surface_normal(point));
   }
 

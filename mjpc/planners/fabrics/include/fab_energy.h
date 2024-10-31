@@ -205,7 +205,7 @@ protected:
   }
 
 public:
-  CaSXDict evaluate(const FabCasadiArgMap& kwargs) const override {
+  CaSXDict evaluate(const CasadiArgMap& kwargs) const override {
     if (func_) {
       auto eval = func_->evaluate(kwargs);
       auto M_f = s_->evaluate(kwargs);
@@ -240,7 +240,7 @@ class FabFinslerStructure : public FabLagrangian {
     func_lg_ = std::make_shared<FabCasadiFunction>(name() + "_func_lg", *this->vars_, CaSXDict{{"Lg", lg_}});
   }
 
-  CaSXDict evaluate(const FabCasadiArgMap& kwargs) const override {
+  CaSXDict evaluate(const CasadiArgMap& kwargs) const override {
     auto parent_eval = FabLagrangian::evaluate(kwargs);
     if (func_lg_) {
       return {{"M", parent_eval["M"]},

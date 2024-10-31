@@ -4,13 +4,12 @@
 #include <Eigen/Core>
 #include <unsupported/Eigen/Splines>
 
+#include "mjpc/casadi/casadi_common.h"
 #include "mjpc/planners/cio/cio_common.h"
 
 class CIOUtils {
 public:
-  static Eigen::Vector3d calc_derivative(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2, double delta) {
-    return (p1 - p2) / delta;
-  }
+  static CaSX calc_derivative(const CaSX& p1, const CaSX& p2, double delta) { return (p1 - p2) / delta; }
 
   // Ref: https://gist.github.com/lorenzoriano/5414671
   template <typename T>
@@ -33,17 +32,16 @@ public:
     return linspaced;
   }
 
-  static std::vector<Eigen::Vector3d> linspace_vectors(const Eigen::Vector3d& vec0,
-                                                       const Eigen::Vector3d& vec1, int num_steps) {
-    std::vector<Eigen::Vector3d> out_vec;
+  static std::vector<CaSX> linspace_vectors(const CaSX& vec0, const CaSX& vec1, int num_steps) {
+    std::vector<CaSX> out_vec;
     std::vector<std::vector<double>> linspaced(num_steps, {0, 0, 0});
     for (auto j = 0; j < 3; ++j) {
-      const auto left = vec0[j];
-      const auto right = vec1[j];
+      const auto left = (double)vec0(j).scalar();
+      const auto right = (double)vec1(j).scalar();
       linspaced[j] = linspace<double>(left, right, num_steps);
     }
     for (auto i = 0; i < num_steps; ++i) {
-      out_vec.emplace_back(linspaced[0][i], linspaced[1][i], linspaced[2][i]);
+      out_vec.emplace_back(CaSX({linspaced[0][i], linspaced[1][i], linspaced[2][i]}));
     }
     return out_vec;
   }

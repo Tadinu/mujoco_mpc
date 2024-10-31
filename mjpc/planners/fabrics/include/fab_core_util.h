@@ -76,9 +76,9 @@ template <typename TArg, typename TMap = std::map<std::string, TArg>>
 static void print_named_map2(const TMap& map, const char* label = nullptr) {
   if (label) print(label);
   for (const auto& [name, val] : map) {
-    print(name, ":", val);
+    fab_core::print(name, ":", val);
   }
-  print("----------------");
+  fab_core::print("----------------");
 }
 
 template <typename TArg, typename TMap = std::map<std::string, TArg>>
@@ -325,8 +325,6 @@ static std::string task_function_name(const std::string& task_name, bool is_goal
 // CASADI UTILS ==
 //
 static bool is_casx_sparse(const CaSX& expr) { return CaSX::symvar(expr).empty(); }
-
-static CaSX casx_sym(const std::string& name, const casadi_int dim = 1) { return CaSX::sym(name, dim); }
 
 // NOTE: Not all symbolic expression go through this parsing function!
 static CaSXDict parse_symbolic_casx(const CaSX& expr, const std::vector<std::string>& var_names) {

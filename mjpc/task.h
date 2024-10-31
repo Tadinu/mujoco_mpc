@@ -243,48 +243,53 @@ public:
   Planner* Planner() const { return planner_; }
 
   // Body
-  int QueryBodyId(const char* body_name) const {
-    return model_ ? mj_name2id(model_, mjOBJ_BODY, body_name) : -1;
+  int QueryBodyId(const char* body_name, const mjModel* model = nullptr) const {
+    auto* _model = model ? model : model_;
+    return _model ? mj_name2id(_model, mjOBJ_BODY, body_name) : -1;
   }
 
-  mjtNum* QueryBodyQuat(int body_id, bool inertia_com = true) const {
-    if (data_) {
+  mjtNum* QueryBodyQuat(int body_id, const mjData* data = nullptr, bool inertia_com = true) const {
+    auto* _data = data ? data : data_;
+    if (_data) {
       if (inertia_com) {
         static mjtNum quat[4];
-        mju_mat2Quat(quat, &data_->ximat[9 * body_id]);
+        mju_mat2Quat(quat, &_data->ximat[9 * body_id]);
         return &quat[0];
       } else {
-        return &data_->xquat[4 * body_id];
+        return &_data->xquat[4 * body_id];
       }
     }
     return nullptr;
   }
 
-  mjtNum* QueryBodyRotMat(int body_id, bool inertia_com = true) const {
-    if (data_) {
+  mjtNum* QueryBodyRotMat(int body_id, const mjData* data = nullptr, bool inertia_com = true) const {
+    auto* _data = data ? data : data_;
+    if (_data) {
       if (inertia_com) {
-        return &data_->ximat[9 * body_id];
+        return &_data->ximat[9 * body_id];
       } else {
         static mjtNum mat[9];
-        mju_quat2Mat(mat, &data_->xquat[4 * body_id]);
+        mju_quat2Mat(mat, &_data->xquat[4 * body_id]);
         return &mat[0];
       }
     }
     return nullptr;
   }
 
-  mjtNum* QueryBodyPos(int body_id, bool inertia_com = true) const {
-    if (data_) {
-      return inertia_com ? &data_->xipos[3 * body_id] : &data_->xpos[3 * body_id];
+  mjtNum* QueryBodyPos(int body_id, const mjData* data = nullptr, bool inertia_com = true) const {
+    auto* _data = data ? data : data_;
+    if (_data) {
+      return inertia_com ? &_data->xipos[3 * body_id] : &_data->xpos[3 * body_id];
     }
     return nullptr;
   }
 
-  mjtNum* QueryBodyVel(int body_id, bool linear = true) const {
-    if (data_) {
+  mjtNum* QueryBodyVel(int body_id, const mjData* data = nullptr, bool linear = true) const {
+    auto* _data = data ? data : data_;
+    if (_data) {
       static double lvel[3] = {0};
 #if 1
-      mju_copy3(lvel, linear ? &data_->cvel[6 * body_id + 3] : &data_->cvel[6 * body_id]);
+      mju_copy3(lvel, linear ? &_data->cvel[6 * body_id + 3] : &_data->cvel[6 * body_id]);
 #else
       mjtNum vel[6];
       mj_objectVelocity(model_, data_, mjOBJ_BODY, body_id, vel, 0);
@@ -295,11 +300,12 @@ public:
     return nullptr;
   }
 
-  mjtNum* QueryBodyAcc(int body_id, bool linear = true) const {
-    if (data_) {
+  mjtNum* QueryBodyAcc(int body_id, const mjData* data = nullptr, bool linear = true) const {
+    auto* _data = data ? data : data_;
+    if (_data) {
       static double lacc[3] = {0};
 #if 1
-      mju_copy3(lacc, linear ? &data_->cacc[6 * body_id + 3] : &data_->cacc[6 * body_id]);
+      mju_copy3(lacc, linear ? &_data->cacc[6 * body_id + 3] : &_data->cacc[6 * body_id]);
 #else
       mjtNum acc[6];
       mj_objectAcceleration(model_, data_, mjOBJ_BODY, body_id, acc, 0);
@@ -311,10 +317,11 @@ public:
   }
 
   // Body mocap
-  int QueryBodyMocapId(const char* body_name) const {
-    if (model_) {
+  int QueryBodyMocapId(const char* body_name, const mjModel* model = nullptr) const {
+    auto* _model = model ? model : model_;
+    if (_model) {
       int body_id = QueryBodyId(body_name);
-      return (body_id > -1) ? model_->body_mocapid[body_id] : -1;
+      return (body_id > -1) ? _model->body_mocapid[body_id] : -1;
     }
     return -1;
   }
@@ -350,57 +357,64 @@ public:
     return nullptr;
   }
 
-  mjtNum QueryBodyMass(int body_id) const {
+  mjtNum QueryBodyMass(int body_id, const mjModel* model = nullptr) const {
     if (model_) {
       return (body_id > -1) ? model_->body_mass[body_id] : 0;
     }
     return 0;
   }
 
-  mjtNum QueryBodyMass(const char* body_name) const {
-    if (model_) {
+  mjtNum QueryBodyMass(const char* body_name, const mjModel* model = nullptr) const {
+    auto* _model = model ? model : model_;
+    if (_model) {
       int bodyId = QueryBodyId(body_name);
-      return (bodyId > -1) ? model_->body_mass[bodyId] : 0;
+      return (bodyId > -1) ? _model->body_mass[bodyId] : 0;
     }
     return 0;
   }
 
   // Geom
-  int QueryGeomId(const char* geom_name) const {
-    return model_ ? mj_name2id(model_, mjOBJ_GEOM, geom_name) : -1;
+  int QueryGeomId(const char* geom_name, const mjModel* model = nullptr) const {
+    auto* _model = model ? model : model_;
+    return _model ? mj_name2id(_model, mjOBJ_GEOM, geom_name) : -1;
   }
 
-  mjtNum* QueryGeomPos(const char* geom_name) const {
-    if (data_) {
-      const int geom_id = QueryGeomId(geom_name);
-      return (geom_id > -1) ? &data_->geom_xpos[3 * geom_id] : nullptr;
+  mjtNum* QueryGeomPos(const char* geom_name, const mjModel* model = nullptr,
+                       const mjData* data = nullptr) const {
+    auto* _data = data ? data : data_;
+    if (_data) {
+      const int geom_id = QueryGeomId(geom_name, model);
+      return (geom_id > -1) ? &_data->geom_xpos[3 * geom_id] : nullptr;
     }
     return nullptr;
   }
 
-  mjtNum* QueryGeomQuat(const char* geom_name) const {
-    if (data_) {
-      const int geom_id = QueryGeomId(geom_name);
+  mjtNum* QueryGeomQuat(const char* geom_name, const mjModel* model = nullptr,
+                        const mjData* data = nullptr) const {
+    auto* _data = data ? data : data_;
+    if (_data) {
+      const int geom_id = QueryGeomId(geom_name, model);
       if (geom_id > -1) {
         static mjtNum quat[4];
-        mju_mat2Quat(quat, &data_->geom_xmat[9 * geom_id]);
+        mju_mat2Quat(quat, &_data->geom_xmat[9 * geom_id]);
         return &quat[0];
       }
     }
     return nullptr;
   }
 
-  std::vector<double> QueryGeomSize(const char* geom_name) const {
-    std::vector<double> size(3, 0.0);
-    int geom_id = QueryGeomId(geom_name);
+  std::vector<double> QueryGeomSize(const char* geom_name, const mjModel* model = nullptr) const {
+    auto* _model = model ? model : model_;
+    std::vector<double> size(3);
+    int geom_id = QueryGeomId(geom_name, _model);
     if (geom_id > -1) {
-      mju_copy3(size.data(), &model_->geom_size[3 * geom_id]);
+      mju_copy3(size.data(), &_model->geom_size[3 * geom_id]);
     }
     return size;
   }
 
-  double QueryGeomSizeMax(const char* geom_name) const {
-    const auto size = QueryGeomSize(geom_name);
+  double QueryGeomSizeMax(const char* geom_name, const mjModel* model = nullptr) const {
+    const auto size = QueryGeomSize(geom_name, model);
     return std::max({size[0], size[1], size[2]});
   }
 
@@ -417,6 +431,11 @@ public:
     if (scene_ && (geom_id < model_->ngeom)) {
       memcpy(scene_->geoms[geom_id].rgba, rgba, sizeof(float) * 4);
     }
+  }
+
+  // site
+  int QuerySiteId(const char* site_name) const {
+    return model_ ? mj_name2id(model_, mjOBJ_SITE, site_name) : -1;
   }
 
   // mode

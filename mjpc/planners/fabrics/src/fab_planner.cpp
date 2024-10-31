@@ -56,7 +56,7 @@ void FabPlanner::InitTaskFabrics() {
                  task_->GetPlaneConstraintsNum(), task_->GetDynamicObstaclesDimension());
 
   // 5- Concretize, calculating [xddot] + composing [cafunc_] based on it
-  concretize(task_->GetFabricsControlMode(), 0.01);
+  concretize(task_->GetFabricsControlMode(), model_->opt.timestep);
 
   // 6- Param tuner (NOTE: always inited at last for using a fully-inited FabPlanner)
   if (tuning_on_) {

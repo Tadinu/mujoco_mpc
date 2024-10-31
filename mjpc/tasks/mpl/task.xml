@@ -46,9 +46,9 @@
     <framelinvel name="obj_linear_velocity" objtype="body" objname="object"/>
     <frameangvel name="obj_angular_velocity" objtype="body" objname="object"/>
     -->
-</sensor>
+  </sensor>
 
-<!-- from: common_assets -->
+  <!-- from: common_assets -->
   <include file="MPL_Pick.xml"/>
 
   <keyframe>

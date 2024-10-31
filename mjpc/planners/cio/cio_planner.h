@@ -15,6 +15,7 @@
 
 // mjpc
 #include "mjpc/planners/cio/cio_common.h"
+#include "mjpc/planners/cio/cio_cost_function.h"
 #include "mjpc/planners/cio/cio_trajectory.h"
 #include "mjpc/planners/cio/cio_util.h"
 #include "mjpc/planners/cross_entropy/planner.h"
@@ -28,12 +29,38 @@ public:
       : mj_model_(mj_model), mj_data_(mj_data), mj_task_(mj_task) {}
 
   Eigen::VectorXd opt_x() const { return x_; }
-  double cost() const { return 0; }
   double operator()(const Eigen::VectorXd& x, Eigen::VectorXd& grad) {
+    // STEP BACK AND CHECK
+    // 1. Direct class with cost optimizing code
+    // 2. Is that residual already represents total cost in multiple frames/trajectories. If so, why it
+    // behaves badly
+    // -> How to implement custom optimizer (like L-FGBS-B) to Direct, by inheritance?
+
+    // Calculate cost()
+    if (!cost_func_) {
+      return 0;
+    }
+    // const FabSharedMutexLock lock(policy_mutex_);
+
     CIOObservation obs;
     obs.from_data(x.data(), (x.size() - CIOObservation::pose_vel_acc_size) / CIOObservation::contact_size);
-    // Calculate cost()
-    return cost();
+
+    CasadiArgMap fingertips_obs = {
+        {"position", obs.pose.position()}, {"vel", obs.vel.linear_vel}, {"acc", obs.acc.linear_acc},
+        //...
+    };
+    auto eval = cost_func_->evaluate(fingertips_obs);
+    CaSX cost = eval["cost"];
+    if (!cost.is_zero()) {
+    }
+    const auto jac = cost_func_->function().jacobian();
+    CaSXDict jac_in;
+    CaSXDict jac_out = jac(jac_in);
+    grad << (double)jac_out["position"].scalar();
+    grad << (double)jac_out["vel"].scalar();
+    grad << (double)jac_out["acc"].scalar();
+    // ...
+    return (double)cost.scalar();
   }
 
   void optimize() {
@@ -42,16 +69,8 @@ public:
 
     // Optimize
     {
-      // Update [traj_, goals, x_, stage_idx_]
-#if 0
-      // Calculate [x_]
-      if (START_STAGE == stage_idx_) {
-        const std::vector<double> init = traj->GetObservationsData();
-        x_ = Eigen::VectorXd::Map(init.data(), init.size());
-      }
-#endif
-
-      // Variable bounds
+      // x_ = planner_->trajectory[0]->GetObservationsData();
+      //  Variable bounds
       const int n = x_.size();
       Eigen::VectorXd lb = Eigen::VectorXd::Constant(n, 0);  // lower
       Eigen::VectorXd ub = Eigen::VectorXd::Constant(n, 1);  // upper
@@ -68,10 +87,21 @@ public:
     }
   }
 
+  void CreateCostFunction() {
+    CaSX total_cost;
+    for (const auto& traj : planner_->trajectory) {
+      total_cost += traj->total_return;
+    }
+    cost_func_ =
+        std::make_shared<CIOCostFunction>("cio_cost", CaSXDict{{"cost", total_cost}}, CaSXDict{}, CaSXDict{});
+  }
+
 private:
   mjModel* mj_model_ = nullptr;
   mjData* mj_data_ = nullptr;
   mjpc::Task* mj_task_ = nullptr;
+  CIOCostFunctionPtr cost_func_ = nullptr;
+  mjpc::Planner* planner_ = nullptr;
 
   // cio
   int stage_idx_ = 0;

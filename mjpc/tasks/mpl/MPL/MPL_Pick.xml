@@ -1,5 +1,5 @@
 <mujoco model="MPL Pick">
-	<include file="MPL.xml"/>
+	<include file="MPL_Underactuated.xml"/>
 	<include file="assets.xml"/>
 
     <default>

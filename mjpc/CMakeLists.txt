@@ -47,6 +47,8 @@ set(LIB_MJPC_HEADERS
         agent.h
         trajectory.h
         utilities.h
+        casadi/casadi_common.h
+        casadi/casadi_function.h
         tasks/tasks.h
         tasks/acrobot/acrobot.h
         tasks/allegro/allegro.h
@@ -139,6 +141,7 @@ set(LIB_MJPC_HEADERS
         planners/fabrics/include/casadi_gen/fab_task_panda_dynamic_func.h
         planners/fabrics/include/casadi_gen/fab_task_panda_dynamic_python_func.h
         planners/cio/cio_common.h
+        planners/cio/cio_cost_function.h
         planners/cio/cio_trajectory.h
         planners/cio/cio_planner.h
         planners/cio/cio_util.h

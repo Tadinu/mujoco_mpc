@@ -4,25 +4,10 @@
 // https://github.com/tud-amr/fabrics
 
 #include <any>
-#include <casadi/casadi.hpp>
 #include <shared_mutex>
 #include <variant>
 
-using CaSX = casadi::SX;
-using CaMX = casadi::MX;
-using CaSXDict = casadi::SXDict;
-using CaSXPair = std::pair<std::string, CaSX>;
-using CaSXVector = casadi::SXVector;
-
-using CaDM = casadi::DM;
-using CaDMVector = casadi::DMVector;
-
-using CaElement = casadi::SXElem;
-using CaDouble = casadi::Matrix<double>;
-using CaSlice = casadi::Slice;
-using CaFunction = casadi::Function;
-static constexpr auto CASADI_INT_MIN = std::numeric_limits<casadi_int>::min();
-static constexpr auto CASADI_INT_MAX = std::numeric_limits<casadi_int>::max();
+#include "mjpc/casadi/casadi_common.h"
 
 template <typename... TVariant>
 using FabVariant = std::variant<std::monostate, TVariant...>;
