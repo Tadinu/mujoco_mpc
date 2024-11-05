@@ -27,17 +27,16 @@ void ZeroSplineMapping::Allocate(int dim) {
   this->dim = dim;
 
   // allocate
-  mapping.resize((dim * kMaxTrajectoryHorizon) *
-                 (dim * kMaxGradientSplinePoints));
+  mapping.resize((dim * kMaxTrajectoryHorizon) * (dim * kMaxGradientSplinePoints));
 }
 
 // compute zero-order-hold mapping
-void ZeroSplineMapping::Compute(const std::vector<double>& input_times,
-                                int num_input, const double* output_times,
-                                int num_output) {
+void ZeroSplineMapping::Compute(const std::vector<double>& input_times, int num_input,
+                                const double* output_times, int num_output) {
+  const auto size = (dim * num_output) * (dim * num_input);
+  assert(mapping.size() >= size);
   // set zeros
-  std::fill(mapping.begin(),
-            mapping.begin() + (dim * num_output) * (dim * num_input), 0.0);
+  std::fill(mapping.begin(), mapping.begin() + size, 0.0);
 
   // compute
   int row, col;
@@ -59,17 +58,16 @@ void LinearSplineMapping::Allocate(int dim) {
   this->dim = dim;
 
   // allocate
-  mapping.resize((dim * kMaxTrajectoryHorizon) *
-                 (dim * kMaxGradientSplinePoints));
+  mapping.resize((dim * kMaxTrajectoryHorizon) * (dim * kMaxGradientSplinePoints));
 }
 
 // compute linear-interpolation mapping
-void LinearSplineMapping::Compute(const std::vector<double>& input_times,
-                                  int num_input, const double* output_times,
-                                  int num_output) {
+void LinearSplineMapping::Compute(const std::vector<double>& input_times, int num_input,
+                                  const double* output_times, int num_output) {
+  const auto size = (dim * num_output) * (dim * num_input);
+  assert(mapping.size() >= size);
   // set zeros
-  std::fill(mapping.begin(),
-            mapping.begin() + (dim * num_output) * (dim * num_input), 0.0);
+  std::fill(mapping.begin(), mapping.begin() + size, 0.0);
   // compute
   int row, col;
   int bounds[2];
@@ -83,8 +81,8 @@ void LinearSplineMapping::Compute(const std::vector<double>& input_times,
         mapping[row + col] = 1.0;
       } else {
         // normalized time
-        double a = (output_times[i] - input_times[bounds[0]]) /
-                   (input_times[bounds[1]] - input_times[bounds[0]]);
+        double a =
+            (output_times[i] - input_times[bounds[0]]) / (input_times[bounds[1]] - input_times[bounds[0]]);
 
         // p0
         row = dim * num_input * (dim * i + j);
@@ -106,23 +104,19 @@ void CubicSplineMapping::Allocate(int dim) {
   this->dim = dim;
 
   // allocate
-  mapping.resize((dim * kMaxTrajectoryHorizon) *
-                 (dim * kMaxGradientSplinePoints));
-  point_slope_mapping.resize((2 * dim * kMaxGradientSplinePoints) *
-                             (dim * kMaxGradientSplinePoints));
-  output_mapping.resize((dim * kMaxTrajectoryHorizon) *
-                        (2 * dim * kMaxGradientSplinePoints));
+  mapping.resize((dim * kMaxTrajectoryHorizon) * (dim * kMaxGradientSplinePoints));
+  point_slope_mapping.resize((2 * dim * kMaxGradientSplinePoints) * (dim * kMaxGradientSplinePoints));
+  output_mapping.resize((dim * kMaxTrajectoryHorizon) * (2 * dim * kMaxGradientSplinePoints));
 }
 
 // compute cubic-interpolation mapping
-void CubicSplineMapping::Compute(const std::vector<double>& input_times,
-                                 int num_input, const double* output_times,
-                                 int num_output) {
+void CubicSplineMapping::Compute(const std::vector<double>& input_times, int num_input,
+                                 const double* output_times, int num_output) {
+  const auto input_size = (2 * dim * num_input) * (dim * num_input);
+
   // FiniteDifferenceSlope matrix
-  std::fill(
-      point_slope_mapping.begin(),
-      point_slope_mapping.begin() + (2 * dim * num_input) * (dim * num_input),
-      0.0);
+  assert(point_slope_mapping.size() >= input_size);
+  std::fill(point_slope_mapping.begin(), point_slope_mapping.begin() + input_size, 0.0);
   int row, col;
   // point-to-point mapping
   for (int i = 0; i < num_input; i++) {
@@ -137,8 +131,7 @@ void CubicSplineMapping::Compute(const std::vector<double>& input_times,
   int shift = (dim * num_input) * (dim * num_input);
   for (int i = 0; i < num_input; i++) {
     double dt1 = (i > 0 ? 1.0 / (input_times[i] - input_times[i - 1]) : 0.0);
-    double dt2 =
-        (i < num_input - 1 ? 1.0 / (input_times[i + 1] - input_times[i]) : 0.0);
+    double dt2 = (i < num_input - 1 ? 1.0 / (input_times[i + 1] - input_times[i]) : 0.0);
     if (i > 0 && i < num_input - 1) {
       dt1 *= 0.5;
       dt2 *= 0.5;
@@ -166,9 +159,9 @@ void CubicSplineMapping::Compute(const std::vector<double>& input_times,
   }
 
   // output matrix
-  std::fill(output_mapping.begin(),
-            output_mapping.begin() + (dim * num_output) * (2 * dim * num_input),
-            0.0);
+  const auto output_size = (dim * num_output) * (2 * dim * num_input);
+  assert(output_mapping.size() >= output_size);
+  std::fill(output_mapping.begin(), output_mapping.begin() + output_size, 0.0);
   int bounds[2];
   double coefficients[4];
   for (int i = 0; i < num_output; i++) {
@@ -200,8 +193,7 @@ void CubicSplineMapping::Compute(const std::vector<double>& input_times,
   }
 
   // mapping
-  mju_mulMatMat(mapping.data(), output_mapping.data(),
-                point_slope_mapping.data(), dim * num_output,
+  mju_mulMatMat(mapping.data(), output_mapping.data(), point_slope_mapping.data(), dim * num_output,
                 2 * dim * num_input, dim * num_input);
 }
 

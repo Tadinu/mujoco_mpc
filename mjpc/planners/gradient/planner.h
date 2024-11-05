@@ -104,6 +104,11 @@ public:
   GradientPolicy policy;
   GradientPolicy previous_policy;
   GradientPolicy candidate_policy[kMaxTrajectory];
+  GradientPolicy& nominal_policy = candidate_policy[0];
+  GradientPolicy winner_policy() const { return candidate_policy[winner]; }
+
+  // nominal trajectory
+  TrajectoryPtr& nominal_trajectory = trajectory[0];
 
   // scratch
   std::vector<double> parameters_scratch;
@@ -135,7 +140,7 @@ public:
   double linesearch_steps[kMaxTrajectory];
 
   // best trajectory id
-  int winner;
+  int winner = -1;
 
   // settings
   GradientPlannerSettings settings;
@@ -154,7 +159,7 @@ public:
   double gradient_compute_time;
   double policy_update_compute_time;
 
-private:
+protected:
   mutable std::shared_mutex mtx_;
   int derivative_skip_ = 0;
 };

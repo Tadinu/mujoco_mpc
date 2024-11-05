@@ -14,9 +14,10 @@
 
 #include "mjpc/planners/gradient/gradient.h"
 
+#include <mujoco/mujoco.h>
+
 #include <algorithm>
 
-#include <mujoco/mujoco.h>
 #include "mjpc/planners/cost_derivatives.h"
 #include "mjpc/planners/gradient/policy.h"
 #include "mjpc/planners/model_derivatives.h"
@@ -40,10 +41,13 @@ void Gradient::Reset(int dim_state_derivative, int dim_action, int T) {
 }
 
 // compute gradient at time step
-int Gradient::GradientStep(int n, int m, const double *Wx, const double *At,
-                           const double *Bt, const double *cxt,
-                           const double *cut, double *Vxt, double *dut,
-                           double *Qxt, double *Qut) {
+int Gradient::GradientStep(int n /*dim_state_derivative*/, int m /*dim_action*/,
+                           const double *Wx /* cost at frame [t]*/, const double *At, /*model jac wrt state*/
+                           const double *Bt /*model jac wrt action*/,
+                           const double *cxt /*cost gradient wrt state*/,
+                           const double *cut /*cost gradient wrt action*/,
+                           double *Vxt /*cost at frame [t-1]*/, double *dut /* action improvement */,
+                           double *Qxt /*objective-state grad*/, double *Qut /*cost action grad*/) {
   //    Qx = cx + A'*Wx
   mju_mulMatTVec(Qxt, At, Wx, n, n);
   mju_addTo(Qxt, cxt, n);
@@ -52,7 +56,7 @@ int Gradient::GradientStep(int n, int m, const double *Wx, const double *At,
   mju_mulMatTVec(Qut, Bt, Wx, n, m);
   mju_addTo(Qut, cut, m);
 
-  //    k = -Qu
+  //    du = -Qu
   mju_scl(dut, Qut, -1.0, m);
 
   // update cost-to-go
@@ -65,15 +69,13 @@ int Gradient::GradientStep(int n, int m, const double *Wx, const double *At,
 }
 
 // compute gradient for entire trajectory
-int Gradient::Compute(GradientPolicy *p, const ModelDerivatives *md,
-                      const CostDerivatives *cd, int dim_state_derivative,
-                      int dim_action, int T) {
+int Gradient::Compute(GradientPolicy *p, const ModelDerivatives *md, const CostDerivatives *cd,
+                      int dim_state_derivative, int dim_action, int T) {
   // reset
   mju_zero(dV, 2);
 
   // final DerivativeStep cost-to-go
-  mju_copy(DataAt(Vx, (T - 1) * dim_state_derivative),
-           DataAt(cd->cx, (T - 1) * dim_state_derivative),
+  mju_copy(DataAt(Vx, (T - 1) * dim_state_derivative), DataAt(cd->cx, (T - 1) * dim_state_derivative),
            dim_state_derivative);
 
   // // iterate gradient steps backward in time
@@ -83,12 +85,9 @@ int Gradient::Compute(GradientPolicy *p, const ModelDerivatives *md,
         dim_state_derivative, dim_action, DataAt(Vx, t * dim_state_derivative),
         DataAt(md->A, (t - 1) * dim_state_derivative * dim_state_derivative),
         DataAt(md->B, (t - 1) * dim_state_derivative * dim_action),
-        DataAt(cd->cx, (t - 1) * dim_state_derivative),
-        DataAt(cd->cu, (t - 1) * dim_action),
-        DataAt(Vx, (t - 1) * dim_state_derivative),
-        DataAt(p->k, (t - 1) * dim_action),
-        DataAt(Qx, (t - 1) * dim_state_derivative),
-        DataAt(Qu, (t - 1) * dim_action));
+        DataAt(cd->cx, (t - 1) * dim_state_derivative), DataAt(cd->cu, (t - 1) * dim_action),
+        DataAt(Vx, (t - 1) * dim_state_derivative), DataAt(p->k, (t - 1) * dim_action),
+        DataAt(Qx, (t - 1) * dim_state_derivative), DataAt(Qu, (t - 1) * dim_action));
 
     // failure
     if (!status) {
@@ -98,8 +97,7 @@ int Gradient::Compute(GradientPolicy *p, const ModelDerivatives *md,
 
     // complete
     if (t == 1) {
-      mju_copy(DataAt(p->k, (T - 1) * dim_action),
-               DataAt(p->k, (T - 2) * dim_action), dim_action);
+      mju_copy(DataAt(p->k, (T - 1) * dim_action), DataAt(p->k, (T - 2) * dim_action), dim_action);
       return 0;
     }
   }

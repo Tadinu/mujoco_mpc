@@ -86,7 +86,7 @@ void SampleGradientPlanner::Allocate() {
   // policy
   int num_max_parameter = model->nu * kMaxTrajectoryHorizon;
   policy.Allocate(model, *task, kMaxTrajectoryHorizon);
-  resampled_policy.Allocate(model, *task, kMaxTrajectoryHorizon);
+  nominal_policy.Allocate(model, *task, kMaxTrajectoryHorizon);
   previous_policy.Allocate(model, *task, kMaxTrajectoryHorizon);
 
   // noise
@@ -122,7 +122,7 @@ void SampleGradientPlanner::Reset(int horizon, const double* initial_repeated_ac
 
   // policy parameters
   policy.Reset(horizon, initial_repeated_action);
-  resampled_policy.Reset(horizon, initial_repeated_action);
+  nominal_policy.Reset(horizon, initial_repeated_action);
   previous_policy.Reset(horizon, initial_repeated_action);
 
   // scratch
@@ -175,16 +175,16 @@ void SampleGradientPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
   // resize number of mjData
   ResizeMjData(model, pool.NumThreads());
 
-  // copy nominal policy
+  // copy [policy] -> [nominal_policy]
   int num_spline_points = policy.num_spline_points;
   policy.plan.SetInterpolation(interpolation_);
   {
     const std::shared_lock<std::shared_mutex> lock(mtx_);
-    resampled_policy.CopyFrom(policy, num_spline_points);
+    nominal_policy.CopyFrom(policy, num_spline_points);
   }
 
-  // resample nominal policy to current time
-  this->ResamplePolicy(resampled_policy, horizon, num_spline_points);
+  // resample [nominal_policy] to current time (from [plan_scratch])
+  this->ResamplePolicy(nominal_policy, horizon, num_spline_points);
 
   // resample gradient policies to current time
   // TODO(taylor): a bit faster to do in Rollouts, but needs more scratch to be
@@ -252,7 +252,10 @@ void SampleGradientPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
   // start timer
   auto gradient_start = std::chrono::steady_clock::now();
 
-  // candidate policies
+  // compute [gradient] as plan values for [candidate_policy]
+  // - noisy gradients (0 -> num_noisy): sampled from Gaussian noise then scaled proportionally to traj cost
+  // - other gradients (num_noisy -> num_trajectory): interpolated between gradients of 2 consecutive
+  // frames using [gradient_filter_]
   this->GradientCandidates(num_trajectory, num_gradient, horizon, pool);
 
   // stop timer
@@ -262,12 +265,12 @@ void SampleGradientPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
 // compute trajectory using nominal policy
 void SampleGradientPlanner::NominalTrajectory(int horizon, ThreadPool& pool) {
   // set policy
-  auto nominal_policy = [&cp = resampled_policy](double* action, const double* state, double time) {
+  auto frun_nominal_policy = [&cp = nominal_policy](double* action, const double* state, double time) {
     cp.Action(action, state, time);
   };
 
   // rollout nominal policy
-  trajectory[idx_nominal]->Rollout(nominal_policy, task, model, data_[0].get(), state.data(), time,
+  trajectory[idx_nominal]->Rollout(frun_nominal_policy, task, model, data_[0].get(), state.data(), time,
                                    mocap.data(), userdata.data(), horizon);
 }
 
@@ -321,8 +324,9 @@ void SampleGradientPlanner::AddNoiseToPolicy(int i) {
   int shift = i * (model->nu * kMaxTrajectoryHorizon);
 
   // sample noise
+  static constexpr double variance = 1.0;
   for (int k = 0; k < num_spline_points * model->nu; k++) {
-    noise[k + shift] = absl::Gaussian<double>(gen_, 0.0, 1.0);
+    noise[k + shift] = absl::Gaussian<double>(gen_, 0.0, variance);
   }
 
   for (int j = 0; j < num_spline_points; j++) {
@@ -349,7 +353,7 @@ void SampleGradientPlanner::Rollouts(int num_trajectory, int num_gradient, int h
       // nominal and noisy policies
       if (i < num_trajectory - num_gradient) {
         // copy nominal policy
-        s.candidate_policy[i].CopyFrom(s.resampled_policy, s.resampled_policy.num_spline_points);
+        s.candidate_policy[i].CopyFrom(s.nominal_policy, s.nominal_policy.num_spline_points);
 
         // noisy nominal policy
         if (i > idx_nominal) s.AddNoiseToPolicy(i);
@@ -358,13 +362,13 @@ void SampleGradientPlanner::Rollouts(int num_trajectory, int num_gradient, int h
       // ----- rollout sample policy ----- //
 
       // policy
-      auto sample_policy_i = [&candidate_policy = s.candidate_policy, &i](double* action, const double* state,
-                                                                          double time) {
-        candidate_policy[i].Action(action, state, time);
+      auto frun_sample_policy_i = [&candidate_policy_i = s.candidate_policy[i]](
+                                      double* action, const double* state, double time) {
+        candidate_policy_i.Action(action, state, time);
       };
 
       // policy rollout
-      s.trajectory[i]->Rollout(sample_policy_i, task, model, s.data_[ThreadPool::WorkerId()].get(),
+      s.trajectory[i]->Rollout(frun_sample_policy_i, task, model, s.data_[ThreadPool::WorkerId()].get(),
                                state.data(), time, mocap.data(), userdata.data(), horizon);
     });
   }
@@ -378,7 +382,7 @@ void SampleGradientPlanner::GradientCandidates(int num_trajectory, int num_gradi
   if (num_gradient < 1) return;
 
   // number of parameters
-  int num_spline_points = resampled_policy.num_spline_points;
+  int num_spline_points = nominal_policy.num_spline_points;
   int num_parameters = num_spline_points * model->nu;
 
   // cache old gradient
@@ -419,7 +423,7 @@ void SampleGradientPlanner::GradientCandidates(int num_trajectory, int num_gradi
     }
   }
 
-  // gradient
+  // Init [gradient] with [noise] (from AddNoiseToPolicy()) scaled by [return_weight_]/num_noisy
   std::fill(gradient.begin(), gradient.end(), 0.0);
   for (int i = 0; i < num_noisy; i++) {
     double* noisei = noise.data() + trajectory_order[i] * (model->nu * kMaxTrajectoryHorizon);
@@ -432,26 +436,30 @@ void SampleGradientPlanner::GradientCandidates(int num_trajectory, int num_gradi
     LogScale(step_size_.data(), gradient_max_step_size, gradient_min_step_size, num_gradient);
   }
 
-  // gradient filter gf * grad + (1 - gf) * grad_prev
+  // gradient filter
   double gradient_filter = gradient_filter_;
 
+  // candidate_policy_i[gf * grad + (1 - gf) * grad_prev]
   // compute candidate policies along gradient direction
   // these candidates will be evaluated at the next planning iteration
   for (int i = num_noisy; i < num_trajectory; i++) {
-    // copy nominal policy
-    candidate_policy[i].CopyFrom(resampled_policy, num_spline_points);
+    // copy [nominal_policy] -> [ candidate_policy[i]]
+    auto& candidate_policy_i = candidate_policy[i];
+    candidate_policy_i.CopyFrom(nominal_policy, num_spline_points);
 
     // scaling
     double scaling = step_size_[i - num_noisy] / noise_exploration;
 
     // gradient step
-    for (int t = 0; t < candidate_policy[i].plan.Size(); t++) {
-      TimeSpline::Node n = candidate_policy[i].plan.NodeAt(t);
+    for (int t = 0; t < candidate_policy_i.plan.Size(); t++) {
+      TimeSpline::Node n = candidate_policy_i.plan.NodeAt(t);
       mju_addToScl(n.values().data(), gradient.data() + t * model->nu, -scaling * gradient_filter, model->nu);
 
       // TODO(taylor): resample the gradient_previous?
+      // [gradient_previous] takes value from [gradient], which is noise-added above
       mju_addToScl(n.values().data(), gradient_previous.data() + t * model->nu,
                    -scaling * (1.0 - gradient_filter), model->nu);
+
       // clamp parameters
       Clamp(n.values().data(), model->actuator_ctrlrange, model->nu);
     }
