@@ -32,6 +32,9 @@
 
 namespace mjpc {
 
+// Refs:
+// https://github.com/google-deepmind/mujoco_mpc/pull/273
+// https://arxiv.org/abs/1703.03864
 class SampleGradientPlanner : public Planner {
 public:
   // constructor
@@ -104,7 +107,7 @@ public:
   // policy
   SamplingPolicy policy;  // (Guarded by mtx_)
   SamplingPolicy candidate_policy[kMaxTrajectory];
-  SamplingPolicy resampled_policy;
+  SamplingPolicy nominal_policy;
   SamplingPolicy previous_policy;
 
   // scratch

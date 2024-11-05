@@ -101,12 +101,13 @@ public:
   // policy
   SamplingPolicy policy;  // (Guarded by mtx_)
   SamplingPolicy candidate_policy[kMaxTrajectory];
-  SamplingPolicy resampled_policy;
+  SamplingPolicy nominal_policy;
   SamplingPolicy previous_policy;
 
   // scratch
   std::vector<double> parameters_scratch;
   std::vector<double> times_scratch;
+  void UpdatePolicyWithScratch(SamplingPolicy& in_policy);
 
   // trajectories
   TrajectoryPtr nominal_trajectory = std::make_shared<Trajectory>();
@@ -115,9 +116,9 @@ public:
   std::vector<int> trajectory_order;
 
   // ----- noise ----- //
-  double std_initial_;  // standard deviation for sampling normal: N(0,
-                        // std)
-  double std_min_;      // the minimum allowable std
+  double std_initial_;           // standard deviation for sampling normal: N(0,
+                                 // std)
+  double std_min_;               // the minimum allowable std
   double explore_fraction_ = 0;  // fraction of trajectories that will use
                                  // std_initial instead of the variance from CEM
   std::vector<double> noise;

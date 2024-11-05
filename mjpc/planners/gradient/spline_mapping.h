@@ -15,16 +15,17 @@
 #ifndef MJPC_PLANNERS_GRADIENT_SPLINE_MAPPING_H_
 #define MJPC_PLANNERS_GRADIENT_SPLINE_MAPPING_H_
 
+#include <mujoco/mujoco.h>
+
 #include <vector>
 
-#include <mujoco/mujoco.h>
 #include "mjpc/utilities.h"
 
 namespace mjpc {
 
 // ----- spline constants ----- //
 inline constexpr int kMinGradientSplinePoints = 1;
-inline constexpr int kMaxGradientSplinePoints = 25;
+inline constexpr int kMaxGradientSplinePoints = 200;
 
 // matrix representation for mapping between spline points and interpolated time
 // series.
@@ -47,7 +48,7 @@ inline constexpr int kMaxGradientSplinePoints = 25;
 // other, A*v gives the corresponding interpolated values, sampled at
 // output_times.
 class SplineMapping {
- public:
+public:
   // constructor
   SplineMapping() {}
 
@@ -60,16 +61,19 @@ class SplineMapping {
   virtual void Allocate(int dim) = 0;
 
   // compute mapping
-  virtual void Compute(const std::vector<double>& input_times, int num_input,
-                       const double* output_times, int num_output) = 0;
+  virtual void Compute(const std::vector<double>& input_times, int num_input, const double* output_times,
+                       int num_output) = 0;
 
   // return mapping
-  virtual double* Get() = 0;
+  virtual double* Get() { return mapping.data(); }
+
+  std::vector<double> mapping;
+  int dim;
 };
 
 // zero-order-hold mapping
 class ZeroSplineMapping : public SplineMapping {
- public:
+public:
   // constructor
   ZeroSplineMapping() {}
 
@@ -81,20 +85,13 @@ class ZeroSplineMapping : public SplineMapping {
   void Allocate(int dim);
 
   // compute mapping
-  void Compute(const std::vector<double>& input_times, int num_input,
-               const double* output_times, int num_output);
-
-  // return mapping
-  double* Get() { return mapping.data(); }
-
-  // ----- members ----- //
-  std::vector<double> mapping;
-  int dim;
+  void Compute(const std::vector<double>& input_times, int num_input, const double* output_times,
+               int num_output);
 };
 
 // linear-interpolation mapping
 class LinearSplineMapping : public SplineMapping {
- public:
+public:
   // constructor
   LinearSplineMapping() {}
 
@@ -107,20 +104,13 @@ class LinearSplineMapping : public SplineMapping {
   void Allocate(int dim);
 
   // compute mapping
-  void Compute(const std::vector<double>& input_times, int num_input,
-               const double* output_times, int num_output);
-
-  // return mapping
-  double* Get() { return mapping.data(); }
-
-  // ----- members ----- //
-  std::vector<double> mapping;
-  int dim;
+  void Compute(const std::vector<double>& input_times, int num_input, const double* output_times,
+               int num_output);
 };
 
 // cubic-interpolation mapping
 class CubicSplineMapping : public SplineMapping {
- public:
+public:
   // constructor
   CubicSplineMapping() {}
 
@@ -133,17 +123,12 @@ class CubicSplineMapping : public SplineMapping {
   void Allocate(int dim);
 
   // compute mapping
-  void Compute(const std::vector<double>& input_times, int num_input,
-               const double* output_times, int num_output);
-
-  // return mapping
-  double* Get() { return mapping.data(); }
+  void Compute(const std::vector<double>& input_times, int num_input, const double* output_times,
+               int num_output);
 
   // ----- members ----- //
-  std::vector<double> mapping;
   std::vector<double> point_slope_mapping;
   std::vector<double> output_mapping;
-  int dim;
 };
 
 }  // namespace mjpc
