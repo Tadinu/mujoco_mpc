@@ -15,9 +15,10 @@
 #ifndef MJPC_PLANNERS_GRADIENT_POLICY_H_
 #define MJPC_PLANNERS_GRADIENT_POLICY_H_
 
+#include <mujoco/mujoco.h>
+
 #include <vector>
 
-#include <mujoco/mujoco.h>
 #include "mjpc/planners/policy.h"
 #include "mjpc/spline/spline.h"
 #include "mjpc/task.h"
@@ -26,7 +27,7 @@ namespace mjpc {
 
 // policy for gradient descent planner
 class GradientPolicy : public Policy {
- public:
+public:
   // constructor
   GradientPolicy() = default;
 
@@ -39,19 +40,18 @@ class GradientPolicy : public Policy {
   void Allocate(const mjModel* model, const Task& task, int horizon) override;
 
   // reset memory to zeros
-  void Reset(int horizon,
-             const double* initial_repeated_action = nullptr) override;
+  void Reset(int horizon, const double* initial_repeated_action = nullptr) override;
 
   // compute action from policy
   // state is not used
-  void Action(double* action, const double* state, double time) const override;
+  void Action(double* action, const double* state, double time,
+              const std::vector<int>& indices = {}) const override;
 
   // copy policy
   void CopyFrom(const GradientPolicy& policy, int horizon);
 
   // copy parameters
-  void CopyParametersFrom(const std::vector<double>& src_parameters,
-                          const std::vector<double>& src_times);
+  void CopyParametersFrom(const std::vector<double>& src_parameters, const std::vector<double>& src_times);
 
   // ----- members ----- //
   const mjModel* model;

@@ -71,7 +71,8 @@ void iLQGPolicy::Reset(int horizon, const double* initial_repeated_action) {
 }
 
 // set action from policy
-void iLQGPolicy::Action(double* action, const double* state, double time) const {
+void iLQGPolicy::Action(double* action, const double* state, double time,
+                        const std::vector<int>& indices) const {
   // dimension
   int dim_state = model->nq + model->nv + model->na;
   int dim_state_derivative = 2 * model->nv + model->na;

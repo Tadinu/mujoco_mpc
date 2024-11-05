@@ -16,6 +16,7 @@
 #define MJPC_PLANNERS_SAMPLING_POLICY_H_
 
 #include <mujoco/mujoco.h>
+
 #include "mjpc/planners/policy.h"
 #include "mjpc/spline/spline.h"
 #include "mjpc/task.h"
@@ -24,7 +25,7 @@ namespace mjpc {
 
 // policy for sampling planner
 class SamplingPolicy : public Policy {
- public:
+public:
   // constructor
   SamplingPolicy() = default;
 
@@ -37,11 +38,11 @@ class SamplingPolicy : public Policy {
   void Allocate(const mjModel* model, const Task& task, int horizon) override;
 
   // reset memory to zeros
-  void Reset(int horizon,
-             const double* initial_repeated_action = nullptr) override;
+  void Reset(int horizon, const double* initial_repeated_action = nullptr) override;
 
   // set action from policy
-  void Action(double* action, const double* state, double time) const override;
+  void Action(double* action, const double* state, double time,
+              const std::vector<int>& indices = {}) const override;
 
   // copy policy
   void CopyFrom(const SamplingPolicy& policy, int horizon);
