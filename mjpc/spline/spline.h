@@ -15,15 +15,15 @@
 #ifndef MJPC_MJPC_SPLINE_SPLINE_H_
 #define MJPC_MJPC_SPLINE_SPLINE_H_
 
+#include <absl/log/check.h>
+#include <absl/types/span.h>
+
 #include <array>
 #include <cstddef>
 #include <deque>
 #include <iterator>
 #include <type_traits>
 #include <vector>
-
-#include <absl/log/check.h>
-#include <absl/types/span.h>
 
 namespace mjpc::spline {
 
@@ -33,16 +33,13 @@ enum SplineInterpolation : int {
   kCubicSpline,
 };
 
-
 // Represents a spline where values are interpolated based on time.
 // Allows updating the spline by adding new future points, or removing old
 // nodes.
 // This class is not thread safe and requires locking to use.
 class TimeSpline {
- public:
-  explicit TimeSpline(int dim = 0,
-                      SplineInterpolation interpolation = kZeroSpline,
-                      int initial_capacity = 1);
+public:
+  explicit TimeSpline(int dim = 0, SplineInterpolation interpolation = kZeroSpline, int initial_capacity = 1);
 
   // Copyable, Movable.
   TimeSpline(const TimeSpline& other) = default;
@@ -55,10 +52,9 @@ class TimeSpline {
   // views of the data.
   template <typename T>
   class NodeT {
-   public:
+  public:
     NodeT() : time_(0) {};
-    NodeT(double time, T* values, int dim)
-        : time_(time), values_(values, dim) {}
+    NodeT(double time, T* values, int dim) : time_(time), values_(values, dim) {}
 
     // Copyable, Movable.
     NodeT(const NodeT& other) = default;
@@ -74,7 +70,7 @@ class TimeSpline {
     // constant.
     absl::Span<T> values() const { return values_; }
 
-   private:
+  private:
     double time_;
     absl::Span<T> values_;
   };
@@ -87,15 +83,14 @@ class TimeSpline {
   // NodeType is Node or ConstNode.
   template <typename SplineType, typename NodeType>
   class IteratorT {
-   public:
+  public:
     using iterator_category = std::random_access_iterator_tag;
     using value_type = typename std::remove_cv_t<NodeType>;
     using difference_type = int;
     using pointer = NodeType*;
     using reference = NodeType&;
 
-    IteratorT(SplineType* spline = nullptr, int index = 0)
-        : spline_(spline), index_(index) {
+    IteratorT(SplineType* spline = nullptr, int index = 0) : spline_(spline), index_(index) {
       if (spline_ != nullptr && index_ != spline->Size()) {
         node_ = spline->NodeAt(index_);
       }
@@ -139,8 +134,7 @@ class TimeSpline {
     IteratorT& operator+=(difference_type n) {
       if (n != 0) {
         index_ += n;
-        node_ =
-            index_ == spline_->Size() ? NodeType() : spline_->NodeAt(index_);
+        node_ = index_ == spline_->Size() ? NodeType() : spline_->NodeAt(index_);
       }
       return *this;
     }
@@ -159,13 +153,10 @@ class TimeSpline {
       return tmp;
     }
 
-    friend IteratorT operator+(difference_type n, const IteratorT& it) {
-      return it + n;
-    }
+    friend IteratorT operator+(difference_type n, const IteratorT& it) { return it + n; }
 
     friend difference_type operator-(const IteratorT& x, const IteratorT& y) {
-      CHECK_EQ(x.spline_, y.spline_)
-          << "Comparing iterators from different splines";
+      CHECK_EQ(x.spline_, y.spline_) << "Comparing iterators from different splines";
       if (x != y) return (x.index_ - y.index_);
       return 0;
     }
@@ -176,29 +167,20 @@ class TimeSpline {
       return x.spline_ == y.spline_ && x.index_ == y.index_;
     }
 
-    friend bool operator!=(const IteratorT& x, const IteratorT& y) {
-      return !(x == y);
-    }
+    friend bool operator!=(const IteratorT& x, const IteratorT& y) { return !(x == y); }
 
     friend bool operator<(const IteratorT& x, const IteratorT& y) {
-      CHECK_EQ(x.spline_, y.spline_)
-          << "Comparing iterators from different splines";
+      CHECK_EQ(x.spline_, y.spline_) << "Comparing iterators from different splines";
       return x.index_ < y.index_;
     }
 
-    friend bool operator>(const IteratorT& x, const IteratorT& y) {
-      return y < x;
-    }
+    friend bool operator>(const IteratorT& x, const IteratorT& y) { return y < x; }
 
-    friend bool operator<=(const IteratorT& x, const IteratorT& y) {
-      return !(y < x);
-    }
+    friend bool operator<=(const IteratorT& x, const IteratorT& y) { return !(y < x); }
 
-    friend bool operator>=(const IteratorT& x, const IteratorT& y) {
-      return !(x < y);
-    }
+    friend bool operator>=(const IteratorT& x, const IteratorT& y) { return !(x < y); }
 
-   private:
+  private:
     SplineType* spline_ = nullptr;
     int index_ = 0;
     NodeType node_;
@@ -209,7 +191,6 @@ class TimeSpline {
 
   // Returns the number of nodes in the spline.
   std::size_t Size() const;
-
 
   // Returns the node at the given index, sorted by time. Any calls that mutate
   // the spline will invalidate the Node object.
@@ -234,9 +215,9 @@ class TimeSpline {
   void Reserve(int num_nodes);
 
   // Interpolates values based on time, writes results to `values`.
-  void Sample(double time, absl::Span<double> values) const;
+  void Sample(double time, absl::Span<double> values, const std::vector<int>& indices = {}) const;
   // Interpolates values based on time, returns a vector of length Dim.
-  std::vector<double> Sample(double time) const;
+  std::vector<double> Sample(double time, const std::vector<int>& indices = {}) const;
 
   // Removes any old nodes that have no effect on the values at time `time`.
   // Returns the number of nodes removed.
@@ -256,9 +237,8 @@ class TimeSpline {
   Node AddNode(double time);
   Node AddNode(double time, absl::Span<const double> values);
 
- private:
-  std::array<double, 4> CubicCoefficients(double time,
-                                          int lower_node_index) const;
+private:
+  std::array<double, 4> CubicCoefficients(double time, int lower_node_index) const;
   double Slope(int node_index, int value_index) const;
   SplineInterpolation interpolation_;
 

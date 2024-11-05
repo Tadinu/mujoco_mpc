@@ -14,20 +14,22 @@
 
 #include "mjpc/spline/spline.h"
 
+#include <absl/log/check.h>
+#include <absl/log/log.h>
+#include <absl/types/span.h>
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
 #include <utility>
 #include <vector>
 
-#include <absl/log/check.h>
-#include <absl/log/log.h>
-#include <absl/types/span.h>
+// MJPC
+#include "mjpc/utilities.h"
 
 namespace mjpc::spline {
 
-TimeSpline::TimeSpline(int dim, SplineInterpolation interpolation,
-                       int initial_capacity)
+TimeSpline::TimeSpline(int dim, SplineInterpolation interpolation, int initial_capacity)
     : interpolation_(interpolation), dim_(dim) {
   values_.resize(initial_capacity * dim);  // Reserve space for node values
 }
@@ -52,26 +54,18 @@ TimeSpline::ConstNode TimeSpline::NodeAt(int index) const {
   return ConstNode(times_[index], values_.data() + values_index_, dim_);
 }
 
-TimeSpline::iterator TimeSpline::begin() {
-  return TimeSpline::iterator(this, 0);
-}
+TimeSpline::iterator TimeSpline::begin() { return TimeSpline::iterator(this, 0); }
 
-TimeSpline::iterator TimeSpline::end() {
-  return TimeSpline::iterator(this, times_.size());
-}
+TimeSpline::iterator TimeSpline::end() { return TimeSpline::iterator(this, times_.size()); }
 
-TimeSpline::const_iterator TimeSpline::cbegin() const {
-  return TimeSpline::const_iterator(this, 0);
-}
+TimeSpline::const_iterator TimeSpline::cbegin() const { return TimeSpline::const_iterator(this, 0); }
 
 TimeSpline::const_iterator TimeSpline::cend() const {
   return TimeSpline::const_iterator(this, times_.size());
 }
 
 // Set Interpolation
-void TimeSpline::SetInterpolation(SplineInterpolation interpolation) {
-  interpolation_ = interpolation;
-}
+void TimeSpline::SetInterpolation(SplineInterpolation interpolation) { interpolation_ = interpolation; }
 
 SplineInterpolation TimeSpline::Interpolation() const { return interpolation_; }
 
@@ -90,8 +84,7 @@ void TimeSpline::Reserve(int num_nodes) {
   } else {
     std::vector<double> new_values(num_nodes * dim_);
     // Copy all existing values to the start of the new vector
-    std::copy(values_.begin() + values_begin_, values_.end(),
-              new_values.begin());
+    std::copy(values_.begin() + values_begin_, values_.end(), new_values.begin());
     std::copy(values_.begin(), values_.begin() + values_end_,
               new_values.begin() + values_.size() - values_begin_);
     values_ = std::move(new_values);
@@ -100,11 +93,9 @@ void TimeSpline::Reserve(int num_nodes) {
   }
 }
 
-void TimeSpline::Sample(double time, absl::Span<double> values) const {
-  CHECK_EQ(values.size(), dim_)
-      << "Tried to sample " << values.size()
-      << " values, but the dimensionality of the spline is " << dim_;
-
+void TimeSpline::Sample(double time, absl::Span<double> values, const std::vector<int>& indices) const {
+  CHECK_EQ(values.size(), dim_) << "Tried to sample " << values.size()
+                                << " values, but the dimensionality of the spline is " << dim_;
   if (times_.empty()) {
     std::fill(values.begin(), values.end(), 0.0);
     return;
@@ -128,25 +119,26 @@ void TimeSpline::Sample(double time, absl::Span<double> values) const {
   ConstNode upper_node = NodeAt(upper - times_.begin());
   switch (interpolation_) {
     case SplineInterpolation::kZeroSpline:
-      std::copy(lower_node.values().begin(), lower_node.values().end(),
-                values.begin());
+      std::copy(lower_node.values().begin(), lower_node.values().end(), values.begin());
       return;
     case SplineInterpolation::kLinearSpline:
       for (int i = 0; i < dim_; i++) {
-        values[i] =
-            lower_node.values().at(i) * (1 - t) + upper_node.values().at(i) * t;
+        if (mjpc::IsSelectedControl(indices, i)) {
+          values[i] = lower_node.values().at(i) * (1 - t) + upper_node.values().at(i) * t;
+        }
       }
       return;
     case SplineInterpolation::kCubicSpline: {
-      std::array<double, 4> coefficients =
-          CubicCoefficients(time, lower - times_.begin());
+      std::array<double, 4> coefficients = CubicCoefficients(time, lower - times_.begin());
       for (int i = 0; i < dim_; i++) {
-        double p0 = lower_node.values().at(i);
-        double m0 = Slope(lower - times_.begin(), i);
-        double m1 = Slope(upper - times_.begin(), i);
-        double p1 = upper_node.values().at(i);
-        values[i] = coefficients[0] * p0 + coefficients[1] * m0 +
-                    coefficients[2] * p1 + coefficients[3] * m1;
+        if (mjpc::IsSelectedControl(indices, i)) {
+          double p0 = lower_node.values().at(i);
+          double m0 = Slope(lower - times_.begin(), i);
+          double m1 = Slope(upper - times_.begin(), i);
+          double p1 = upper_node.values().at(i);
+          values[i] =
+              coefficients[0] * p0 + coefficients[1] * m0 + coefficients[2] * p1 + coefficients[3] * m1;
+        }
       }
       return;
     }
@@ -155,9 +147,9 @@ void TimeSpline::Sample(double time, absl::Span<double> values) const {
   }
 }
 
-std::vector<double> TimeSpline::Sample(double time) const {
+std::vector<double> TimeSpline::Sample(double time, const std::vector<int>& indices) const {
   std::vector<double> values(dim_);
-  Sample(time, absl::MakeSpan(values));
+  Sample(time, absl::MakeSpan(values), indices);
   return values;
 }
 
@@ -210,8 +202,7 @@ TimeSpline::Node TimeSpline::AddNode(double time) {
   return AddNode(time, absl::Span<const double>());  // Default empty values
 }
 
-TimeSpline::Node TimeSpline::AddNode(double time,
-                                     absl::Span<const double> new_values) {
+TimeSpline::Node TimeSpline::AddNode(double time, absl::Span<const double> new_values) {
   CHECK(new_values.size() == dim_ || new_values.empty());
   // TODO(nimrod): Implement node insertion in the middle of the spline
   CHECK(times_.empty() || time > times_.back() || time < times_.front())
@@ -247,8 +238,7 @@ TimeSpline::Node TimeSpline::AddNode(double time,
   return new_node;
 }
 
-std::array<double, 4> TimeSpline::CubicCoefficients(
-    double time, int lower_node_index) const {
+std::array<double, 4> TimeSpline::CubicCoefficients(double time, int lower_node_index) const {
   std::array<double, 4> coefficients;
   int upper_node_index = lower_node_index + 1;
   CHECK(upper_node_index != times_.size())
@@ -257,11 +247,10 @@ std::array<double, 4> TimeSpline::CubicCoefficients(
   double upper = times_[upper_node_index];
   double t = (time - lower) / (upper - lower);
 
-  coefficients[0] = 2.0 * t*t*t - 3.0 * t*t + 1.0;
-  coefficients[1] =
-      (t*t*t - 2.0 * t*t + t) * (upper - lower);
-  coefficients[2] = -2.0 * t*t*t + 3 * t*t;
-  coefficients[3] = (t*t*t - t*t) * (upper - lower);
+  coefficients[0] = 2.0 * t * t * t - 3.0 * t * t + 1.0;
+  coefficients[1] = (t * t * t - 2.0 * t * t + t) * (upper - lower);
+  coefficients[2] = -2.0 * t * t * t + 3 * t * t;
+  coefficients[3] = (t * t * t - t * t) * (upper - lower);
 
   return coefficients;
 }
@@ -271,18 +260,14 @@ double TimeSpline::Slope(int node_index, int value_index) const {
   if (node_index == 0) {
     ConstNode next = NodeAt(node_index + 1);
     // one-sided finite-diff
-    return (next.values().at(value_index) - node.values().at(value_index)) /
-           (next.time() - node.time());
+    return (next.values().at(value_index) - node.values().at(value_index)) / (next.time() - node.time());
   }
   ConstNode prev = NodeAt(node_index - 1);
   if (node_index == times_.size() - 1) {
-    return (node.values().at(value_index) - prev.values().at(value_index)) /
-           (node.time() - prev.time());
+    return (node.values().at(value_index) - prev.values().at(value_index)) / (node.time() - prev.time());
   }
   ConstNode next = NodeAt(node_index + 1);
-  return 0.5 * (next.values().at(value_index) - node.values().at(value_index)) /
-             (next.time() - node.time()) +
-         0.5 * (node.values().at(value_index) - prev.values().at(value_index)) /
-             (node.time() - prev.time());
+  return 0.5 * (next.values().at(value_index) - node.values().at(value_index)) / (next.time() - node.time()) +
+         0.5 * (node.values().at(value_index) - prev.values().at(value_index)) / (node.time() - prev.time());
 }
 }  // namespace mjpc::spline

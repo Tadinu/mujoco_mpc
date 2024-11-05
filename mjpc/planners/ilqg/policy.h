@@ -42,7 +42,8 @@ public:
 
   // set action from policy
   // if state == nullptr, return the nominal action without a feedback term
-  void Action(double* action, const double* state, double time) const override;
+  void Action(double* action, const double* state, double time,
+              const std::vector<int>& indices = {}) const override;
 
   // copy policy
   void CopyFrom(const iLQGPolicy& policy, int horizon);
