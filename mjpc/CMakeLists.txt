@@ -49,8 +49,8 @@ set(LIB_MJPC_HEADERS
         utilities.h
         tasks/tasks.h
         casadi/casadi_common.h
-	casadi/casadi_function.h
-	tasks/acrobot/acrobot.h
+	    casadi/casadi_function.h
+	    tasks/acrobot/acrobot.h
         tasks/allegro/allegro.h
         tasks/bimanual/handover/handover.h
         tasks/bimanual/reorient/reorient.h
@@ -61,9 +61,12 @@ set(LIB_MJPC_HEADERS
         tasks/humanoid/walk/walk.h
         tasks/manipulation/common.h
         tasks/manipulation/manipulation.h
+        tasks/manipulation_x/common.h
+        tasks/manipulation_x/manipulation_x.h
         tasks/op3/stand.h
         tasks/panda/panda.h
         tasks/particle/particle.h
+        tasks/particle_x/particle_x.h
         tasks/planar_robot/planar_robot.h
         tasks/rubik/solve.h
         tasks/shadow_reorient/hand.h
@@ -182,9 +185,12 @@ add_library(
         tasks/humanoid/walk/walk.cc
         tasks/manipulation/common.cc
         tasks/manipulation/manipulation.cc
+        tasks/manipulation_x/common.cc
+        tasks/manipulation_x/manipulation_x.cc
         tasks/op3/stand.cc
         tasks/panda/panda.cc
         tasks/particle/particle.cc
+        tasks/particle_x/particle_x.cc
         tasks/planar_robot/planar_robot.cc
         tasks/rubik/solve.cc
         tasks/shadow_reorient/hand.cc

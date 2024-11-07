@@ -40,12 +40,15 @@ add_custom_target(
           ${CMAKE_CURRENT_BINARY_DIR}/humanoid/humanoid.xml
           <${CMAKE_CURRENT_SOURCE_DIR}/humanoid/humanoid.xml.patch
   # particle
-  #COMMAND ${CMAKE_COMMAND} -E copy
-  #        ${dm_control_SOURCE_DIR}/dm_control/suite/point_mass.xml
-  #        ${CMAKE_CURRENT_BINARY_DIR}/particle/particle.xml
-  #COMMAND patch -o ${CMAKE_CURRENT_BINARY_DIR}/particle/particle_modified.xml
-  #        ${CMAKE_CURRENT_BINARY_DIR}/particle/particle.xml
-  #        <${CMAKE_CURRENT_SOURCE_DIR}/particle/particle.xml.patch
+  COMMAND ${CMAKE_COMMAND} -E copy
+          ${dm_control_SOURCE_DIR}/dm_control/suite/point_mass.xml
+          ${CMAKE_CURRENT_BINARY_DIR}/particle/particle.xml
+  COMMAND patch -o ${CMAKE_CURRENT_BINARY_DIR}/particle/particle_modified.xml
+          ${CMAKE_CURRENT_BINARY_DIR}/particle/particle.xml
+          <${CMAKE_CURRENT_SOURCE_DIR}/particle/particle.xml.patch
+
+  # particle_x
+
   # swimmer
   COMMAND ${CMAKE_COMMAND} -E copy
           ${dm_control_SOURCE_DIR}/dm_control/suite/swimmer.xml
@@ -99,12 +102,12 @@ add_custom_target(
           ${CMAKE_CURRENT_BINARY_DIR}/quadruped/a1.xml
           <${CMAKE_CURRENT_SOURCE_DIR}/quadruped/a1.xml.patch
 
-  #COMMAND ${CMAKE_COMMAND} -E copy_directory
-  #        ${menagerie_SOURCE_DIR}/franka_emika_panda/assets
-  #        ${CMAKE_CURRENT_BINARY_DIR}/manipulation/assets
-  #COMMAND ${CMAKE_COMMAND} -E copy_directory
-  #        ${menagerie_SOURCE_DIR}/robotiq_2f85/assets
-  #        ${CMAKE_CURRENT_BINARY_DIR}/manipulation/assets
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${menagerie_SOURCE_DIR}/franka_emika_panda
+        ${CMAKE_CURRENT_BINARY_DIR}/manipulation
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${menagerie_SOURCE_DIR}/robotiq_2f85
+        ${CMAKE_CURRENT_BINARY_DIR}/manipulation
 
   COMMAND ${CMAKE_COMMAND} -E copy
           ${menagerie_SOURCE_DIR}/skydio_x2/x2.xml
@@ -196,9 +199,9 @@ add_custom_target(
           ${CMAKE_CURRENT_BINARY_DIR}/op3/op3.xml
           <${CMAKE_CURRENT_SOURCE_DIR}/op3/op3.xml.patch
 
-  #COMMAND ${Python_EXECUTABLE}
-  #        ${CMAKE_CURRENT_BINARY_DIR}/manipulation/merge_panda_robotiq.py
-  #        ${CMAKE_CURRENT_BINARY_DIR}/manipulation/panda_robotiq.xml
+  COMMAND ${Python_EXECUTABLE}
+          ${CMAKE_CURRENT_BINARY_DIR}/manipulation/merge_panda_robotiq.py
+          ${CMAKE_CURRENT_BINARY_DIR}/manipulation/panda_robotiq.xml
   COMMENT "Copying Menagerie and dm_control assets into binary directory")
 
 add_custom_target(copy_resources ALL

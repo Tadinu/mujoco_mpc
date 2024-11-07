@@ -30,10 +30,12 @@
 #include "mjpc/tasks/humanoid/tracking/tracking.h"
 #include "mjpc/tasks/humanoid/walk/walk.h"
 #include "mjpc/tasks/manipulation/manipulation.h"
+#include "mjpc/tasks/manipulation_x/manipulation_x.h"
 // DEEPMIND INTERNAL IMPORT
 #include "mjpc/tasks/op3/stand.h"
 #include "mjpc/tasks/panda/panda.h"
 #include "mjpc/tasks/particle/particle.h"
+#include "mjpc/tasks/particle_x/particle_x.h"
 #include "mjpc/tasks/quadrotor/quadrotor.h"
 #include "mjpc/tasks/quadruped/quadruped.h"
 #include "mjpc/tasks/rubik/solve.h"
@@ -45,10 +47,13 @@
 namespace mjpc {
 std::vector<std::shared_ptr<Task>> GetTasks() {
   return {
+      std::make_shared<manipulation_x::Bring>(),
       std::make_shared<manipulation::Bring>(),
       std::make_shared<PlanarRobot>(),
       std::make_shared<Particle>(),
       std::make_shared<ParticleFixed>(),
+      std::make_shared<ParticleX>(),
+      std::make_shared<ParticleXFixed>(),
       std::make_shared<Acrobot>(),
       std::make_shared<Allegro>(),
       std::make_shared<aloha::Handover>(),
