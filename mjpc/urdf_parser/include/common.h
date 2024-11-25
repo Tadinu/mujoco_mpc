@@ -4,10 +4,11 @@
 #include <memory>
 #include <string>
 #include <vector>
-#ifndef M_PI
-#define M_PI 3.141592538
-#endif  // M_PI
 
+// MuJoCo
+#include <mujoco/mujoco.h>
+
+// Mjpc
 #include "absl/strings/ascii.h"
 #include "mjpc/urdf_parser/include/exception.h"
 #include "mjpc/urdf_parser/include/txml.h"
@@ -34,9 +35,11 @@ struct Vector3 {
   Vector3() = default;
   explicit Vector3(const std::vector<double>& xyz) : x(xyz[0]), y(xyz[1]), z(xyz[2]) {}
   Vector3(double x, double y, double z) : x(x), y(y), z(z) {}
-  Vector3(const Vector3& other) : x(other.x), y(other.y), z(other.z) {}
+  Vector3(const Vector3& other) = default;
+  explicit Vector3(const mjtNum mj_pos[3]) : x(mj_pos[0]), y(mj_pos[1]), z(mj_pos[2]) {}
 
   Vector3 operator+(const Vector3& other) const;
+  void operator+=(const Vector3& other) { *this = *this + other; }
   Vector3 operator*(double scale) const;
   friend Vector3 operator*(const double scale, const Vector3& v) { return v * scale; }
   double operator[](const int idx) const { return (idx == 0) ? x : (idx == 1) ? y : (idx == 2) ? z : -1; }
@@ -76,17 +79,18 @@ struct Rotation {
   Rotation operator*(const Rotation& other) const;
   Vector3 operator*(const Vector3& vec) const;
 
-  double operator[](const int idx) const {
-    return (idx == 0) ? rpy.x : (idx == 1) ? rpy.y : (idx == 2) ? rpy.z : -1;
-  }
+  double operator[](const int idx) const { return rpy[idx]; }
 
   Rotation() = default;
   Rotation(const double x, const double y, const double z, const double w) : x(x), y(y), z(z), w(w) {
     set_rpy();
   }
-
   Rotation(const Rotation& other) : x(other.x), y(other.y), z(other.z), w(other.w) { set_rpy(); }
+  explicit Rotation(const mjtNum mj_pos[4]) : x(mj_pos[1]), y(mj_pos[2]), z(mj_pos[3]), w(mj_pos[0]) {
+    set_rpy();
+  }
 
+  std::vector<double> to_quat() const { return {w, x, y, z}; }
   std::string to_string() const { return rpy.to_string(); }
 
   static Rotation fromRpy(double roll, double pitch, double yaw);
@@ -110,7 +114,7 @@ struct Color {
   Color() = default;
   Color(float r, float g, float b, float a) : r(r), g(g), b(b), a(a) {}
 
-  Color(const Color& other) : r(other.r), g(other.g), b(other.b), a(other.a) {}
+  explicit Color(const Color& other) : r(other.r), g(other.g), b(other.b), a(other.a) {}
 
   static Color fromColorStr(const std::string& vector_str);
 };
@@ -124,9 +128,13 @@ struct Transform {
     this->rotation.clear();
   };
 
-  Transform() = default;
-  Transform(const Transform& other) : position(other.position), rotation(other.rotation) {}
-
+  Transform operator*(const Transform& other) const {
+    mjtNum pos[3];
+    mjtNum quat[4];
+    mju_mulPose(pos, quat, position.to_vector().data(), rotation.to_quat().data(),
+                other.position.to_vector().data(), other.rotation.to_quat().data());
+    return Transform{.position = Vector3(pos), .rotation = Rotation(quat)};
+  }
   static Transform fromXml(TiXmlElement* xml);
 };
 

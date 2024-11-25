@@ -14,6 +14,7 @@ struct FabPose {
   std::vector<double> pos;
   std::vector<double> rot;  // rpy
   bool empty() const { return pos.empty() && rot.empty(); }
+  static FabPose zeros(int n) { return {.pos = std::vector(n, 0.), .rot = std::vector(n, 0.)}; }
 };
 
 struct FabDynamicsState {

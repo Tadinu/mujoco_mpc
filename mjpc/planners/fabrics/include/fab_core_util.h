@@ -134,6 +134,17 @@ static bool has_collection_element_if(const TCollection& collection, const TPred
   return std::find_if(collection.begin(), collection.end(), pred) != collection.end();
 }
 
+template <typename TCollection>
+static TCollection get_subcollection(const TCollection& collection, const std::vector<int>& indices = {}) {
+  if (indices.empty()) {
+    return collection;
+  }
+  TCollection subcollection;
+  std::transform(indices.begin(), indices.end(), std::back_inserter(subcollection),
+                 [&collection](int index) { return collection.at(index); });
+  return subcollection;
+}
+
 template <typename T>
 static std::string join(const std::vector<T>& inputs, const std::string& delimiter = ",") {
   std::string result;

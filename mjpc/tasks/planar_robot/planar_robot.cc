@@ -16,7 +16,7 @@ namespace mjpc {
 std::string PlanarRobot::XmlPath() const { return GetModelPath("planar_robot/task_timevarying.xml"); }
 std::string PlanarRobot::Name() const { return "PlanarRobot"; }
 
-std::string PlanarRobot::URDFPath() const { return mjpc::GetModelPath("planar_robot/planar_2dof.urdf"); }
+std::string PlanarRobot::MJCFPath() const { return mjpc::GetModelPath("planar_robot/planar_2dof.xml"); }
 
 void PlanarRobot::ResidualFn::Residual(const mjModel* model, const mjData* data, double* residual) const {}
 

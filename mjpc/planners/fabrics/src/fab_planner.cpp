@@ -40,7 +40,9 @@ void FabPlanner::InitTaskFabrics() {
   config_ = tuning_on_ ? FabPlannerConfig::get_symbolic_config() : task_->GetFabricsConfig();
 
   // 2- Robot, resetting [vars_, geometry_, target_velocity_] here-in!
-  init_robot("robot", dim_action_, task_->URDFPath(), task_->GetBaseBodyName(), task_->GetEndtipNames(),
+  const auto urdf_path = task_->URDFPath();
+  const auto robot_model_path = urdf_path.empty() ? task_->MJCFPath() : urdf_path;
+  init_robot("robot", dim_action_, robot_model_path, task_->GetBaseBodyName(), task_->GetEndtipNames(),
              config_);
 
   // 3- Goal
@@ -78,14 +80,17 @@ void FabPlanner::SetGoalArguments() {
     const auto& pos = valid_goal_state ? desired_goal_state.pose.pos : desired_goal_state.default_lin;
     const auto& vel = valid_goal_state ? desired_goal_state.linear_vel : desired_goal_state.default_lin;
     const auto& acc = valid_goal_state ? desired_goal_state.linear_acc : desired_goal_state.default_lin;
+
+    const auto& indices = sub_goal->indices();
+
     if (task_->IsGoalFixed()) {
-      arguments_.insert_or_assign("x_goal_" + i_str, pos);
+      arguments_["x_goal_" + i_str] = fab_core::get_subcollection(pos, indices);
     } else {
-      arguments_.insert_or_assign("x_ref_goal_" + i_str + "_leaf", pos);
-      arguments_.insert_or_assign("xdot_ref_goal_" + i_str + "_leaf", vel);
-      arguments_.insert_or_assign("xddot_ref_goal_" + i_str + "_leaf", acc);
+      arguments_["x_ref_goal_" + i_str + "_leaf"] = fab_core::get_subcollection(pos, indices);
+      arguments_["xdot_ref_goal_" + i_str + "_leaf"] = fab_core::get_subcollection(vel, indices);
+      arguments_["xddot_ref_goal_" + i_str + "_leaf"] = fab_core::get_subcollection(acc, indices);
     }
-    arguments_.insert_or_assign("weight_goal_" + i_str, sub_goal->cfg_.weight);
+    arguments_["weight_goal_" + i_str] = sub_goal->cfg_.weight;
   }
 }
 
@@ -172,7 +177,7 @@ void FabPlanner::SetTuningArguments(const FabParamWeightDict& params) {
       arguments_[fconstraint_prop_name("k_plane_fin_", link_name, i)] = fetch_param("k_plane_fin");
       arguments_[fconstraint_prop_name("exp_plane_fin_", link_name, i)] = fetch_param("exp_plane_fin");
     }  // End plane constraints
-  }    // End collision link names
+  }  // End collision link names
 
   // Sundries
   arguments_["base_inertia"] = fetch_param("base_inertia");

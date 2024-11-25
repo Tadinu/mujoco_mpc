@@ -112,13 +112,14 @@ void UrdfModel::findRoot(const map<string, string>& parent_link_tree) {
         root_link = get_link(link_name);
       } else {
         ostringstream error_msg;
-        error_msg << "Error! Multiple root links found: (" << root_link->name << ") and (" + link_name + ")!";
+        error_msg << "Error! Multiple root links found: (" << root_link->name << ") and ("
+                  << link_name + ")!";
         throw URDFParseError(error_msg.str());
       }
     }
   }
   if (root_link == nullptr) {
-    throw URDFParseError("Error! No root link found. The urdf does not contain a valid link tree.");
+    throw URDFParseError("Error! No root link found. The model does not contain a valid link tree.");
   }
 }
 
@@ -143,7 +144,7 @@ bool UrdfModel::fromUrdfStr(const std::string& xml_string) {
   // xml_doc.Print();
   TiXmlElement* robot_xml = xml_doc.RootElement();
   if (robot_xml == nullptr || robot_xml->ValueStr() != "robot") {
-    std::string error_msg = "Error! Could not find the <robot> element in the xml file";
+    std::string error_msg = "Error! Could not find the <robot> element in the URDF file";
     throw URDFParseError(error_msg);
   }
 
@@ -218,36 +219,46 @@ bool UrdfModel::fromUrdfStr(const std::string& xml_string) {
       joint_map[joint->name] = joint;
       joint_list.push_back(joint);
 
-      // [parent_name_map]
-      const auto& child_link_name = joint->child_link_name;
-      parent_name_map[child_link_name] = JointLinkNamePair{joint->name, joint->parent_link_name};
-
-      // [child_name_map]
-      const auto& parent_link_name = joint->parent_link_name;
-      if (child_name_map.contains(parent_link_name)) {
-        child_name_map[parent_link_name].emplace_back(joint->name, child_link_name);
-      } else {
-        child_name_map[parent_link_name] = {JointLinkNamePair{joint->name, child_link_name}};
-      }
+      // link-joint name map
+      init_link_joint_name_map(joint);
     }
   }
 
-  std::map<std::string, std::string> parent_link_tree;
-  init_link_tree(parent_link_tree);
-  findRoot(parent_link_tree);
-  {
-    // 1-
-    init_active_joints();
-    // 2-
-    init_actuated_joint_names();
-    // 3-
-    init_joint_name_map();
-  }
+  // parent link tree
+  init_parent_link_tree();
 
 #if URDF_MODEL_DEBUG_LOG
   print_self();
 #endif
   return true;
+}
+
+void UrdfModel::init_parent_link_tree() {
+  std::map<std::string, std::string> parent_link_tree;
+  init_link_tree(parent_link_tree);
+  findRoot(parent_link_tree);
+  {
+    // 1- [active_joint_names]
+    init_active_joints();
+    // 2- [actuated_joint_names]
+    init_actuated_joint_names();
+    // 3- [joint_name_map]
+    init_joint_name_map();
+  }
+}
+
+void UrdfModel::init_link_joint_name_map(const JointPtr& joint) {
+  // [parent_name_map]
+  const auto& child_link_name = joint->child_link_name;
+  parent_name_map[child_link_name] = JointLinkNamePair{joint->name, joint->parent_link_name};
+
+  // [child_name_map]
+  const auto& parent_link_name = joint->parent_link_name;
+  if (child_name_map.contains(parent_link_name)) {
+    child_name_map[parent_link_name].emplace_back(joint->name, child_link_name);
+  } else {
+    child_name_map[parent_link_name] = {JointLinkNamePair{joint->name, child_link_name}};
+  }
 }
 
 void UrdfModel::print_self() const {
@@ -288,6 +299,7 @@ std::vector<std::string> UrdfModel::get_chain(const std::string& base_name, cons
 }
 
 void UrdfModel::init_joint_name_map() {
+  joint_name_map.clear();
   int index = 0;
   for (const auto& joint_name : actuated_joint_names) {
     if (has_collection_element(active_joint_names, joint_name)) {
@@ -297,6 +309,7 @@ void UrdfModel::init_joint_name_map() {
 }
 
 void UrdfModel::init_actuated_joint_names() {
+  actuated_joint_names.clear();
   for (const auto& joint : joint_list) {
     if (has_collection_element(actuated_joint_types, joint->type)) {
       actuated_joint_names.push_back(joint->name);
@@ -305,10 +318,12 @@ void UrdfModel::init_actuated_joint_names() {
 }
 
 void UrdfModel::init_active_joints() {
+  // Fetch [active_joints_names] between [base_link, root_link] > [endtips]
+  active_joint_names.clear();
   for (const auto& endtip : endtip_names) {
     auto parent_link_name = endtip;
     while (!has_collection_element(vector{base_link_name, root_link->name}, parent_link_name)) {
-      const auto& [joint_name, link_name] = parent_name_map[parent_link_name];
+      const auto& [joint_name, link_name] = parent_name_map.at(parent_link_name);
       parent_link_name = link_name;
       active_joint_names.push_back(joint_name);
       if (parent_link_name == root_link->name) {

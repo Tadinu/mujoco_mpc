@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <thread>
 
+#include "fab_mjcf_forward_kinematics.h"
 #include "mjpc/planners/fabrics/include/fab_common.h"
 #include "mjpc/planners/fabrics/include/fab_config.h"
 #include "mjpc/planners/fabrics/include/fab_diff_map.h"
@@ -46,11 +47,12 @@ public:
   FabRobotPtr robot() const { return robot_; }
   mjpc::Task* task() const { return task_; }
 
-  void init_robot(std::string name, int dof, std::string urdf_path, std::string base_link_name,
+  void init_robot(std::string name, int dof, std::string robot_model_path, std::string base_link_name,
                   std::vector<std::string> endtip_names, FabPlannerConfigPtr config) {
     // NOTE: Always need to reset robot afresh regardless to renew its vars
-    robot_ = std::make_shared<FabRobot>(std::move(name), dof, std::move(urdf_path), std::move(base_link_name),
-                                        std::move(endtip_names), std::move(config));
+    robot_ =
+        std::make_shared<FabRobot>(std::move(name), dof, std::move(robot_model_path),
+                                   std::move(base_link_name), std::move(endtip_names), std::move(config));
     vars_ = robot_->vars();
     geometry_ = robot_->weighted_geometry();
     forced_geometry_ = nullptr;
@@ -539,6 +541,7 @@ public:
       const auto& subgoal = sub_goals[i];
       const auto fk_subgoal_pose = get_differential_map(subgoal);
       if (fab_core::is_casx_sparse(fk_subgoal_pose)) {
+        FAB_PRINT(fk_subgoal_pose);
         throw FabError(fk_subgoal_pose.get_str() + "must not be sparse");
       }
 
@@ -675,6 +678,12 @@ public:
     const auto urdf_fk = robot_ ? robot_->fk() : nullptr;
     return urdf_fk ? dynamic_pointer_cast<FabURDFForwardKinematics>(urdf_fk)->urdf_model()
                    : urdf::UrdfModel();
+  }
+
+  mjpc::MjcfModel RobotMJCFModel() const override {
+    const auto mjcf_fk = robot_ ? robot_->fk() : nullptr;
+    return mjcf_fk ? dynamic_pointer_cast<FabMJCFForwardKinematics>(mjcf_fk)->mjcf_model()
+                   : mjpc::MjcfModel();
   }
 
   // initialize data and settings
