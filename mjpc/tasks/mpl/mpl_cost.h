@@ -194,11 +194,17 @@ public:
   double L_Contacts() const {
     double cost = 0;
     for (const auto& [_, hand_part] : hand_parts_) {
-#if 1
+#if 0
+      // !NOTE: This is not smooth
       mjtNum dist[6];
-      cost += mj_geomDistance(mj_model_, mj_data_, hand_part->geom_id(), manip_obj_->geom_id(), 100, dist);
+      cost += pow(mj_geomDistance(mj_model_, mj_data_, hand_part->geom_id(), manip_obj_->geom_id(), 100, dist), 2);
 #else
-      cost += mju_dist3(hand_part->pose().position().data(), manip_obj_->pose().position().data());
+      if (0) {
+        cost += (hand_part->pose().position() - manip_obj_->project_point(hand_part->pose().position()))
+                    .squaredNorm();
+      } else {
+        cost += (hand_part->pose().position() - manip_obj_->pose().position()).squaredNorm();
+      }
 #endif
     }
     for (const auto& [_, contact_list] : hand_contacts_) {

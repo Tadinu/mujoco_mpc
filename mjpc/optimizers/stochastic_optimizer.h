@@ -188,17 +188,17 @@ struct RMSprop {
   TReal r;
 
   // hyperparameters
-  TReal a, e;
+  TReal w /* weight*/, e /*epsilon*/;
 
   // second moment
   TReal v;
 
-  RMSprop(TReal rate = 0.001, TReal alpha = 0.9, TReal epsilon = 1e-6)
-      : r(rate), a(alpha), e(epsilon), v(0.0) {}
+  RMSprop(TReal rate = 0.001, TReal weight = 0.9, TReal epsilon = 1e-6)
+      : r(rate), w(weight), e(epsilon), v(0.0) {}
 
   TReal operator()(TReal g /*grad*/) {
     // update moment
-    v = a * v + (1 - a) * g * g;
+    v = w * v + (1 - w) * g * g;
 
     // NB epsilon is intentionally placed outside sqrt
     // https://pytorch.org/docs/stable/generated/torch.optim.RMSprop.html

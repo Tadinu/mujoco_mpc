@@ -253,11 +253,12 @@ void GradientPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
     mappings[policy.representation]->Compute(nominal_policy.times, nominal_policy.num_spline_points,
                                              nominal_trajectory->times.data(),
                                              nominal_trajectory->horizon - 1);
-
+#if 1
     // compute [parameter_update] as total derivatives, from [nominal_policy]:[k]
     mju_mulMatTVec(nominal_policy.parameter_update.data(), mappings[policy.representation]->Get(),
                    nominal_policy.k.data(), model->nu * (nominal_trajectory->horizon - 1),
                    model->nu * nominal_policy.num_spline_points);
+#endif
 
     // stop timer
     gradient_time += GetDuration(gradient_start);
@@ -460,11 +461,26 @@ void GradientPlanner::Rollouts(int horizon, ThreadPool& pool) {
                    &mocap = this->mocap, horizon, &userdata = this->userdata]() {
       {
         const std::shared_lock<std::shared_mutex> lock(mtx_);
-        // scale improvement: [parameters] += [parameter_update] * [linesearch_steps]
         auto* parameters_i = candidate_policy_i.parameters.data();
         auto* parameters_update_i = candidate_policy_i.parameter_update.data();
+#if 0
+        // v = (w * v + (1 - w) * g^2);, where v: derivative or [nominal_policy.k]
+        const float w = 0.9;
+        const float r = 0.1;
+        const float e = 1e-6;
+        const int num = model->nu * candidate_policy_i.num_spline_points;
+        auto& v = candidate_policy_i.k;
+        for (auto k = 0; k < num; k++) {
+          auto& p_k = parameters_i[k];
+          auto& p_update_k = parameters_update_i[k];
+          p_k = w * p_k + (1 - w) * mju_pow(v[k], 2);
+          p_update_k = -r * v[k] / (mju_sqrt(p_k) + e);
+        }
+#else
+        // scale improvement: [parameters] += [parameter_update] * [linesearch_steps]
         mju_addScl(parameters_i, parameters_i, parameters_update_i, linesearch_steps_i,
                    model->nu * candidate_policy_i.num_spline_points);
+#endif
 
 #if MJPC_GRADIENT_PLANNER_USE_CEM
         cross_entropy_sampler.AddNoiseToPolicy(candidate_policy_i, i);
