@@ -15,7 +15,9 @@
 #include "mjpc/casadi/casadi_common.h"
 #include "mjpc/task.h"
 
-#define CIO_USE_LBFGSB (1)
+#define CIO_USE_OPTIMIZER (1)
+#define CIO_USE_ACTION_SPLINE (1)
+#define CIO_USE_BATCH_GRADIENT (1)
 #define CIO_USE_EXT_OBJ_WRENCH (0)
 
 struct CIOPose {

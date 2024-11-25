@@ -55,6 +55,7 @@ set(LIB_MJPC_HEADERS
         optimizers/base_optimizer.h
         optimizers/second_order_optimizer.h
         optimizers/stochastic_optimizer.h
+        optimizers/riemannian_optimizer.h
         tasks/tasks.h
         casadi/casadi_common.h
 	    casadi/casadi_function.h
@@ -188,6 +189,7 @@ add_library(
         mjcf/mjcf_model.cc
         optimizers/second_order_optimizer.cc
         optimizers/stochastic_optimizer.cc
+        optimizers/riemannian_optimizer.cc
         tasks/tasks.cc
         tasks/acrobot/acrobot.cc
         tasks/allegro/allegro.cc
@@ -372,6 +374,7 @@ add_subdirectory(tasks)
 add_subdirectory(ispc)
 add_subdirectory(planners/idto)
 add_subdirectory(contacts)
+add_subdirectory(optimizers/riemannian_opt)
 
 if (BUILD_TESTING AND MJPC_BUILD_TESTS)
     enable_testing()

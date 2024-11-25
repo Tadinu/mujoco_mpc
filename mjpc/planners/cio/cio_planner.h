@@ -12,8 +12,9 @@
 #include <vector>
 
 // mjpc
-#include "mjpc/optimizers/second_order_optimizer.h"
-#include "mjpc/optimizers/stochastic_optimizer.h"
+#include <Eigen/src/Core/DenseBase.h>
+
+#include "mjpc/optimizers/riemannian_optimizer.h"
 #include "mjpc/planners/cio/cio_common.h"
 #include "mjpc/planners/cio/cio_util.h"
 #include "mjpc/planners/gradient/planner.h"
@@ -42,18 +43,30 @@ public:
   }
 
   void InitTaskCIO() {
-    optimizer_ = std::make_shared<SecondOrderOptimizer>(model, task->data_, const_cast<Task*>(task), this);
+    optimizer_ = std::make_shared<RiemannianOptimizer>(model, task->data_, const_cast<Task*>(task), this);
   }
 
-  SecondOrderOptimizerPtr optimizer() const { return optimizer_; }
+  BaseOptimizerPtr optimizer() const { return optimizer_; }
   void Plan(int horizon, mjpc::ThreadPool& pool) {
-#if CIO_USE_LBFGSB
+#if CIO_USE_OPTIMIZER
     horizon_ = horizon;
     pool_ = &pool;
 
     if (optimizer_) {
       // Optimize [nominal_policy] by rolling out [nominal_trajectory] here-in
       optimizer_->optimize();
+
+      // [opt_vals()] -> [nominal_policy]'s parameters
+      {
+        const std::shared_lock<std::shared_mutex> lock(mtx_);
+#if CIO_USE_ACTION_SPLINE
+        // parameters
+        mju_copy(nominal_policy.parameters.data(), optimizer_->opt_vals().data(), policy.num_parameters);
+#else
+        mju_copy(action_.data(), optimizer_->opt_vals().data(), policy.num_parameters);
+
+#endif
+      }
     }
 #endif
   }
@@ -148,7 +161,7 @@ public:
 
   // optimize nominal policy
   void OptimizePolicy(int horizon, mjpc::ThreadPool& pool) override {
-#if CIO_USE_LBFGSB
+#if CIO_USE_OPTIMIZER
     ResizeMjData(model, pool.NumThreads());
 
     // maximum number of trajectories in linesearch
@@ -168,6 +181,7 @@ public:
     // CIO plan optimizing, rolling out [nominal_trajectory] here-in
     Plan(horizon, pool);
 
+#if CIO_USE_BATCH_GRADIENT
     // Rollout [candidate_policy[]]
     for (int r = 0; r < settings.max_rollout; r++) {
       // copy [nominal_policy] -> [candidate_policy[k]]
@@ -225,12 +239,16 @@ public:
     if (c_best >= c_prev) {
       winner = num_trajectory - 1;
     }
-
+#endif
     // copy [winner_policy()] -> [policy] to be used in [ActionFromPolicy()]
     {
       const std::shared_lock<std::shared_mutex> lock(mtx_);
       previous_policy = policy;
+#if CIO_USE_BATCH_GRADIENT
       policy.CopyParametersFrom(winner_policy().parameters, winner_policy().times);
+#else
+      policy.CopyParametersFrom(nominal_policy.parameters, nominal_policy.times);
+#endif
     }
 #else
     // Rollout policies & calculate [trajectories' total_return], including [nominal_trajectory]
@@ -278,7 +296,9 @@ public:
 
   // set action from policy
   void ActionFromPolicy(double* action, const double* state, double time, bool use_previous) override {
-#if 0  // CIO_USE_LBFGSB
+#if CIO_USE_ACTION_SPLINE
+    GradientPlanner::ActionFromPolicy(action, state, time, use_previous);
+#else
     const std::shared_lock<std::shared_mutex> lock(policy_mutex_);
 
     // WAIT ACTION TO BE COMPUTED
@@ -294,13 +314,11 @@ public:
 
     // Clamp controls on outputted [action]
     mjpc::Clamp(action, model->actuator_ctrlrange, model->nu);
-#else
-    GradientPlanner::ActionFromPolicy(action, state, time, use_previous);
 #endif
   }
 
 private:
-  SecondOrderOptimizerPtr optimizer_ = nullptr;
+  BaseOptimizerPtr optimizer_ = nullptr;
 
   int horizon_ = 0;
   mjpc::ThreadPool* pool_ = nullptr;
