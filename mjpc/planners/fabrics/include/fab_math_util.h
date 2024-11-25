@@ -248,6 +248,10 @@ static CaSX cuboid_to_capsule(const CaSX& cuboid_center, const CaSXVector& capsu
 //
 #include "mjpc/urdf_parser/include/common.h"
 
+// Refs
+// https://github.com/maxspahn/forwardKinematics/blob/develop/forwardkinematics/urdfFks/casadiConversion/geometry/transformation_matrix.py
+// https://github.com/UWRobotLearning/rmp2/blob/master/rmp2/utils/tf_transform_utils.py
+// https://github.com/lumoe/dlkinematics/blob/main/dlkinematics/tf_transformations.py
 static CaSX prismatic(const urdf::Vector3& xyz, const urdf::Vector3& rpy, const urdf::Vector3& axis,
                       const CaSX& qi) {
   CaSX T = CaSX::zeros(4, 4);

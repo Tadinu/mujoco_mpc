@@ -26,8 +26,8 @@ using MaterialPtr = std::shared_ptr<Material>;
 
 struct Inertial {
   Transform origin;
-  double mass;
-  double ixx, ixy, ixz, iyy, iyz, izz;
+  double mass = 0;
+  double ixx = 0, ixy = 0, ixz = 0, iyy = 0, iyz = 0, izz = 0;
 
   void clear() {
     origin.clear();
@@ -81,6 +81,7 @@ const char* getParentLinkName(TiXmlElement* xml);
 
 struct Link {
   std::string name;
+  Transform origin;
 
   std::optional<Inertial> inertial;
 

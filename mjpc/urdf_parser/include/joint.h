@@ -84,6 +84,7 @@ enum class JointType : uint8_t {
   PRISMATIC,  // translation axis
   FLOATING,
   PLANAR,  // plane normal axis
+  BALL,
   FIXED
 };
 
@@ -101,6 +102,27 @@ struct Joint {
   std::optional<std::shared_ptr<JointCalibration>> calibration;
   std::optional<std::shared_ptr<JointMimic>> mimic;
 
+  std::string joint_type_name() const {
+    switch (type) {
+      case JointType::FIXED:
+        return "FIXED";
+      case JointType::REVOLUTE:
+        return "FIXED";
+      case JointType::CONTINUOUS:
+        return "CONTINUOUS";
+      case JointType::PRISMATIC:
+        return "PRISMATIC";
+      case JointType::FLOATING:
+        return "FLOATING";
+      case JointType::PLANAR:
+        return "PLANAR";
+      case JointType::BALL:
+        return "BALL";
+      case JointType::UNKNOWN:
+      default:
+        return "UNKNOWN";
+    }
+  }
   void clear() {
     this->axis.clear();
     this->child_link_name.clear();

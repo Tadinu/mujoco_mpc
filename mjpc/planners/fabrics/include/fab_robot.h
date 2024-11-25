@@ -21,12 +21,19 @@ public:
            std::vector<std::string> endtip_names, FabPlannerConfigPtr config)
       : name_(std::move(name)), dof_(dof), model_path_(std::move(model_path)), config_(std::move(config)) {
     // 1- FK
-    if (absl::EndsWith(model_path_, ".urdf")) {
+    if (absl::EndsWithIgnoreCase(model_path_, ".urdf")) {
       fk_ = std::make_shared<FabURDFForwardKinematics>(model_path_, std::move(base_link_name),
                                                        std::move(endtip_names));
       FAB_PRINT(model_name() + ": full-dof " + std::to_string(dof_) + " vs " +
                 "actuated active dof: " + std::to_string(fk_->n()));
+    } else if (absl::EndsWithIgnoreCase(model_path_, ".xml") ||
+               absl::EndsWithIgnoreCase(model_path_, ".mjcf")) {
+      fk_ = std::make_shared<FabMJCFForwardKinematics>(model_path_, std::move(base_link_name),
+                                                       std::move(endtip_names));
+      FAB_PRINT(model_name() + ": full-dof " + std::to_string(dof_) + " vs " +
+                "actuated active dof: " + std::to_string(fk_->n()));
     }
+    fk_->init();
 
     // 2- Casadi vars
     vars_ = std::make_shared<FabVariables>(

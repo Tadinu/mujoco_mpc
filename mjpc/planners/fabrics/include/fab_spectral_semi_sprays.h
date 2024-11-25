@@ -169,11 +169,10 @@ protected:
     const auto xdot = vars_->velocity_var();
     FAB_PRINTDB("M_pulled", M_pulled, M_pulled.size());
     FAB_PRINTDB("x", x, x.size());
-    FAB_PRINTDB("xdot", xdot, xdot.size());
     FAB_PRINTDB("dm.phi", dm.phi(), dm.phi().size());
 
     const auto M_pulled_subst_x = CaSX::substitute(M_pulled, x, dm.phi());
-#if 0
+#if FAB_DEBUG
     const auto dm_phidot = dm.phidot();
     FAB_PRINT("===========");
     FAB_PRINT("DM VARS");
@@ -185,7 +184,7 @@ protected:
     for (auto i = 0; i < xdot.size1(); ++i) {
       const auto xdot_i = fab_core::get_casx(xdot, i);
       const auto dm_phidot_i = fab_core::get_casx(dm_phidot, i);
-      FAB_PRINT(i, xdot_i, dm_phidot_i);
+      FAB_PRINT("xdot[", i, "]:", xdot_i, "- dm_phidot[", i, "]:", dm_phidot_i);
       FAB_PRINT("scalar?", xdot_i.is_scalar(), dm_phidot_i.is_scalar());
       FAB_PRINT("sparsity", xdot_i.sparsity(), dm_phidot_i.sparsity());
       FAB_PRINT("nnz", xdot_i.nnz(), dm_phidot_i.nnz());
@@ -195,7 +194,6 @@ protected:
     FAB_PRINTDB("xdot", xdot, xdot.size());
     FAB_PRINTDB("dm.phidot", dm.phidot(), dm.phidot().size());
     const auto M_pulled_subst_x_xdot = CaSX::substitute(M_pulled_subst_x, xdot, dm.phidot());
-
     const auto f_pulled_subst_x = CaSX::substitute(f_pulled, x, dm.phi());
     auto f_pulled_subst_x_xdot = CaSX::substitute(f_pulled_subst_x, xdot, dm.phidot());
 
@@ -221,8 +219,8 @@ protected:
     const auto M_pulled = M();
     const auto x = vars_->position_var();
     const auto xdot = vars_->velocity_var();
-    FAB_PRINT("M_pulled", M_pulled, x, xdot);
-    FAB_PRINT("dm.phi()", dm.phi());
+    FAB_PRINTDB("M_pulled", M_pulled, x, xdot);
+    FAB_PRINTDB("dm.phi()", dm.phi());
     const auto M_pulled_subst_x = CaSX::substitute(M_pulled, x, dm.phi());
     const auto M_pulled_subst_x_xdot = CaSX::substitute(M_pulled_subst_x, xdot, dm.phidot());
     const auto f_pulled = f() - CaSX::mtimes(M(), dm.xddot_ref());

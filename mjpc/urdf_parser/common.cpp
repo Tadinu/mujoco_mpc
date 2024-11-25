@@ -104,8 +104,8 @@ Rotation Rotation::get_inverse() const {
 }
 
 Rotation Rotation::operator*(const Rotation& other) const {
+#if 1
   Rotation result;
-
   result.x = (w * other.x) + (x * other.w) + (y * other.z) - (z * other.y);
   result.y = (w * other.y) - (x * other.z) + (y * other.w) + (z * other.x);
   result.z = (w * other.z) + (x * other.y) - (y * other.x) + (z * other.w);
@@ -113,6 +113,11 @@ Rotation Rotation::operator*(const Rotation& other) const {
 
   result.set_rpy();
   return result;
+#else
+  mjtNum quat[4];
+  mju_mulQuat(quat, to_vector().data(), other.to_vector().data());
+  return Rotation(quat);
+#endif
 }
 
 Vector3 Rotation::operator*(const Vector3& vec) const {

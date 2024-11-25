@@ -19,7 +19,9 @@ struct UrdfModel {
   // JOINTS
   map<string, JointPtr> joint_map;
   vector<JointPtr> joint_list;
-  vector<JointType> actuated_joint_types;
+  // TODO: TAKE FROM PARAM
+  vector<JointType> actuated_joint_types = {urdf::JointType::PRISMATIC, urdf::JointType::REVOLUTE,
+                                            urdf::JointType::CONTINUOUS};
   map<string, int> joint_name_map;
   vector<string> actuated_joint_names;
   void init_joint_name_map();
@@ -28,6 +30,7 @@ struct UrdfModel {
   using JointLinkNamePair = pair<string /*joint_name*/, string /*link_name*/>;
   map<string /*link_name*/, JointLinkNamePair> parent_name_map;
   map<string /*link_name*/, vector<JointLinkNamePair>> child_name_map;
+  void init_link_joint_name_map(const JointPtr& joint);
 
   vector<string> active_joint_names;
   void init_active_joints();
@@ -52,8 +55,9 @@ struct UrdfModel {
     return names;
   }
 
-  void init_link_tree(map<string, string>& parent_link_tree);
-  void findRoot(const map<string, string>& parent_link_tree);
+  void init_parent_link_tree();
+  virtual void init_link_tree(map<string, string>& parent_link_tree);
+  virtual void findRoot(const map<string, string>& parent_link_tree);
 
   // MATERIALS
   map<string, MaterialPtr> material_map;
@@ -68,7 +72,7 @@ struct UrdfModel {
     root_link = nullptr;
   }
 
-  void print_self() const;
+  virtual void print_self() const;
 
   bool fromUrdfStr(const string& xml_string);
   bool fromUrdfFile(const string& urdf_path);
@@ -77,4 +81,5 @@ struct UrdfModel {
   vector<string> get_chain(const string& base_name, const string& endtip_name, bool joints = true,
                            bool links = true, bool fixed = true) const;
 };
+using UrdfModelPtr = std::shared_ptr<UrdfModel>;
 }  // namespace urdf

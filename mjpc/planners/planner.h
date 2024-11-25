@@ -92,6 +92,7 @@ public:
   TrajectoryPtr trajectory[kMaxTrajectory];
 
   virtual urdf::UrdfModel RobotURDFModel() const { return {}; }
+  virtual MjcfModel RobotMJCFModel() const { return {}; }
   bool tuning_on_ = false;
 };
 

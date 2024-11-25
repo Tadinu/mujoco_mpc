@@ -22,22 +22,22 @@ public:
   }
   std::string Name() const override;
   std::string XmlPath() const override;
-  std::string URDFPath() const override;
-  std::string GetBaseBodyName() const override {
-    static std::string name = "link0";
-    return name;
-  }
+  std::string MJCFPath() const override;
+  std::string GetBaseBodyName() const override { return "link0"; }
   std::vector<std::string> GetEndtipNames() const override {
-    static std::vector<std::string> names = {"link3"};
-    return names;
+    return {(GetActionDim() == 4) ? "finger" : "hand"};
   }
   std::vector<std::string> GetCollisionLinkNames() const override {
-    static std::vector<std::string> names = {"link2"};
-    return names;
+    return (GetActionDim() == 4) ? std::vector<std::string>{"link2", "hand", "finger"}
+                                 : std::vector<std::string>{"link2", "hand"};
   }
   FabLinkCollisionProps GetCollisionLinkProps() const override {
-    const auto& link_names = GetCollisionLinkNames();
-    static FabLinkCollisionProps props = {{link_names[0], {0.2}}};
+    static FabLinkCollisionProps props;
+    if (props.empty()) {
+      for (const auto& link_name : GetCollisionLinkNames()) {
+        props[link_name] = {QueryGeomSizeMax(link_name.c_str())};
+      }
+    }
     return props;
   }
   int GetStaticObstaclesNum() const override { return 2; }
@@ -45,29 +45,39 @@ public:
     return (planner_ && planner_->tuning_on_) ? static_cast<int>(GetCollisionLinkNames().size()) : 0;
   }
   int GetPlaneConstraintsNum() const override { return 0; }
-  int GetActionDim() const override { return 2; }
+  int GetActionDim() const override {
+    return MJCFPath().ends_with("4dof.xml")   ? 4
+           : MJCFPath().ends_with("3dof.xml") ? 3
+           : MJCFPath().ends_with("2dof.xml") ? 2
+                                              : 0;
+  }
   std::vector<FabSubGoalPtr> GetSubGoals() const override {
     // Static subgoals with static [desired_state.pos]
     static std::vector<FabSubGoalPtr> subgoals = {
-        std::make_shared<FabStaticSubGoal>(
-            FabSubGoalConfig{.name = "subgoal0",
-                             .type = FabSubGoalType::STATIC,
-                             .is_primary_goal = true,
-                             .epsilon = 0.1,
-                             .indices = {1, 2},
-                             .weight = 1.0,
-                             .parent_link_name = "link0",
-                             .child_link_name = "link3",
-                             .desired_state = {.pose = FabPose{.pos = {1.0, 1.2}}}}),
+        std::make_shared<FabStaticSubGoal>(FabSubGoalConfig{
+            .name = "subgoal0",
+            .type = FabSubGoalType::STATIC,
+            .is_primary_goal = true,
+            .epsilon = 0.1,
+            // NOTE: For [planar_2dof] or singular-axis robots in general, due to
+            // zeroed-out elements in fk, only a subset of goal indices is used
+            .indices = (GetActionDim() == 2) ? std::vector<int>{1, 2} : std::vector<int>{0, 1, 2},
+            .weight = 1.0,
+            .parent_link_name = "link0",
+            .child_link_name = (GetActionDim() == 4) ? "finger" : "hand",
+        }),
     };
     auto& subgoal0_cfg = subgoals[0]->cfg_;
     subgoal0_cfg.desired_state = GetGoalState();
-    subgoal0_cfg.desired_state.pose_offset = FabPose{.pos = {0., 0., 0.}, .rot = {0., 0., 0.}};
+    if (subgoal0_cfg.desired_state.pose.empty()) {
+      subgoal0_cfg.desired_state.reset();
+    }
+    subgoal0_cfg.desired_state.pose_offset = FabPose::zeros(3);
     return subgoals;
   }
 
+  bool AreObstaclesFixed() const override { return true; }
   bool IsGoalFixed() const override { return true; }
-  int GetDynamicObstaclesDimension() const override { return 3; }
   std::vector<FabJointLimit> GetJointLimits() const override { return {}; }
 
   // NOTES on mutex:
@@ -104,7 +114,7 @@ public:
     // Draw tip
     static constexpr float BLUE[] = {0.0, 0.0, 1.0, 1.0};
     double tip_pos[3];
-    mju_copy(tip_pos, &data_->site_xpos[3 * mj_name2id(model, mjOBJ_SITE, "tip")], 3);
+    mju_copy(tip_pos, &data_->site_xpos[3 * mj_name2id(model, mjOBJ_SITE, "hand")], 3);
     mjpc::AddGeom(scene, mjGEOM_SPHERE, (mjtNum[]){0.02}, tip_pos, /*mat=*/nullptr, BLUE);
   }
 
