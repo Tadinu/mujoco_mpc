@@ -164,8 +164,7 @@ public:
 
   virtual std::string Name() const = 0;
   virtual std::string XmlPath() const = 0;
-  virtual std::string MJCFPath() const { return {}; }
-  virtual std::string URDFPath() const { return {}; }
+  virtual std::string RobotModelPath() const { return {}; }
   virtual std::string GetBaseBodyName() const { return {}; }
   virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */ return {}; }
   virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */ return {}; }

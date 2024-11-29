@@ -22,7 +22,7 @@ public:
   }
   std::string Name() const override;
   std::string XmlPath() const override;
-  std::string MJCFPath() const override;
+  std::string RobotModelPath() const override;
   std::string GetBaseBodyName() const override { return "link0"; }
   std::vector<std::string> GetEndtipNames() const override {
     return {(GetActionDim() == 4) ? "finger" : "hand"};
@@ -46,10 +46,10 @@ public:
   }
   int GetPlaneConstraintsNum() const override { return 0; }
   int GetActionDim() const override {
-    return MJCFPath().ends_with("4dof.xml")   ? 4
-           : MJCFPath().ends_with("3dof.xml") ? 3
-           : MJCFPath().ends_with("2dof.xml") ? 2
-                                              : 0;
+    return RobotModelPath().ends_with("4dof.xml")   ? 4
+           : RobotModelPath().ends_with("3dof.xml") ? 3
+           : RobotModelPath().ends_with("2dof.xml") ? 2
+                                                    : 0;
   }
   std::vector<FabSubGoalPtr> GetSubGoals() const override {
     // Static subgoals with static [desired_state.pos]

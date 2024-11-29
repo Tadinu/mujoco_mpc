@@ -40,8 +40,7 @@ void FabPlanner::InitTaskFabrics() {
   config_ = tuning_on_ ? FabPlannerConfig::get_symbolic_config() : task_->GetFabricsConfig();
 
   // 2- Robot, resetting [vars_, geometry_, target_velocity_] here-in!
-  const auto urdf_path = task_->URDFPath();
-  const auto robot_model_path = urdf_path.empty() ? task_->MJCFPath() : urdf_path;
+  const auto robot_model_path = task_->RobotModelPath();
   init_robot("robot", dim_action_, robot_model_path, task_->GetBaseBodyName(), task_->GetEndtipNames(),
              config_);
 

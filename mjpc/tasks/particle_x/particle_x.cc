@@ -18,7 +18,7 @@
 namespace mjpc {
 std::string ParticleX::XmlPath() const { return GetModelPath("particle_x/task_timevarying.xml"); }
 std::string ParticleX::Name() const { return "ParticleX"; }
-std::string ParticleX::URDFPath() const { return mjpc::GetModelPath("particle_x/point_robot.urdf"); }
+std::string ParticleX::RobotModelPath() const { return mjpc::GetModelPath("particle_x/point_robot.urdf"); }
 
 bool ParticleX::CheckBlocking(const double start[], const double end[]) {
 #if 1

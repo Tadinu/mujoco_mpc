@@ -107,7 +107,7 @@ struct Joint {
       case JointType::FIXED:
         return "FIXED";
       case JointType::REVOLUTE:
-        return "FIXED";
+        return "REVOLUTE";
       case JointType::CONTINUOUS:
         return "CONTINUOUS";
       case JointType::PRISMATIC:

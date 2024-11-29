@@ -158,6 +158,8 @@ public:
               const CaSX& link_transf = fab_math::CASX_TRANSF_IDENTITY,
               const CaSX& link_transf_offset = fab_math::CASX_TRANSF_IDENTITY,
               bool position_only = false) override {
+    CaSX fk = position_only ? mjpc_casadi::CASX_3D_ZERO : fab_math::CASX_TRANSF_IDENTITY;
+
     auto parent_link_name = fab_core::get_variant_value<std::string>(parent_link);
     if (parent_link_name.empty()) {
       parent_link_name = base_link_name_;
@@ -166,11 +168,10 @@ public:
     const auto child_link_name = fab_core::get_variant_value<std::string>(child_link);
     if (!entity_model_->get_link(child_link_name)) {
       throw FabError(child_link_name + " :Link not found in robot model " + model_path());
-    } else if (child_link_name == entity_model_->root_link->name) {
-      return fab_math::CASX_TRANSF_IDENTITY;
+    } else if ((child_link_name == entity_model_->root_link->name) || (child_link_name == "world")) {
+      return fk;
     }
 
-    CaSX fk;
     switch (base_type_) {
       case FabRobotBaseType::DIFF_DRIVE: {
         fk = get_robot_fk(parent_link_name, child_link_name,
@@ -195,7 +196,7 @@ public:
     // Offset
     if (position_only) {
       fk = fab_core::get_casx2(fk, {0, 3}, 3) + (link_transf_offset.is_zero()
-                                                     ? CaSX::zeros(3)
+                                                     ? mjpc_casadi::CASX_3D_ZERO
                                                      : fab_core::get_casx2(link_transf_offset, {0, 3}, 3));
     } else {
       fk = CaSX::mtimes(fk, link_transf_offset);
