@@ -57,6 +57,8 @@ extern "C" {
 
 namespace mjpc {
 static constexpr bool MJCF_MODEL_DEBUG = true;
+static constexpr bool MJCF_MODEL_WORLD_BODY_COVERED = false;
+
 bool MjcfModel::fromMjcfFile(const string& mjcf_path) {
   std::array<char, 1024> error;
   model = mj_loadXML(mjcf_path.data(), nullptr, error.data(), error.size());
@@ -79,8 +81,7 @@ void MjcfModel::fill_data_structure() {
     return;
   }
 
-  // [0]: world body, so not taken into account
-  for (auto i = 1; i < model->nbody; ++i) {
+  for (auto i = MJCF_MODEL_WORLD_BODY_COVERED ? 0 : 1; i < model->nbody; ++i) {
     // LINKS --
     //
     auto link = std::make_shared<urdf::Link>();
@@ -103,7 +104,9 @@ void MjcfModel::fill_data_structure() {
       assert(g < model->ngeom);
       // Visual
       auto vis = std::make_shared<urdf::Visual>();
-      vis->name = mj_id2name(model, mjOBJ_GEOM, g);
+      if (auto* vis_name = mj_id2name(model, mjOBJ_GEOM, g)) {
+        vis->name = vis_name;
+      }
       vis->origin = urdf::Transform{.position = urdf::Vector3(&model->geom_pos[3 * g]),
                                     .rotation = urdf::Rotation(&model->geom_quat[4 * g])};
       auto geom_type = model->geom_type[g];
@@ -157,8 +160,7 @@ void MjcfModel::fill_data_structure() {
     link_map[link->name] = link;
     // End links
 
-    // NOTE: Base link's, having parentid as 0, fixed joint is basically not considered
-    if (model->body_parentid[i] == 0) {
+    if (!MJCF_MODEL_WORLD_BODY_COVERED && model->body_parentid[i] == 0) {
       continue;
     }
 
@@ -187,7 +189,9 @@ void MjcfModel::fill_data_structure() {
     } else {
       for (auto jnt_id = jnt_adr; jnt_id < jnt_adr + jnt_num; ++jnt_id) {
         auto joint = std::make_shared<urdf::Joint>();
-        joint->name = mj_id2name(model, mjOBJ_JOINT, jnt_id);
+        if (auto* jnt_name = mj_id2name(model, mjOBJ_JOINT, jnt_id)) {
+          joint->name = jnt_name;
+        }
         const auto jnt_type = model->jnt_type[jnt_id];
         joint->type = (jnt_type == mjJNT_FREE)    ? urdf::JointType::FLOATING
                       : (jnt_type == mjJNT_BALL)  ? urdf::JointType::BALL
@@ -227,8 +231,7 @@ void MjcfModel::init_link_tree(map<string, string>& parent_link_tree) {
   UrdfModel::init_link_tree(parent_link_tree);
   // NOTE: Since MuJoCo assumes fixed joint between parent-child bodies in case of no joint being defined
   // => Loop over body names again to fill in [parent_link_tree] to account for fixed joints also
-  // [0]: world body, so not taken into account
-  for (auto i = 1; i < model->nbody; ++i) {
+  for (auto i = MJCF_MODEL_WORLD_BODY_COVERED ? 0 : 1; i < model->nbody; ++i) {
     const auto child_link_name = mj_id2name(model, mjOBJ_BODY, i);
     const auto parent_link_name = mj_id2name(model, mjOBJ_BODY, model->body_parentid[i]);
     // NOTE: This will overwrite the [parent_link_tree] earlier filled by [UrdfModel::]

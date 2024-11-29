@@ -204,7 +204,7 @@ public:
     assert(fk);
     return fk ? fk->casadi(vars_->position_var(), link_name, {}, fab_math::CASX_TRANSF_IDENTITY, offset,
                            position_only)
-              : CaSX();
+              : fab_math::CASX_TRANSF_IDENTITY;
   }
 
   void add_capsule_sphere_geometry(const std::string& obstacle_name, const std::string& capsule_name,
@@ -525,7 +525,7 @@ public:
         fk_parent = get_forward_kinematics(sub_goal->parent_link_name(), sub_goal->desired_pose_offset(),
                                            goal_position_only);
       } catch (const FabError& e) {
-        fk_parent = CaSX::zeros(3);
+        fk_parent = mjpc_casadi::CASX_3D_ZERO;
       }
       FAB_PRINTDB("fk_child", sub_goal->child_link_name(), fab_core::get_casx(fk_child, subgoal_indices),
                   subgoal_indices);

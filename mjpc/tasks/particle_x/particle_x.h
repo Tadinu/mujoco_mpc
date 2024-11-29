@@ -32,7 +32,7 @@ public:
 
   std::string Name() const override;
   std::string XmlPath() const override;
-  std::string URDFPath() const override;
+  std::string RobotModelPath() const override;
   std::string GetBaseBodyName() const override {
     static std::string name = "world";
     return name;

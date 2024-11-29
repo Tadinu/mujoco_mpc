@@ -21,9 +21,13 @@ std::string manipulation_x::Bring::XmlPath() const {
 }
 std::string manipulation_x::Bring::Name() const { return "XPickAndPlace"; }
 
-std::string manipulation_x::Bring::URDFPath() const {
+std::string manipulation_x::Bring::RobotModelPath() const {
+#if MJPC_MANIPULATION_X_URDF
   // "panda_with_finger.urdf"
   return mjpc::GetModelPath("manipulation_x/panda_for_fk.urdf");
+#else
+  return mjpc::GetModelPath("manipulation_x/panda.xml");
+#endif
 }
 
 void manipulation_x::Bring::ResidualFn::Residual(const mjModel* model, const mjData* data,

@@ -11,6 +11,8 @@
 #include "mjpc/tasks/manipulation_x/common.h"
 #include "mjpc/utilities.h"
 
+#define MJPC_MANIPULATION_X_URDF (0)
+
 namespace mjpc::manipulation_x {
 class Bring : public Task {
 public:
@@ -21,41 +23,50 @@ public:
   }
   std::string Name() const override;
   std::string XmlPath() const override;
-  std::string URDFPath() const override;
+  std::string RobotModelPath() const override;
   std::string GetBaseBodyName() const override {
-    static std::string name = "panda_link0";
+    static std::string name = MJPC_MANIPULATION_X_URDF ? "panda_link0" : "link0";
     return name;
   }
   std::vector<std::string> GetEndtipNames() const override {
     // Ones in URDF, not XML
-    static std::vector<std::string> names = {"panda_leftfinger", "panda_rightfinger"};
+    static std::vector<std::string> names = MJPC_MANIPULATION_X_URDF
+                                                ? std::vector<string>{"panda_leftfinger", "panda_rightfinger"}
+                                                : std::vector<string>{"left_finger", "right_finger"};
     return names;
   }
   std::vector<std::string> GetCollisionLinkNames() const override {
     // Ones in URDF, not XML
     // NOTE: In XML, link5 collisions, composed of 3 subparts, is not obvious to fetch
-    static std::vector<std::string> names = {
-        // "panda_hand", "panda_link3", "panda_link4" -> "panda_with_finger.urdf"
-        "panda_link0", "panda_link1", "panda_link2", "panda_link3", "panda_link4",
-        "panda_link5", "panda_link6", "panda_link7", "panda_hand"};  // -> "panda_for_fk.urdf"
+    static std::vector<std::string> names = MJPC_MANIPULATION_X_URDF
+        ? std::vector<string>{ // "panda_hand", "panda_link3", "panda_link4" -> "panda_with_finger.urdf"
+            "panda_link0", "panda_link1", "panda_link2", "panda_link3", "panda_link4",
+            "panda_link5", "panda_link6", "panda_link7", "panda_hand"}// -> "panda_for_fk.urdf"
+        : std::vector<string>{"link0", "link1", "link2", "link3", "link4",
+                              "link5", "link6", "link7", "hand"};
+
     return names;
   }
   FabLinkCollisionProps GetCollisionLinkProps() const override {
+    static constexpr bool is_urdf = MJPC_MANIPULATION_X_URDF;
     static FabLinkCollisionProps props = {
-        {"panda_link2", {QueryGeomSizeMax("link2_c")}},
-        {"panda_link3", {QueryGeomSizeMax("link3_c")}},
-        {"panda_link4", {QueryGeomSizeMax("link4_c")}},
-        {"panda_link5", {QueryGeomSizeMax({"link5_c0", "link5_c1", "link5_c2"})}},
-        {"panda_link6", {QueryGeomSizeMax("link6_c")}},
-        {"panda_link7", {QueryGeomSizeMax("link7_c")}},
-        {"panda_hand", {QueryGeomSizeMax("hand_c")}}};
+        {is_urdf ? "panda_link2" : "link2", {QueryGeomSizeMax("link2_c")}},
+        {is_urdf ? "panda_link3" : "link3", {QueryGeomSizeMax("link3_c")}},
+        {is_urdf ? "panda_link4" : "link4", {QueryGeomSizeMax("link4_c")}},
+        {is_urdf ? "panda_link5" : "link5", {QueryGeomSizeMax({"link5_c0", "link5_c1", "link5_c2"})}},
+        {is_urdf ? "panda_link6" : "link6", {QueryGeomSizeMax("link6_c")}},
+        {is_urdf ? "panda_link7" : "link7", {QueryGeomSizeMax("link7_c")}},
+        {is_urdf ? "panda_hand" : "hand", {QueryGeomSizeMax("hand_c")}}};
     return props;
   }
   FabSelfCollisionNamePairs GetSelfCollisionNamePairs() const override {
     // Ones in URDF, not XML
-    return {{"panda_hand",
-             {"panda_link0", "panda_link1", "panda_link2", "panda_link3", "panda_link4", "panda_link5",
-              "panda_link6", "panda_link7"}}};
+    return MJPC_MANIPULATION_X_URDF
+               ? FabSelfCollisionNamePairs{{"panda_hand",
+                                            {"panda_link0", "panda_link1", "panda_link2", "panda_link3",
+                                             "panda_link4", "panda_link5", "panda_link6", "panda_link7"}}}
+               : FabSelfCollisionNamePairs{
+                     {"hand", {"link0", "link1", "link2", "link3", "link4", "link5", "link6", "link7"}}};
   }
   int GetStaticObstaclesNum() const override { return AreObstaclesFixed() ? 3 : 0; }
   int GetDynamicObstaclesNum() const override {
@@ -64,18 +75,22 @@ public:
   }
   int GetPlaneConstraintsNum() const override { return 1; }
 
-  int GetActionDim() const override { return (GetSubGoals()[0]->child_link_name() == "panda_hand") ? 7 : 9; }
+  int GetActionDim() const override {
+    const auto goal_child_link_name = GetSubGoals()[0]->child_link_name();
+    return ((goal_child_link_name == "panda_hand") || (goal_child_link_name == "hand")) ? 7 : 9;
+  }
   std::vector<FabSubGoalPtr> GetSubGoals() const override {
+    static constexpr bool is_urdf = MJPC_MANIPULATION_X_URDF;
     // Static subgoals with static [desired_state.pos]
-    static std::vector<FabSubGoalPtr> subgoals = {
-        std::make_shared<FabStaticSubGoal>(FabSubGoalConfig{.name = "subgoal0",
-                                                            .type = FabSubGoalType::STATIC,
-                                                            .is_primary_goal = true,
-                                                            .epsilon = 0.02,
-                                                            .indices = {0, 1, 2},
-                                                            .weight = 0.4,
-                                                            .parent_link_name = "panda_link0",
-                                                            .child_link_name = "panda_leftfinger"})};
+    static std::vector<FabSubGoalPtr> subgoals = {std::make_shared<FabStaticSubGoal>(
+        FabSubGoalConfig{.name = "subgoal0",
+                         .type = FabSubGoalType::STATIC,
+                         .is_primary_goal = true,
+                         .epsilon = 0.02,
+                         .indices = {0, 1, 2},
+                         .weight = 0.4,
+                         .parent_link_name = is_urdf ? "panda_link0" : "link0",
+                         .child_link_name = is_urdf ? "panda_leftfinger" : "left_finger"})};
 #if 0
         std::make_shared<FabStaticSubGoal>(
             FabSubGoalConfig{.name = "subgoal1",
@@ -200,12 +215,13 @@ public:
     // NOTE: As observed, unclear why yet involving body links (as obstacles) disrupt the arm ik planning
     if (planner_ && planner_->tuning_on_) {
       static const auto prefix_len = std::string("panda_").size();
-      for (const auto& link_urdf_name : GetCollisionLinkNames()) {
-        const auto link_xml_name = link_urdf_name.substr(prefix_len);
+      static constexpr bool is_urdf = MJPC_MANIPULATION_X_URDF;
+      for (const auto& link_name : GetCollisionLinkNames()) {
+        const auto link_xml_name = is_urdf ? link_name.substr(prefix_len) : link_name;
         // NOTE:
         // WIP-["link5"]: This requires GetDynamicObstaclesNum() to be updated to match the total no of
         // collision links + free obsts
-        if (link_urdf_name == "link5") {
+        if (link_name == "link5") {
           fQueryObstacle("link5", "link5_c0");
           fQueryObstacle("link5", "link5_c1");
           fQueryObstacle("link5", "link5_c2");
