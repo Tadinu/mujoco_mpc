@@ -9,11 +9,11 @@
 
 #include "mjpc/planners/fabrics/include/fab_casadi_function.h"
 #include "mjpc/planners/fabrics/include/fab_common.h"
-#include "mjpc/planners/fabrics/include/fab_core_util.h"
 #include "mjpc/planners/fabrics/include/fab_diff_map.h"
 #include "mjpc/planners/fabrics/include/fab_geometry.h"
 #include "mjpc/planners/fabrics/include/fab_spectral_semi_sprays.h"
 #include "mjpc/planners/fabrics/include/fab_variables.h"
+#include "mjpc/utils/mjpc_core_util.h"
 
 using FabLagrangianArgs =
     FabNamedMap<CaSX, FabVariablesPtr, FabTrajectories, FabSpectralSemiSpraysPtr, std::vector<std::string>>;
@@ -26,7 +26,7 @@ public:
       : FabGeometry(std::move(name)), l_(lag) {
     // [x_ref_name_, xdot_ref_name_, xddot_ref_name_]
     if (kwargs.contains("ref_names")) {
-      const auto ref_names = *fab_core::get_arg_value<std::vector<std::string>>(kwargs, "ref_names");
+      const auto ref_names = *mjpc::get_arg_value<std::vector<std::string>>(kwargs, "ref_names");
       x_ref_name_ = ref_names[0];
       xdot_ref_name_ = ref_names[1];
       xddot_ref_name_ = ref_names[2];
@@ -36,22 +36,22 @@ public:
     if (kwargs.contains("x")) {
       assert(kwargs.contains("xdot"));
       vars_ =
-          std::make_shared<FabVariables>(CaSXDict{{"x", *fab_core::get_arg_value<CaSX>(kwargs, "x")},
-                                                  {"xdot", *fab_core::get_arg_value<CaSX>(kwargs, "xdot")}});
+          std::make_shared<FabVariables>(CaSXDict{{"x", *mjpc::get_arg_value<CaSX>(kwargs, "x")},
+                                                  {"xdot", *mjpc::get_arg_value<CaSX>(kwargs, "xdot")}});
     } else if (kwargs.contains("var")) {
-      vars_ = *fab_core::get_arg_value<decltype(vars_)>(kwargs, "var");
+      vars_ = *mjpc::get_arg_value<decltype(vars_)>(kwargs, "var");
     }
 
     // [refTrajs_]
     if (kwargs.contains("refTrajs")) {
-      refTrajs_ = *fab_core::get_arg_value<decltype(refTrajs_)>(kwargs, "refTrajs");
+      refTrajs_ = *mjpc::get_arg_value<decltype(refTrajs_)>(kwargs, "refTrajs");
       rel_ = refTrajs_.size() > 0;
     }
 
     // [J_ref_, J_ref_inv_]
     if (kwargs.contains("J_ref")) {
-      J_ref_ = *fab_core::get_arg_value<decltype(J_ref_)>(kwargs, "J_ref");
-      FAB_PRINT("Casadi pseudo inverse is used in Lagrangian");
+      J_ref_ = *mjpc::get_arg_value<decltype(J_ref_)>(kwargs, "J_ref");
+      MJPC_PRINT("Casadi pseudo inverse is used in Lagrangian");
       const auto J_ref_transpose = J_ref_.T();
       J_ref_inv_ =
           CaSX::mtimes(J_ref_transpose, CaSX::inv(CaSX::mtimes(J_ref_, J_ref_transpose) +
@@ -60,8 +60,8 @@ public:
 
     // [S_, H_]
     if (!is_dynamic() && kwargs.contains("spec") && kwargs.contains("hamiltonian")) {
-      h_ = *fab_core::get_arg_value<decltype(h_)>(kwargs, "hamiltonian");
-      s_ = *fab_core::get_arg_value<decltype(s_)>(kwargs, "spec");
+      h_ = *mjpc::get_arg_value<decltype(h_)>(kwargs, "hamiltonian");
+      s_ = *mjpc::get_arg_value<decltype(s_)>(kwargs, "spec");
     } else {
       apply_euler_lagrange();
     }
@@ -81,7 +81,7 @@ public:
   CaSX l() const { return l_; }
 
   FabLagrangian operator+(const FabLagrangian& b) const {
-    assert(fab_core::check_compatibility(*this, b));
+    assert(mjpc::check_compatibility(*this, b));
     // const auto refTrajs = FabVariables::join_refTrajs(refTrajs_, b.refTrajs_);
 
     // [all+vars]
@@ -143,8 +143,8 @@ public:
     const auto& F = d2L_dxdxdot;
     const auto& M = d2L_dxdot2;
     const auto f_e = -dL_dx;
-    FAB_PRINTDB(F.T(), F.T().size());
-    FAB_PRINTDB(xdot(), xdot().size());
+    MJPC_PRINTDB(F.T(), F.T().size());
+    MJPC_PRINTDB(xdot(), xdot().size());
     const auto f = CaSX::mtimes(F.T(), xdot()) + f_e + f_rel;
     h_ = CaSX::dot(dL_dxdot, xdot()) - l_ + en_rel;
     s_ = std::make_shared<FabSpectralSemiSprays>(

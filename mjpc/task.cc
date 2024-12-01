@@ -50,7 +50,7 @@ void Task::InitIdto() {
   // Load parameters from file
   IdtoPlannerConfig default_options;
   *idto_configs_ = drake::yaml::LoadYamlFile<IdtoPlannerConfig>(idto_configs_path_, {}, default_options);
-  FAB_PRINT("IDTO MPC:", idto_configs_->mpc);
+  MJPC_PRINT("IDTO MPC:", idto_configs_->mpc);
 
 #if IDTO_USE_MESHCAT
   // NOTE: THIS MUST RUN ON MAIN THREAD

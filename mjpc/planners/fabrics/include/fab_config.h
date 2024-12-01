@@ -27,7 +27,7 @@ using FabConfigFunc =
     std::function<FabConfigExprMeta(const CaSX& x, const CaSX& xdot, const std::string& affix)>;
 struct FabPlannerConfig {
   static CaSX sym_var(const std::string& var_name, const std::string& affix) {
-    FAB_PRINTDB("sym_var:", var_name + (affix.empty() ? "" : ("_" + affix)));
+    MJPC_PRINTDB("sym_var:", var_name + (affix.empty() ? "" : ("_" + affix)));
     return CaSX::sym(var_name + (affix.empty() ? "" : ("_" + affix)));
   }
   FORCING_TYPE forcing_type = FORCING_TYPE::SPEED_CONTROLLED;
@@ -256,14 +256,14 @@ public:
   explicit FabProblemConfig(FabNamedMap<TArgs...> configs)
       : configs_(std::move(configs)),
         goal_composition_(
-            FabGoalComposition("goal", fab_core::get_variant_value<FabGoalConfig>(configs_["goal"]))) {
+            FabGoalComposition("goal", mjpc::get_variant_value<FabGoalConfig>(configs_["goal"]))) {
     const auto& joint_limits_data = configs_["joint_limits"];
     joint_limits_ = FabJointLimitArray{
-        .lower_limits = fab_core::tokenize<double>(joint_limits_data["lower_limits"], ' '),
-        .upper_limits = fab_core::tokenize<double>(joint_limits_data["upper_limits"], ' ')};
+        .lower_limits = mjpc::tokenize<double>(joint_limits_data["lower_limits"], ' '),
+        .upper_limits = mjpc::tokenize<double>(joint_limits_data["upper_limits"], ' ')};
     construct_robot_representation();
     const auto env_config =
-        fab_core::get_variant_value<std::map<std::string, std::string>>(configs_["environment"]);
+        mjpc::get_variant_value<std::map<std::string, std::string>>(configs_["environment"]);
     environment_ = std::make_shared<FabEnvironment>(
         FabEnvironment{.name_ = env_config["name"],
                        .spheres_num_ = std::stoi(env_config["number_spheres"]),
@@ -275,11 +275,11 @@ public:
 
   void construct_robot_representation() {
     std::map<std::string, FabGeometricPrimitivePtr> collision_links;
-    auto robot_config = fab_core::get_variant_value<
+    auto robot_config = mjpc::get_variant_value<
         std::map<std::string, std::map<std::string, std::map<std::string, std::string>>>>(
         configs_["robot_representation"]);
     for (const auto& [link_name, link_data] : robot_config["collision_links"]) {
-      const std::string collision_link_type = fab_core::get_map_keys(link_data)[0];
+      const std::string collision_link_type = mjpc::get_map_keys(link_data)[0];
       const auto link_props = link_data[collision_link_type];
 
       if (collision_link_type == "capsule") {
@@ -288,7 +288,7 @@ public:
       } else if (collision_link_type == "sphere") {
         collision_links[link_name] = std::make_shared<FabSphere>(link_name, std::stod(link_props["radius"]));
       } else if (collision_link_type == "cuboid") {
-        auto sizes = fab_core::tokenize<double>(link_props["size"], ' ');
+        auto sizes = mjpc::tokenize<double>(link_props["size"], ' ');
         assert(sizes.size() == 3);
         collision_links[link_name] = std::make_shared<FabCuboid>(link_name, std::move(sizes));
       }

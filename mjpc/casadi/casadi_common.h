@@ -16,6 +16,9 @@
 // Casadi
 #include <casadi/casadi.hpp>
 
+// MJPC
+#include "mjpc/utils/mjpc_core_util.h"
+
 #define CASADI_DEBUG (1)
 
 using CaSX = casadi::SX;
@@ -34,28 +37,17 @@ using CaFunction = casadi::Function;
 
 template <typename... TVariant>
 using CasadiVariant = std::variant<std::monostate, TVariant...>;
-
 using CasadiArg = CasadiVariant<CaSX, int, double, std::string, std::vector<int>, std::vector<double>,
                                 std::map<int, double>>;
 using CasadiArgMap = std::map<std::string, CasadiArg>;
 
-template <typename... TVariant>
-using CasadiNamedVariantPair = std::pair<std::string, CasadiVariant<TVariant...>>;
-template <typename... TVariant>
-using CasadiNamedMap = std::map<std::string, CasadiVariant<TVariant...>>;
-using CasadiDoubleScalarMap = CasadiNamedMap<double, std::vector<double>>;
-using CasadiNamedAnyMap = std::map<std::string, std::any>;
-
-template <typename... TVariant>
-using CasadiVariantVector = std::vector<CasadiVariant<TVariant...>>;
-
 static constexpr auto CASADI_INT_MIN = std::numeric_limits<casadi_int>::min();
 static constexpr auto CASADI_INT_MAX = std::numeric_limits<casadi_int>::max();
 
-#define CASADI_PRINT(...) mjpc_casadi::print(__VA_ARGS__)
-#define CASADI_PRINTDB(...) mjpc_casadi::printdb(__VA_ARGS__)
+#define CASADI_PRINT(...) mjpc::print(__VA_ARGS__)
+#define CASADI_PRINTDB(...) mjpc::printdb(__VA_ARGS__)
 
-namespace mjpc_casadi {
+namespace mjpc {
 template <typename TScalar>
 static CaSX CASX_IDENTITY(const TScalar size) {
   return CaSX::eye(size); /*with structural zeros*/  //+ CaSX::zeros(size, size); /*with scalar zeros*/
@@ -79,73 +71,39 @@ static TScalar norm_squared(const TCasadi& x) {
   return TScalar(TCasadi::pow(TCasadi::norm_2(x), 2).scalar());
 }
 
-// ANY -------------------------------------------------------------------------------------------------------
-//
-template <typename T, typename... Types>
-struct is_any_type : std::disjunction<std::is_same<T, Types>...> {};
-
-template <typename T, typename... Types>
-static constexpr bool is_any() {
-  return (std::is_same_v<T, Types> || ...);
-}
-
-// VARIANT ---------------------------------------------------------------------------------------------------
-//
-template <typename T, typename TVariant>
-static T get_variant_value(const TVariant& variant) {
-  if (const auto* value_ptr = std::get_if<T>(&variant)) {
-    return *value_ptr;
-  }
-  return T();
-}
-
-template <typename T, typename TVariant>
-static bool get_variant_value2(const TVariant& variant, T& out) {
-  if (const auto* value_ptr = std::get_if<T>(&variant)) {
-    out = *value_ptr;
-    return true;
-  }
-  return false;
+template <typename T>
+static constexpr bool is_convertible_to_casx() {
+  return mjpc::is_any<T, int, double, std::vector<int>, std::vector<double>, std::vector<std::vector<double>>,
+                      CaSX>();
 }
 
 template <typename... TArgs>
-static std::any get_variant_value_any(const CasadiVariant<TArgs...>& var) {
-  std::any res;
-  (
-      [&]() {
-        if (const auto* value_ptr = std::get_if<TArgs>(&var)) {
-          res = std::any(*value_ptr);
-        }
-      }(),
-      ...);
+static CaSXDict get_casx_dict(const MjpcNamedMap<TArgs...>& vars) {
+  CaSXDict res;
+  for (const auto& item_var : vars) {
+    (
+        [&]() {
+          const auto& name = item_var.first;
+          const auto& var = item_var.second;
+          TArgs val;
+          if (get_variant_value2<TArgs>(var, val)) {
+            res.insert_or_assign(name, CaSX(val));
+          }
+        }(),
+        ...);
+  }
   return res;
 }
 
-template <typename T>
-static bool get_any_value(const std::any& any_var, T& out_val) {
-  try {
-    out_val = std::any_cast<T>(any_var);
-    return true;
-  } catch (const std::bad_any_cast& e) {
-    return false;
-  }
-}
-
-template <typename T>
-static constexpr bool is_convertible_to_casx() {
-  return is_any<T, int, double, std::vector<int>, std::vector<double>, std::vector<std::vector<double>>,
-                CaSX>();
-}
-
 template <typename... TArgs>
-static bool variant_to_casx(const CasadiVariant<TArgs...>& var, CaSX& out) {
+static bool variant_to_casx(const MjpcVariant<TArgs...>& var, CaSX& out) {
   bool res = false;
   (
       [&]() {
         // std::cout << typeid(TArgs).name() << std::endl;
         if constexpr (is_convertible_to_casx<TArgs>()) {
           TArgs val;
-          if (get_variant_value2<TArgs>(var, val)) {
+          if (mjpc::get_variant_value2<TArgs>(var, val)) {
             out = CaSX(val);
             res = true;
           }
@@ -155,96 +113,55 @@ static bool variant_to_casx(const CasadiVariant<TArgs...>& var, CaSX& out) {
   return res;
 }
 
-// PRINT -----------------------------------------------------------------------------------------------------
-//
 template <typename... TArgs>
-static void print(TArgs&&... var) {
-  ((std::cout << var << " "), ...) << std::endl;
-}
-
-template <typename... TArgs>
-static void printdb(TArgs&&... var) {
-#if CASADI_DEBUG
-  print(std::forward<TArgs>(var)...);
-#endif
-}
-
-template <typename... TArgs>
-static void print_variant(const CasadiVariant<TArgs...>& var, const std::string& var_name = "") {
+static void print_casadi_variant(const MjpcVariant<TArgs...>& var, const std::string& var_name = "") {
   (
       [&]() {
         if (const auto* var_value_ptr = std::get_if<TArgs>(&var)) {
           const auto var_value = *var_value_ptr;
-          if (!var_name.empty()) {
-            std::cout << var_name << ": ";
-          }
-          if constexpr (std::is_same_v<TArgs, std::any>) {
-            if (var_value.has_value()) {
-              try {
-                std::cout << std::any_cast<std::string>(var_value) << std::endl;
-              } catch (const std::bad_any_cast& e) {
-              }
-            }
-          } else if constexpr (std::is_same_v<TArgs, CaSX>) {
+          if constexpr (std::is_same_v<TArgs, CaSX>) {
             std::cout << var_value << ": " << var_value.size() << std::endl;
           } else {
-            std::cout << var_value << std::endl;
+            mjpc::print_variant(var, var_name);
           }
         }
       }(),
       ...);
 }
 
-template <typename... TArgs>
-static void print_named_map(const CasadiNamedMap<TArgs...>& vars, const char* label = nullptr) {
-  if (label) print(label);
-  for (const auto& [name, var] : vars) {
-    print_variant(var, name);
+template <typename T>
+static std::string join_casadi_str(const std::vector<T>& inputs, const std::string& delimiter = ",") {
+  std::string result;
+  for (const auto& str : inputs) {
+    if constexpr (std::is_same_v<T, std::string>) {
+      result += str;
+    } else if constexpr (std::is_same_v<T, CaSX>) {
+      result += str.get_str();
+    } else {
+      result += std::to_string(str);
+    }
+    result += delimiter;
   }
-  print("----------------");
-}
-
-template <typename... TArgs>
-static void print_named_mapdb(const CasadiNamedMap<TArgs...>& vars, const char* label = nullptr) {
-#if CASADI_DEBUG
-  print_named_map(vars, label);
-#endif
-}
-
-template <typename TArg, typename TMap = std::map<std::string, TArg>>
-static void print_named_map2(const TMap& map, const char* label = nullptr) {
-  if (label) print(label);
-  for (const auto& [name, val] : map) {
-    print(name, ":", val);
+  if (const auto pos = result.find_last_of(delimiter); pos != std::string::npos) {
+    result.erase(pos);
   }
-  print("----------------");
+  return result;
 }
 
-template <typename TArg, typename TMap = std::map<std::string, TArg>>
-static void print_named_map2db(const TMap& map, const char* label = nullptr) {
-#if CASADI_DEBUG
-  print_named_map2<TArg>(map, label);
-#endif
-}
-
-// CASX ------------------------------------------------------------------------------------------------------
-//
 static bool is_casx_sparse(const CaSX& expr) { return CaSX::symvar(expr).empty(); }
 
-#if 0
 // NOTE: Not all symbolic expression go through this parsing function!
 static CaSXDict parse_symbolic_casx(const CaSX& expr, const std::vector<std::string>& var_names) {
   CaSXDict out_vars_dict;
-  CASADI_PRINT("PARSE SYMBOLIC VARS OUTPUT:");
+  MJPC_PRINT("PARSE SYMBOLIC VARS OUTPUT:");
   for (const auto& var : CaSX::symvar(expr)) {
-    if (has_collection_element(var_names, var.name())) {
-      CASADI_PRINT(var.name(), var);
+    if (mjpc::has_collection_element(var_names, var.name())) {
+      MJPC_PRINT(var.name(), var);
       out_vars_dict.insert_or_assign(var.name(), var);
     }
   }
   return out_vars_dict;
 }
-#endif
 
 static bool is_equal_SXPair(const CaSXPair& left, const CaSXPair& right) {
   return (left.first == right.first) && CaSX::is_equal(left.second, right.second);
@@ -262,16 +179,16 @@ static bool is_equal_itertable(const TIteratable& left, const TIteratable& right
 template <typename TGeometricComponent1, typename TGeometricComponent2>
 static bool check_compatibility(const TGeometricComponent1& a, const TGeometricComponent2& b) {
   if (a.x().size() != b.x().size()) {
-    CASADI_PRINT("Operation invalid", "Different dimensions: " + std::to_string(a.x().size().first) + "x" +
-                                          std::to_string(a.x().size().second) + "vs. " +
-                                          std::to_string(b.x().size().first) + "x" +
-                                          std::to_string(b.x().size().second));
-    return false;
+    throw MjpcError::customized("Operation invalid",
+                                "Different dimensions: " + std::to_string(a.x().size().first) + "x" +
+                                    std::to_string(a.x().size().second) + "vs. " +
+                                    std::to_string(b.x().size().first) + "x" +
+                                    std::to_string(b.x().size().second));
   }
 
   if (!CaSX::is_equal(a.x(), b.x())) {
-    CASADI_PRINT("Operation invalid", "Different values: " + a.x().get_str() + " vs. " + b.x().get_str());
-    return false;
+    throw MjpcError::customized("Operation invalid",
+                                "Different values: " + a.x().get_str() + " vs. " + b.x().get_str());
   }
   return true;
 }
@@ -424,4 +341,4 @@ static void add_gaussian_noise(TCasadi& x) {
     }
   }
 }
-}  // namespace mjpc_casadi
+}  // namespace mjpc

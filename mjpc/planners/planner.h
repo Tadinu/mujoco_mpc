@@ -17,6 +17,7 @@
 
 #include <mujoco/mujoco.h>
 
+#include "mjpc/mjcf/mjcf_model.h"
 #include "mjpc/states/state.h"
 #include "mjpc/task.h"
 #include "mjpc/threadpool.h"

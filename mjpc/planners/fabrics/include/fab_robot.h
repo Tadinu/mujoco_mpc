@@ -24,13 +24,13 @@ public:
     if (absl::EndsWithIgnoreCase(model_path_, ".urdf")) {
       fk_ = std::make_shared<FabURDFForwardKinematics>(model_path_, std::move(base_link_name),
                                                        std::move(endtip_names));
-      FAB_PRINT(model_name() + ": full-dof " + std::to_string(dof_) + " vs " +
+      MJPC_PRINT(model_name() + ": full-dof " + std::to_string(dof_) + " vs " +
                 "actuated active dof: " + std::to_string(fk_->n()));
     } else if (absl::EndsWithIgnoreCase(model_path_, ".xml") ||
                absl::EndsWithIgnoreCase(model_path_, ".mjcf")) {
       fk_ = std::make_shared<FabMJCFForwardKinematics>(model_path_, std::move(base_link_name),
                                                        std::move(endtip_names));
-      FAB_PRINT(model_name() + ": full-dof " + std::to_string(dof_) + " vs " +
+      MJPC_PRINT(model_name() + ": full-dof " + std::to_string(dof_) + " vs " +
                 "actuated active dof: " + std::to_string(fk_->n()));
     }
     fk_->init();
@@ -47,7 +47,7 @@ public:
     const auto q = vars_->position_var();
     const auto qdot = vars_->velocity_var();
     const auto [base_energy, new_var_names] = config_->base_energy(q, qdot, {});
-    vars_->add_parameters(fab_core::parse_symbolic_casx(base_energy, new_var_names));
+    vars_->add_parameters(mjpc::parse_symbolic_casx(base_energy, new_var_names));
     auto base_geometry = std::make_shared<FabGeometry>(
         name() + "_base_geom", FabGeometryArgs{{"h", CaSX::zeros(dof_)}, {"var", vars_}});
     auto base_lagrangian =

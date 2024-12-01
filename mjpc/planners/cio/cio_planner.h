@@ -287,7 +287,7 @@ public:
     }
 
     // APPLY ACTION: COPY [action_] -> [action]
-    FAB_PRINTDB("ACTION", action_);
+    MJPC_PRINTDB("ACTION", action_);
     mju_copy(action, action_.data(), int(action_.size()));
     // Clear [action_]
     action_.clear();

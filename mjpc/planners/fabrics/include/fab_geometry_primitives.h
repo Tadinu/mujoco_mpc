@@ -6,13 +6,13 @@
 
 #include "mjpc/planners/fabrics/include/fab_casadi_function.h"
 #include "mjpc/planners/fabrics/include/fab_common.h"
-#include "mjpc/planners/fabrics/include/fab_core_util.h"
 #include "mjpc/planners/fabrics/include/fab_diff_map.h"
 #include "mjpc/planners/fabrics/include/fab_energy.h"
 #include "mjpc/planners/fabrics/include/fab_geometry.h"
 #include "mjpc/planners/fabrics/include/fab_math_util.h"
 #include "mjpc/planners/fabrics/include/fab_spectral_semi_sprays.h"
 #include "mjpc/planners/fabrics/include/fab_variables.h"
+#include "mjpc/utils/mjpc_core_util.h"
 
 class FabSphere;
 class FabCuboid;
@@ -61,12 +61,12 @@ public:
 
   std::string to_string() const { return std::string(typeid(this).name()) + ": " + name_; }
 
-  CaSX position() const { return fab_core::get_casx2(origin_, {0, 3}, 3); }
+  CaSX position() const { return mjpc::get_casx2(origin_, {0, 3}, 3); }
 
   void set_position(const CaSX& position, bool free = false) {
-    fab_core::set_casx2(origin_, {0, 3}, 3, position);
+    mjpc::set_casx2(origin_, {0, 3}, 3, position);
     if (free) {
-      const CaSX position_0 = fab_core::get_casx2(origin_, 0, 0);
+      const CaSX position_0 = mjpc::get_casx2(origin_, 0, 0);
       if (position_0.is_symbolic()) {
         const std::string position_0_name = position_0.name();
         sym_parameters_[position_0_name.substr(position_0_name.size() - 2, 2)] = position;
@@ -79,7 +79,7 @@ public:
   void set_origin(const CaSX& origin, const bool free = false) {
     origin_ = origin;
     if (free) {
-      const CaSX origin_0 = fab_core::get_casx2(origin, 0, 0);
+      const CaSX origin_0 = mjpc::get_casx2(origin, 0, 0);
       if (origin_0.is_symbolic()) {
         const std::string origin_0_name = origin_0.name();
         sym_parameters_[origin_0_name.substr(origin_0_name.size() - 2, 2)] = origin;

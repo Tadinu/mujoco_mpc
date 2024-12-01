@@ -10,15 +10,16 @@
 #include <stdexcept>
 #include <thread>
 
-#include "fab_mjcf_forward_kinematics.h"
 #include "mjpc/planners/fabrics/include/fab_common.h"
 #include "mjpc/planners/fabrics/include/fab_config.h"
+#include "mjpc/planners/fabrics/include/fab_core_util.h"
 #include "mjpc/planners/fabrics/include/fab_diff_map.h"
 #include "mjpc/planners/fabrics/include/fab_energized_geometry.h"
 #include "mjpc/planners/fabrics/include/fab_energy.h"
 #include "mjpc/planners/fabrics/include/fab_forward_kinematics.h"
 #include "mjpc/planners/fabrics/include/fab_geometry.h"
 #include "mjpc/planners/fabrics/include/fab_goal.h"
+#include "mjpc/planners/fabrics/include/fab_mjcf_forward_kinematics.h"
 #include "mjpc/planners/fabrics/include/fab_robot.h"
 #include "mjpc/planners/fabrics/include/fab_spectral_semi_sprays.h"
 #include "mjpc/planners/fabrics/include/fab_speed_control.h"
@@ -112,7 +113,7 @@ public:
     for (const auto& leaf_name : leaf_names) {
       if (!leaves_.contains(leaf_name)) {
         throw FabError("Leaf not found: " + leaf_name +
-                       "\nPossible leaves: " + fab_core::join(fab_core::get_map_keys(leaves_), ";"));
+                       "\nPossible leaves: " + mjpc::join(mjpc::get_map_keys(leaves_), ";"));
       }
       out_leaves.push_back(leaves_.at(leaf_name));
     }
@@ -180,7 +181,7 @@ public:
                               {"le", execution_lagrangian_}});
       forced_speed_controlled_geometry_->concretize();
     } catch (const FabParamNotFoundError& e) {
-      FAB_PRINT(e.what());
+      MJPC_PRINT(e.what());
       assert(false);
     }
   }
@@ -211,14 +212,14 @@ public:
                                    const CaSX& tf_capsule_origin, double capsule_length) {
     const auto capsule_radius = 0.5 * capsule_length;
     auto tf_origin_center_0 = fab_math::CASX_TRANSF_IDENTITY;
-    fab_core::set_casx2(tf_origin_center_0, 2, 3, capsule_radius);
+    mjpc::set_casx2(tf_origin_center_0, 2, 3, capsule_radius);
     auto tf_origin_center_1 = fab_math::CASX_TRANSF_IDENTITY;
-    fab_core::set_casx2(tf_origin_center_1, 2, 3, -capsule_radius);
+    mjpc::set_casx2(tf_origin_center_1, 2, 3, -capsule_radius);
     const auto tf_center_0 = CaSX::mtimes(tf_capsule_origin, tf_origin_center_0);
     const auto tf_center_1 = CaSX::mtimes(tf_capsule_origin, tf_origin_center_1);
     auto capsule_sphere_leaf =
-        FabCapsuleSphereLeaf(vars_, capsule_name, obstacle_name, fab_core::get_casx2(tf_center_0, {0, 3}, 3),
-                             fab_core::get_casx2(tf_center_1, {0, 3}, 3));
+        FabCapsuleSphereLeaf(vars_, capsule_name, obstacle_name, mjpc::get_casx2(tf_center_0, {0, 3}, 3),
+                             mjpc::get_casx2(tf_center_1, {0, 3}, 3));
     capsule_sphere_leaf.set_geometry(config_->collision_geometry);
     capsule_sphere_leaf.set_finsler_structure(config_->collision_finsler);
     add_leaf(&capsule_sphere_leaf);
@@ -228,14 +229,14 @@ public:
                                    const CaSX& tf_capsule_origin, double capsule_length) {
     const auto capsule_radius = 0.5 * capsule_length;
     auto tf_origin_center_0 = fab_math::CASX_TRANSF_IDENTITY;
-    fab_core::set_casx2(tf_origin_center_0, 2, 3, capsule_radius);
+    mjpc::set_casx2(tf_origin_center_0, 2, 3, capsule_radius);
     auto tf_origin_center_1 = fab_math::CASX_TRANSF_IDENTITY;
-    fab_core::set_casx2(tf_origin_center_1, 2, 3, -capsule_radius);
+    mjpc::set_casx2(tf_origin_center_1, 2, 3, -capsule_radius);
     const auto tf_center_0 = CaSX::mtimes(tf_capsule_origin, tf_origin_center_0);
     const auto tf_center_1 = CaSX::mtimes(tf_capsule_origin, tf_origin_center_1);
     auto capsule_cuboid_leaf =
-        FabCapsuleCuboidLeaf(vars_, capsule_name, obstacle_name, fab_core::get_casx2(tf_center_0, {0, 3}, 3),
-                             fab_core::get_casx2(tf_center_1, {0, 3}, 3));
+        FabCapsuleCuboidLeaf(vars_, capsule_name, obstacle_name, mjpc::get_casx2(tf_center_0, {0, 3}, 3),
+                             mjpc::get_casx2(tf_center_1, {0, 3}, 3));
     capsule_cuboid_leaf.set_geometry(config_->collision_geometry);
     capsule_cuboid_leaf.set_finsler_structure(config_->collision_finsler);
     add_leaf(&capsule_cuboid_leaf);
@@ -258,7 +259,7 @@ public:
                                                int dynamic_obstacle_dimension = 3) {
     assert(dynamic_obstacle_dimension <= fk.size().first);
     auto dyn_spherical_obstacle_leaf = FabDynamicObstacleLeaf(
-        vars_, fab_core::get_casx(fk, std::array<casadi_int, 2>{0, (casadi_int)dynamic_obstacle_dimension}),
+        vars_, mjpc::get_casx(fk, std::array<casadi_int, 2>{0, (casadi_int)dynamic_obstacle_dimension}),
         obstacle_name, collision_link_name, reference_params);
     dyn_spherical_obstacle_leaf.set_geometry(config_->collision_geometry);
     dyn_spherical_obstacle_leaf.set_finsler_structure(config_->collision_finsler);
@@ -294,9 +295,9 @@ public:
     const auto fk_1 = get_forward_kinematics(collision_link_1_name);
     const auto fk_2 = get_forward_kinematics(collision_link_2_name);
     const auto fk = fk_2 - fk_1;
-    if (fab_core::is_casx_sparse(fk)) {
-      FAB_PRINT("Expression [" + fk.get_str() + "] for links " + collision_link_1_name + "and " +
-                collision_link_2_name + " is sparse and so skipped");
+    if (mjpc::is_casx_sparse(fk)) {
+      MJPC_PRINT("Expression [" + fk.get_str() + "] for links " + collision_link_1_name + "and " +
+                 collision_link_2_name + " is sparse and so skipped");
     }
     auto geometry = FabSelfCollisionLeaf(vars_, fk, collision_link_1_name, collision_link_2_name);
     geometry.set_geometry(config_->self_collision_geometry);
@@ -326,14 +327,14 @@ public:
     set_joint_limits();
 
     // [Goal composition]
-    if (fab_core::has_collection_element(
+    if (mjpc::has_collection_element(
             std::array{FORCING_TYPE::SPEED_CONTROLLED, FORCING_TYPE::FORCED, FORCING_TYPE::FORCED_ENERGIZED},
             config_->forcing_type)) {
       set_goal_component(problem_config_.goal_composition());
     }
 
     // [Execution Energy]
-    if (fab_core::has_collection_element(
+    if (mjpc::has_collection_element(
             std::array<FORCING_TYPE, 3>{FORCING_TYPE::SPEED_CONTROLLED, FORCING_TYPE::EXECUTION_ENERGY,
                                         FORCING_TYPE::FORCED_ENERGIZED},
             config_->forcing_type)) {
@@ -380,19 +381,19 @@ public:
       const auto fk_size = fk.size();
       if (fk_size == decltype(fk_size){3, 3}) {
         auto fk_augmented = fab_math::CASX_TRANSF_IDENTITY;
-        fab_core::set_casx2(fk_augmented, {0, 2}, {0, 2}, fab_core::get_casx2(fk, {0, 2}, {0, 2}));
-        fab_core::set_casx2(fk_augmented, {0, 2}, 3, fab_core::get_casx2(fk, {0, 2}, 2));
+        mjpc::set_casx2(fk_augmented, {0, 2}, {0, 2}, mjpc::get_casx2(fk, {0, 2}, {0, 2}));
+        mjpc::set_casx2(fk_augmented, {0, 2}, 3, mjpc::get_casx2(fk, {0, 2}, 2));
         fk = fk_augmented;
       }
       if (fk_size == decltype(fk_size){4, 4}) {
-        const auto fk_0_3_3 = fab_core::get_casx2(fk, {0, 3}, 3);
-        if (fab_core::is_casx_sparse(fk_0_3_3)) {
-          FAB_PRINT("Expression " + fk_0_3_3.get_str() + " for link " + link_name +
-                    " is sparse and so skipped");
+        const auto fk_0_3_3 = mjpc::get_casx2(fk, {0, 3}, 3);
+        if (mjpc::is_casx_sparse(fk_0_3_3)) {
+          MJPC_PRINT("Expression " + fk_0_3_3.get_str() + " for link " + link_name +
+                     " is sparse and so skipped");
           continue;
         }
-      } else if (fab_core::is_casx_sparse(fk)) {
-        FAB_PRINT("Expression " + fk.get_str() + " for link " + link_name + " is sparse and so skipped");
+      } else if (mjpc::is_casx_sparse(fk)) {
+        MJPC_PRINT("Expression " + fk.get_str() + " for link " + link_name + " is sparse and so skipped");
         continue;
       }
 
@@ -452,8 +453,8 @@ public:
     // Collision link geoms
     for (const auto& link_name : collision_link_names) {
       const auto fk = get_forward_kinematics(link_name);
-      if (fab_core::is_casx_sparse(fk)) {
-        FAB_PRINT("Expression " + fk.get_str() + " for link " + link_name + "is sparse and so skipped");
+      if (mjpc::is_casx_sparse(fk)) {
+        MJPC_PRINT("Expression " + fk.get_str() + " for link " + link_name + "is sparse and so skipped");
         continue;
       }
 
@@ -515,7 +516,7 @@ public:
     const auto subgoal_type = sub_goal->type();
     const auto subgoal_indices = sub_goal->indices();
     if (FabSubGoalType::STATIC_JOINT_SPACE == subgoal_type) {
-      return fab_core::get_casx(vars_->position_var(), subgoal_indices);
+      return mjpc::get_casx(vars_->position_var(), subgoal_indices);
     } else {
       static constexpr bool goal_position_only = true;
       const auto fk_child = get_forward_kinematics(sub_goal->child_link_name(),
@@ -525,13 +526,13 @@ public:
         fk_parent = get_forward_kinematics(sub_goal->parent_link_name(), sub_goal->desired_pose_offset(),
                                            goal_position_only);
       } catch (const FabError& e) {
-        fk_parent = mjpc_casadi::CASX_3D_ZERO;
+        fk_parent = mjpc::CASX_3D_ZERO;
       }
-      FAB_PRINTDB("fk_child", sub_goal->child_link_name(), fab_core::get_casx(fk_child, subgoal_indices),
-                  subgoal_indices);
-      FAB_PRINTDB("fk_parent", sub_goal->parent_link_name(), fab_core::get_casx(fk_parent, subgoal_indices),
-                  subgoal_indices);
-      return fab_core::get_casx(fk_child, subgoal_indices) - fab_core::get_casx(fk_parent, subgoal_indices);
+      MJPC_PRINTDB("fk_child", sub_goal->child_link_name(), mjpc::get_casx(fk_child, subgoal_indices),
+                   subgoal_indices);
+      MJPC_PRINTDB("fk_parent", sub_goal->parent_link_name(), mjpc::get_casx(fk_parent, subgoal_indices),
+                   subgoal_indices);
+      return mjpc::get_casx(fk_child, subgoal_indices) - mjpc::get_casx(fk_parent, subgoal_indices);
     }
   }
 
@@ -540,8 +541,8 @@ public:
     for (auto i = 0; i < sub_goals.size(); ++i) {
       const auto& subgoal = sub_goals[i];
       const auto fk_subgoal_pose = get_differential_map(subgoal);
-      if (fab_core::is_casx_sparse(fk_subgoal_pose)) {
-        FAB_PRINT(fk_subgoal_pose);
+      if (mjpc::is_casx_sparse(fk_subgoal_pose)) {
+        MJPC_PRINT(fk_subgoal_pose);
         throw FabError(fk_subgoal_pose.get_str() + "must not be sparse");
       }
 
@@ -592,7 +593,7 @@ public:
       } break;
 
       case FORCING_TYPE::EXECUTION_ENERGY: {
-        FAB_PRINT("No forcing term, using pure geometry with energization");
+        MJPC_PRINT("No forcing term, using pure geometry with energization");
 #if 1
         xddot =
             execution_geometry_->xddot() - execution_geometry_->alpha() * geometry_->vars()->velocity_var();
@@ -602,13 +603,13 @@ public:
       } break;
 
       case FORCING_TYPE::FORCED_ENERGIZED: {
-        FAB_PRINT("Using forced geometry with constant execution energy");
+        MJPC_PRINT("Using forced geometry with constant execution energy");
         xddot = forced_speed_controlled_geometry_->xddot() -
                 forced_speed_controlled_geometry_->alpha() * geometry_->vars()->velocity_var();
       } break;
 
       case FORCING_TYPE::FORCED: {
-        FAB_PRINT("No execution energy, using forced geometry without speed regulation");
+        MJPC_PRINT("No execution energy, using forced geometry without speed regulation");
         xddot = forced_geometry_->xddot() - geometry_->alpha() * geometry_->vars()->velocity_var();
       } break;
 
@@ -650,17 +651,17 @@ public:
     CaSX action = eval["action"];
     if (!action.is_zero()) {
       // Debugging
-      FAB_PRINTDB("a_ex: ", eval["a_ex"]);
-      FAB_PRINTDB("alpha_forced_geometry:", eval["alpha_forced_geometry"]);
-      FAB_PRINTDB("alpha_geometry:", eval["alpha_geometry"]);
-      FAB_PRINTDB("beta", eval["beta"]);
+      MJPC_PRINTDB("a_ex: ", eval["a_ex"]);
+      MJPC_PRINTDB("alpha_forced_geometry:", eval["alpha_forced_geometry"]);
+      MJPC_PRINTDB("alpha_geometry:", eval["alpha_geometry"]);
+      MJPC_PRINTDB("beta", eval["beta"]);
 
       const double action_magnitude = double(CaSX::norm_2(action).scalar());
       if (action_magnitude < casadi::eps) {
-        FAB_PRINT("Fabrics: Avoiding SMALL action with magnitude", action_magnitude);
+        MJPC_PRINT("Fabrics: Avoiding SMALL action with magnitude", action_magnitude);
         action = CaSX::zeros(robot_->dof());
       } else if (action_magnitude > (1 / casadi::eps)) {
-        FAB_PRINT("Fabrics: Avoiding LARGE action with magnitude", action_magnitude);
+        MJPC_PRINT("Fabrics: Avoiding LARGE action with magnitude", action_magnitude);
         action = CaSX::zeros(robot_->dof());
       }
     }
@@ -803,7 +804,7 @@ public:
       trajectory_->trace.push_back(target_pos[2]);
     }
 #endif
-    FAB_PRINTDB("ACTION", action_);
+    MJPC_PRINTDB("ACTION", action_);
 #if FAB_USE_ACTUATOR_VELOCITY
     mju_scl(action, action_.data(), task_->actuator_kv, int(action_.size()));
 #endif

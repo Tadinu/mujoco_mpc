@@ -56,7 +56,7 @@ void IdtoPlanner::StartControl() {
   }
   run_once = true;
   if (configs_->mpc) {
-    FAB_PRINT("IDTO STARTS MPC");
+    MJPC_PRINT("IDTO STARTS MPC");
     // Run a simulation that uses the optimizer as a model predictive controller
     RunMPC(*configs_);
   } else {

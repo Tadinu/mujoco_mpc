@@ -83,11 +83,11 @@ void FabPlanner::SetGoalArguments() {
     const auto& indices = sub_goal->indices();
 
     if (task_->IsGoalFixed()) {
-      arguments_["x_goal_" + i_str] = fab_core::get_subcollection(pos, indices);
+      arguments_["x_goal_" + i_str] = mjpc::get_subcollection(pos, indices);
     } else {
-      arguments_["x_ref_goal_" + i_str + "_leaf"] = fab_core::get_subcollection(pos, indices);
-      arguments_["xdot_ref_goal_" + i_str + "_leaf"] = fab_core::get_subcollection(vel, indices);
-      arguments_["xddot_ref_goal_" + i_str + "_leaf"] = fab_core::get_subcollection(acc, indices);
+      arguments_["x_ref_goal_" + i_str + "_leaf"] = mjpc::get_subcollection(pos, indices);
+      arguments_["xdot_ref_goal_" + i_str + "_leaf"] = mjpc::get_subcollection(vel, indices);
+      arguments_["xddot_ref_goal_" + i_str + "_leaf"] = mjpc::get_subcollection(acc, indices);
     }
     arguments_["weight_goal_" + i_str] = sub_goal->cfg_.weight;
   }
@@ -227,20 +227,20 @@ void FabPlanner::SetTuningArguments(const FabParamWeightDict& params) {
 #if FAB_VERIFY_TUNED_PARAMS
   for (const auto& [param_name, _] : FabParamTuner::get_default_parameters()) {
     if (false == fetched_params_names.contains(param_name)) {
-      FAB_PRINT(param_name);
+      MJPC_PRINT(param_name);
       assert(false);
     }
   }
 #endif
-  fab_core::print_named_mapdb(arguments_, "TUNED ARG VALS");
+  mjpc::print_named_mapdb(arguments_, "TUNED ARG VALS");
 }
 
 void FabPlanner::Plan(const FabParamDict& params) {
   const auto robot_dof = robot_->dof();
   std::vector<double> q = task_->QueryJointPos(robot_dof);
   std::vector<double> qdot = task_->QueryJointVel(robot_dof);
-  FAB_PRINTDB("QPOS", q);
-  FAB_PRINTDB("QVEL", qdot);
+  MJPC_PRINTDB("QPOS", q);
+  MJPC_PRINTDB("QVEL", qdot);
   arguments_ = {{"q", std::move(q)}, {"qdot", std::move(qdot)}};
 
   // [X-space goals] & [Weights of goals]

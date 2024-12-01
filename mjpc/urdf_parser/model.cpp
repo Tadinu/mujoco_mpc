@@ -1,6 +1,10 @@
 #include "mjpc/urdf_parser/include/model.h"
 
 #include <fstream>
+#include <iostream>
+#include <map>
+#include <string>
+#include <vector>
 
 // abseil
 #include "absl/strings/ascii.h"
@@ -8,10 +12,12 @@
 #include "absl/types/bad_any_cast.h"
 
 // urdf_parser
-#include "mjpc/planners/fabrics/include/fab_core_util.h"
 #include "mjpc/urdf_parser/include/joint.h"
 #include "mjpc/urdf_parser/include/link.h"
 #include "mjpc/urdf_parser/include/txml.h"
+
+// mjpc
+#include "mjpc/utils/mjpc_core_util.h"
 
 using namespace urdf;
 
@@ -58,7 +64,7 @@ MaterialPtr UrdfModel::get_material(const string& mat_name) const {
   return material_map.contains(mat_name) ? material_map.at(mat_name) : nullptr;
 }
 
-std::vector<LinkPtr> UrdfModel::get_links() const { return fab_core::get_map_values<LinkPtr>(link_map); }
+std::vector<LinkPtr> UrdfModel::get_links() const { return mjpc::get_map_values<LinkPtr>(link_map); }
 
 void UrdfModel::init_link_tree(map<string, string>& parent_link_tree) {
   for (const auto& [joint_name, joint] : joint_map) {
@@ -262,12 +268,12 @@ void UrdfModel::init_link_joint_name_map(const JointPtr& joint) {
 }
 
 void UrdfModel::print_self() const {
-  fab_core::print_named_map2<JointLinkNamePair>(parent_name_map, "PARENT LINK NAME MAP");
-  fab_core::print_named_map2<vector<JointLinkNamePair>>(child_name_map, "CHILD LINK NAME MAP");
+  mjpc::print_named_map2<JointLinkNamePair>(parent_name_map, "PARENT LINK NAME MAP");
+  mjpc::print_named_map2<vector<JointLinkNamePair>>(child_name_map, "CHILD LINK NAME MAP");
 
-  FAB_PRINT("ACTIVE JOINT NAMES: ", active_joint_names);
-  fab_core::print_named_map2<int>(joint_name_map, "JOINT NAME MAP");
-  FAB_PRINT("ACTUATED JOINT NAMES: ", actuated_joint_names);
+  MJPC_PRINT("ACTIVE JOINT NAMES: ", mjpc::join(active_joint_names));
+  mjpc::print_named_map2<int>(joint_name_map, "JOINT NAME MAP");
+  MJPC_PRINT("ACTUATED JOINT NAMES: ", mjpc::join(actuated_joint_names));
 }
 
 std::vector<std::string> UrdfModel::get_chain(const std::string& base_name, const std::string& endtip_name,
@@ -292,7 +298,7 @@ std::vector<std::string> UrdfModel::get_chain(const std::string& base_name, cons
   std::reverse(chain.begin(), chain.end());
 
 #if URDF_MODEL_DEBUG_LOG
-  std::cout << name << "'s CHAIN: " << base_name << "->" << endtip_name << ": " << fab_core::join(chain, ",")
+  std::cout << name << "'s CHAIN: " << base_name << "->" << endtip_name << ": " << mjpc::join(chain, ",")
             << std::endl;
 #endif
   return chain;

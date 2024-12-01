@@ -6,12 +6,12 @@
 
 #include "mjpc/planners/fabrics/include/fab_casadi_function.h"
 #include "mjpc/planners/fabrics/include/fab_common.h"
-#include "mjpc/planners/fabrics/include/fab_core_util.h"
 #include "mjpc/planners/fabrics/include/fab_diff_map.h"
 #include "mjpc/planners/fabrics/include/fab_energy.h"
 #include "mjpc/planners/fabrics/include/fab_geometry.h"
 #include "mjpc/planners/fabrics/include/fab_spectral_semi_sprays.h"
 #include "mjpc/planners/fabrics/include/fab_variables.h"
+#include "mjpc/utils/mjpc_core_util.h"
 
 using FabWeightedSpecArgs = FabNamedMap<CaSX, FabGeometryPtr, FabLagrangianPtr, std::vector<std::string>>;
 
@@ -24,7 +24,7 @@ public:
       : FabSpectralSemiSprays(std::move(name)) {
     // [x_ref_name_, xdot_ref_name_, xddot_ref_name_]
     if (kwargs.contains("ref_names")) {
-      auto ref_names = *fab_core::get_arg_value<std::vector<std::string>>(kwargs, "ref_names");
+      auto ref_names = *mjpc::get_arg_value<std::vector<std::string>>(kwargs, "ref_names");
       assert(ref_names.size() == 3);
       x_ref_name_ = std::move(ref_names[0]);
       xdot_ref_name_ = std::move(ref_names[1]);
@@ -33,22 +33,22 @@ public:
 
     // [le_]
     if (kwargs.contains("le")) {
-      le_ = *fab_core::get_arg_value<decltype(le_)>(kwargs, "le");
+      le_ = *mjpc::get_arg_value<decltype(le_)>(kwargs, "le");
       le_->vars()->print_self();
     }
 
     // [h_, M_, refTrajs_]
     if (kwargs.contains("g")) {
-      const auto geom = *fab_core::get_arg_value<FabGeometryPtr>(kwargs, "g");
-      assert(fab_core::check_compatibility(*le_, *geom));
+      const auto geom = *mjpc::get_arg_value<FabGeometryPtr>(kwargs, "g");
+      assert(mjpc::check_compatibility(*le_, *geom));
       vars_ = std::make_shared<FabVariables>(*geom->vars() + *le_->vars());
       refTrajs_ = FabVariables::join_refTrajs(le_->refTrajs(), geom->refTrajs());
       this->h_ = geom->h();
       this->M_ = le_->s()->M();
     } else if (kwargs.contains("s")) {
       const auto s = std::dynamic_pointer_cast<FabSpectralSemiSprays>(
-          *fab_core::get_arg_value<FabGeometryPtr>(kwargs, "s"));
-      assert(fab_core::check_compatibility(*le_, *s));
+          *mjpc::get_arg_value<FabGeometryPtr>(kwargs, "s"));
+      assert(mjpc::check_compatibility(*le_, *s));
       auto refTrajs = FabVariables::join_refTrajs(le_->refTrajs(), s->refTrajs());
       initialize(s->M(), {{"f", s->f()},
                           {"var", s->vars()},
@@ -64,7 +64,7 @@ public:
   FabWeightedSpec operator+(const FabWeightedSpec& b) const { return FabWeightedSpec(*this) += b; }
 
   FabWeightedSpec& operator+=(const FabWeightedSpec& b) {
-    assert(fab_core::check_compatibility(*this, b));
+    assert(mjpc::check_compatibility(*this, b));
     auto spec = std::make_shared<FabSpectralSemiSprays>(FabSpectralSemiSprays::operator+(b));
     auto all_le = std::make_shared<FabLagrangian>(*le_ + *b.le_);
     *this = FabWeightedSpec(

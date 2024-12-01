@@ -116,9 +116,9 @@ public:
 
     static const auto link0_id = QueryBodyId("link0");  // GetBaseBodyName() - "pand_"
     static const mjtNum* link0_pos = &data_->xpos[3 * link0_id];
-    FAB_PRINTDB(link0_id, link0_pos[0], link0_pos[1], link0_pos[2]);
+    MJPC_PRINTDB(link0_id, link0_pos[0], link0_pos[1], link0_pos[2]);
     mju_subFrom3(subgoals[0]->cfg_.desired_state.pos.data(), link0_pos);
-    FAB_PRINTDB("Subgoal0 pos", subgoals[0]->cfg_.desired_state.pos);
+    MJPC_PRINTDB("Subgoal0 pos", subgoals[0]->cfg_.desired_state.pos);
 #endif
     auto& subgoal0_cfg = subgoals[0]->cfg_;
     if (!IsGoalFixed()) {

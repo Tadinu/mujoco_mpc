@@ -29,7 +29,7 @@ public:
 
   void set_potential(const FabConfigFunc& potential) override {
     const auto [x_potential, var_names] = potential(x_, xdot_, leaf_name_);
-    parent_vars_->add_parameters(fab_core::parse_symbolic_casx(x_potential, var_names));
+    parent_vars_->add_parameters(mjpc::parse_symbolic_casx(x_potential, var_names));
     const CaSX psi = weight_var_ * x_potential;
     CaSX h_psi = CaSX::gradient(psi, x_);
     geom_ = std::make_shared<FabGeometry>(name() + "_geom",
@@ -40,7 +40,7 @@ public:
     const auto x = leaf_vars_->position_var();
     const auto xdot = leaf_vars_->velocity_var();
     const auto [attractor_metric, var_names] = metric(x, xdot, leaf_name_);
-    parent_vars_->add_parameters(fab_core::parse_symbolic_casx(attractor_metric, var_names));
+    parent_vars_->add_parameters(mjpc::parse_symbolic_casx(attractor_metric, var_names));
     const auto lagrangian_psi = CaSX::dot(xdot, CaSX::mtimes(attractor_metric, xdot));
     lag_ = std::make_shared<FabLagrangian>(name() + "_lag", lagrangian_psi,
                                            FabLagrangianArgs{{"var", leaf_vars_}});

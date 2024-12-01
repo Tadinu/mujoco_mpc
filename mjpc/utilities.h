@@ -30,26 +30,10 @@
 #include <type_traits>
 #include <vector>
 
-// mjpc
-#include "mjpc/urdf_parser/include/model.h"
-
 #define MJPC_OPENMP_ENABLED (1)
 #define MJPC_OPENMP_THREADS_NUM (1000)
 
 namespace mjpc {
-
-struct MjcfModel : public urdf::UrdfModel {
-  mjModel* model = nullptr;
-
-  bool fromMjcfFile(const string& mjcf_path);
-  bool fromMjcfStr(const string& xml_string);
-
-private:
-  void fill_data_structure();
-  void init_link_tree(map<string, string>& parent_link_tree) override;
-  void findRoot(const map<string, string>& parent_link_tree) override;
-};
-using MjcfModelPtr = std::shared_ptr<MjcfModel>;
 
 // maximum number of traces that are visualized
 inline constexpr int kMaxTraces = 99;

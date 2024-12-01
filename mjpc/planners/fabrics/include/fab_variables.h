@@ -5,7 +5,8 @@
 #include <stdexcept>
 #include <variant>
 
-#include "mjpc/planners/fabrics/include/fab_core_util.h"
+// MJPC
+#include "mjpc/utils/mjpc_core_util.h"
 
 class FabVariables {
 public:
@@ -22,28 +23,28 @@ public:
   void print_self() const {
     const auto self_size = size();
     const auto vars_size = all_vars().size();
-    FAB_PRINT("----------");
-    FAB_PRINT("TOTAL SIZE", self_size, "VARS SIZE", vars_size);
+    MJPC_PRINT("----------");
+    MJPC_PRINT("TOTAL SIZE", self_size, "VARS SIZE", vars_size);
     assert(self_size == vars_size);
-    FAB_PRINT("STATE VARS --");
+    MJPC_PRINT("STATE VARS --");
     for (const auto& [var_name, var] : state_variables_) {
-      FAB_PRINT(var_name, ":", var, var.size());
+      MJPC_PRINT(var_name, ":", var, var.size());
     }
 
-    FAB_PRINT("PARAMS --");
+    MJPC_PRINT("PARAMS --");
     for (const auto& [param_name, param] : parameters_) {
-      FAB_PRINT(param_name, ":", param, param.size());
+      MJPC_PRINT(param_name, ":", param, param.size());
     }
 
-    FAB_PRINT("PARAM VALS --");
+    MJPC_PRINT("PARAM VALS --");
     for (const auto& [param_val_name, param_val] : parameter_values_) {
-      FAB_PRINT(param_val_name, ":");
-      fab_core::print_variant(param_val);
+      MJPC_PRINT(param_val_name, ":");
+      mjpc::print_casadi_variant(param_val);
     }
   }
 
   CaSX position_var() const {
-    const auto state_variable_names = fab_core::get_map_keys(state_variables_);
+    const auto state_variable_names = mjpc::get_map_keys(state_variables_);
     if (state_variable_names.empty()) {
       throw FabParamNotFoundError("There is 0 state variable");
     }
@@ -51,7 +52,7 @@ public:
   }
 
   CaSX velocity_var() const {
-    const auto state_variable_names = fab_core::get_map_keys(state_variables_);
+    const auto state_variable_names = mjpc::get_map_keys(state_variables_);
     if (state_variable_names.size() < 2) {
       throw FabParamNotFoundError("There are <2 state variables");
     }
@@ -85,7 +86,7 @@ public:
   }
 
   double parameter_value(const std::string& name) const {
-    return parameter_values_.contains(name) ? fab_core::get_variant_value<double>(parameter_values_.at(name))
+    return parameter_values_.contains(name) ? mjpc::get_variant_value<double>(parameter_values_.at(name))
                                             : -1;
   }
 
@@ -133,9 +134,9 @@ public:
   }
 
   bool operator==(const FabVariables& other) const {
-    return fab_core::is_equal_SXDict(state_variables_, other.state_variables_) &&
-           fab_core::is_equal_SXDict(parameters_, other.parameters_) &&
-           fab_core::is_equal_itertable(parameter_values_, other.parameter_values_);
+    return mjpc::is_equal_SXDict(state_variables_, other.state_variables_) &&
+           mjpc::is_equal_SXDict(parameters_, other.parameters_) &&
+           mjpc::is_equal_itertable(parameter_values_, other.parameter_values_);
   }
 
   static FabTrajectories join_refTrajs(const FabTrajectories& refTrajs1, const FabTrajectories& refTrajs2) {
