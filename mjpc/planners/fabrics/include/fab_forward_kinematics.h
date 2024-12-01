@@ -46,7 +46,7 @@ public:
   bool init() override {
     // 1.1- Read entity model from description file (urdf, xml, etc.)
     if (entity_model_file_.empty()) {
-      FAB_PRINT("[FabURDFForwardKinematics] entity model path is empty, failed reading MODEL");
+      MJPC_PRINT("[FabURDFForwardKinematics] entity model path is empty, failed reading MODEL");
       return false;
     }
     if (!read_entity_model()) {
@@ -68,7 +68,7 @@ public:
 
   bool read_entity_model() override {
     if (false == read_urdf()) {
-      FAB_PRINT("[FabURDFForwardKinematics] failed reading MODEL", model_path());
+      MJPC_PRINT("[FabURDFForwardKinematics] failed reading MODEL", model_path());
       return false;
     }
     return true;
@@ -123,13 +123,13 @@ public:
           const urdf::Vector3 axis =
               (joint->axis == urdf::Vector3::Zero) ? urdf::Vector3::UnitX : joint->axis;
           const auto joint_frame = fab_math::prismatic(
-              xyz, rpy, axis, fab_core::get_casx(q, entity_model_->joint_name_map[joint->name]));
+              xyz, rpy, axis, mjpc::get_casx(q, entity_model_->joint_name_map[joint->name]));
 
 #if 0
-          FAB_PRINTDB("AXIS", axis.to_string());
-          FAB_PRINTDB("JOINT FRAME", joint_frame, xyz.to_string(), rpy.to_string(),
+          MJPC_PRINTDB("AXIS", axis.to_string());
+          MJPC_PRINTDB("JOINT FRAME", joint_frame, xyz.to_string(), rpy.to_string(),
                             entity_model_->joint_name_map[joint->name],
-                            fab_core::get_casx(q, entity_model_->joint_name_map[joint->name]));
+                            mjpc::get_casx(q, entity_model_->joint_name_map[joint->name]));
 #endif
           T_fk = CaSX::mtimes(T_fk, joint_frame);
         } break;
@@ -138,11 +138,11 @@ public:
         case urdf::JointType::CONTINUOUS: {
           urdf::Vector3 axis = (joint->axis == urdf::Vector3::Zero) ? urdf::Vector3::UnitX : joint->axis;
           axis = double((1. / CaSX::norm_2(axis.to_vector())).scalar()) * axis;
-          FAB_PRINT("get_robot_fk", joint->name, joint->joint_type_name(),
+          MJPC_PRINT("get_robot_fk", joint->name, joint->joint_type_name(),
                     entity_model_->joint_name_map[joint->name], xyz.to_string(), rpy.to_string(),
                     axis.to_string());
           const auto joint_frame = fab_math::revolute(
-              xyz, rpy, axis, fab_core::get_casx(q, entity_model_->joint_name_map[joint->name]));
+              xyz, rpy, axis, mjpc::get_casx(q, entity_model_->joint_name_map[joint->name]));
           T_fk = CaSX::mtimes(T_fk, joint_frame);
         } break;
 
@@ -158,14 +158,14 @@ public:
               const CaSX& link_transf = fab_math::CASX_TRANSF_IDENTITY,
               const CaSX& link_transf_offset = fab_math::CASX_TRANSF_IDENTITY,
               bool position_only = false) override {
-    CaSX fk = position_only ? mjpc_casadi::CASX_3D_ZERO : fab_math::CASX_TRANSF_IDENTITY;
+    CaSX fk = position_only ? mjpc::CASX_3D_ZERO : fab_math::CASX_TRANSF_IDENTITY;
 
-    auto parent_link_name = fab_core::get_variant_value<std::string>(parent_link);
+    auto parent_link_name = mjpc::get_variant_value<std::string>(parent_link);
     if (parent_link_name.empty()) {
       parent_link_name = base_link_name_;
     }
 
-    const auto child_link_name = fab_core::get_variant_value<std::string>(child_link);
+    const auto child_link_name = mjpc::get_variant_value<std::string>(child_link);
     if (!entity_model_->get_link(child_link_name)) {
       throw FabError(child_link_name + " :Link not found in robot model " + model_path());
     } else if ((child_link_name == entity_model_->root_link->name) || (child_link_name == "world")) {
@@ -175,13 +175,13 @@ public:
     switch (base_type_) {
       case FabRobotBaseType::DIFF_DRIVE: {
         fk = get_robot_fk(parent_link_name, child_link_name,
-                          fab_core::get_casx(q, std::array<casadi_int, 2>{2, CASADI_INT_MAX}), link_transf);
-        const CaSX q_2 = fab_core::get_casx(q, 2);
+                          mjpc::get_casx(q, std::array<casadi_int, 2>{2, CASADI_INT_MAX}), link_transf);
+        const CaSX q_2 = mjpc::get_casx(q, 2);
         const CaSX c = CaSX::cos(q_2);
         const CaSX s = CaSX::sin(q_2);
         const CaSX T_base = CaSX::blockcat({
-            {c, -s, 0, fab_core::get_casx(q, 0)},
-            {s, c, 0, fab_core::get_casx(q, 1)},
+            {c, -s, 0, mjpc::get_casx(q, 0)},
+            {s, c, 0, mjpc::get_casx(q, 1)},
             {0, 0, 1, 0},
             {0, 0, 0, 1},
         });
@@ -195,14 +195,14 @@ public:
 
     // Offset
     if (position_only) {
-      fk = fab_core::get_casx2(fk, {0, 3}, 3) + (link_transf_offset.is_zero()
-                                                     ? mjpc_casadi::CASX_3D_ZERO
-                                                     : fab_core::get_casx2(link_transf_offset, {0, 3}, 3));
+      fk = mjpc::get_casx2(fk, {0, 3}, 3) + (link_transf_offset.is_zero()
+                                                     ? mjpc::CASX_3D_ZERO
+                                                     : mjpc::get_casx2(link_transf_offset, {0, 3}, 3));
     } else {
       fk = CaSX::mtimes(fk, link_transf_offset);
     }
-    FAB_PRINT("URDFFK casadi", parent_link_name, child_link_name, q, fk);
-    FAB_PRINT("FK Offset:", link_transf_offset);
+    MJPC_PRINT("URDFFK casadi", parent_link_name, child_link_name, q, fk);
+    MJPC_PRINT("FK Offset:", link_transf_offset);
     return fk;
   }
 

@@ -1,5 +1,6 @@
 #include "mjpc/planners/fabrics/include/fab_casadi_function.h"
 
+#include "mjpc/planners/fabrics/include/fab_core_util.h"
 #define USE_PYTHON_FUNC (0)
 
 #if USE_PYTHON_FUNC
@@ -7,7 +8,7 @@
 #else
 #include "mjpc/planners/fabrics/include/casadi_gen/fab_task_panda_dynamic_func.h"
 #endif
-#include "mjpc/planners/fabrics/include/fab_core_util.h"
+#include "mjpc/utils/mjpc_core_util.h"
 
 #define SET_INPUT_FROM_ARG1(idx, key)                   \
   {                                                     \

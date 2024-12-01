@@ -8,8 +8,8 @@
 #include "mjpc/casadi/casadi_common.h"
 #include "mjpc/casadi/casadi_function.h"
 #include "mjpc/planners/fabrics/include/fab_common.h"
-#include "mjpc/planners/fabrics/include/fab_core_util.h"
 #include "mjpc/planners/fabrics/include/fab_variables.h"
+#include "mjpc/utils/mjpc_core_util.h"
 
 #define FAB_CASADI_GENERATE_FUNCTION_CODE (0)
 #define FAB_CASADI_USE_PREGEN_FUNCTIONS (0)
@@ -22,7 +22,7 @@ public:
                     bool use_pregen_functions = false)
       : CasadiFunction(std::move(name), std::move(expressions)) {
     inputs_ = variables.all_vars();
-    arguments_ = fab_core::get_casx_dict(variables.parameter_values());
+    arguments_ = mjpc::get_casx_dict(variables.parameter_values());
     create_function();
 #if FAB_CASADI_USE_PREGEN_FUNCTIONS
     if (use_pregen_functions) {
@@ -38,21 +38,21 @@ public:
   void print_self() const override { CasadiFunction::print_self(); }
 
   virtual CaSXDict evaluate(const CasadiArgMap& kwargs) override {
-    FAB_PRINTDB(name_, "EVALUATING...");
+    MJPC_PRINTDB(name_, "EVALUATING...");
     // Process arguments
-    FAB_PRINTDB("PRE-PROCESSED KWARGS", kwargs.size());
-    fab_core::print_named_mapdb(kwargs);
-    FAB_PRINTDB("----------------");
+    MJPC_PRINTDB("PRE-PROCESSED KWARGS", kwargs.size());
+    mjpc::print_named_mapdb(kwargs);
+    MJPC_PRINTDB("----------------");
     // arguments_.clear();
     auto fill_arg = [this](const std::string& arg_name, const CasadiArg& arg,
                            const std::vector<std::string>& arg_prefix_name_list) {
       const bool bArg_matched =
           arg_prefix_name_list.empty() ||
-          fab_core::has_collection_element_if(
+          mjpc::has_collection_element_if(
               arg_prefix_name_list, [&arg_name](const auto& prefix) { return arg_name.starts_with(prefix); });
       if (bArg_matched) {
         CaSX arg_val;
-        if (fab_core::variant_to_casx(arg, arg_val)) {
+        if (mjpc::variant_to_casx(arg, arg_val)) {
           arguments_.insert_or_assign(arg_name, arg_val);
         }
       }
@@ -86,7 +86,7 @@ public:
         fill_arg(arg_name, arg, {});
       }
     }
-    fab_core::print_named_map2db<CaSX>(arguments_, "POST-PROCESSED KWARGS");
+    mjpc::print_named_map2db<CaSX>(arguments_, "POST-PROCESSED KWARGS");
 
     // Evaluate, invoking [function_(inputs)]
     // Example:
@@ -97,8 +97,8 @@ public:
       return {};
     }
 
-    FAB_PRINTDB("CASADI FUNCTION INPUTS NUM:", function_.name_in().size());
-    FAB_PRINTDB("CASADI FUNCTION OUTPUTS NUM:", function_.name_out().size());
+    MJPC_PRINTDB("CASADI FUNCTION INPUTS NUM:", function_.name_in().size());
+    MJPC_PRINTDB("CASADI FUNCTION OUTPUTS NUM:", function_.name_out().size());
 
 #if FAB_CASADI_GENERATE_FUNCTION_CODE
     // Compile [function_] code to a shared library
@@ -106,7 +106,7 @@ public:
     const auto current_path = std::filesystem::current_path();
     const auto function_c = std::string(current_path / function_.name()) + ".c";
     const auto function_so = std::string(current_path / function_base_name) + ".so";
-    FAB_PRINT("CASADI FUNCTION GENERATED TO:", function_.generate(function_.name()), function_c);
+    MJPC_PRINT("CASADI FUNCTION GENERATED TO:", function_.generate(function_.name()), function_c);
 #if 0
     // Automatically convert function code to object then use [casadi::Importer] (wip)
     function_ = casadi::external(function_base_name, casadi::Importer(function_c, "clang"));
@@ -132,12 +132,12 @@ public:
 #endif
     const auto end = std::chrono::high_resolution_clock::now();
     const auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    FAB_PRINTDB("Average compute time:", double(duration.count()) * 0.001, " milliseconds");
-    FAB_PRINTDB("OUTPUTS", outputs);
+    MJPC_PRINTDB("Average compute time:", double(duration.count()) * 0.001, " milliseconds");
+    MJPC_PRINTDB("OUTPUTS", outputs);
     for (auto& [name, val] : outputs) {
       const auto val_size = val.size();
       if ((val_size == decltype(val_size){1, 1}) || (val_size.second == 1)) {
-        val = fab_core::get_casx2(val, {CASADI_INT_MIN, CASADI_INT_MAX}, 0);
+        val = mjpc::get_casx2(val, {CASADI_INT_MIN, CASADI_INT_MAX}, 0);
       }
     }
     return outputs;

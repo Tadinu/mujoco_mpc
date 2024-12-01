@@ -94,10 +94,10 @@ public:
                           std::filesystem::exists(study_file_path);
 #endif
     if (storage_exists) {
-      FAB_PRINT("[FabParamTuner] Reading study from " + study_file_path);
+      MJPC_PRINT("[FabParamTuner] Reading study from " + study_file_path);
       // TODO: tbd
     } else {
-      FAB_PRINT("[FabParamTuner] Create new study with backend:",
+      MJPC_PRINT("[FabParamTuner] Create new study with backend:",
                 study_file_path.empty() ? "in-memory" : study_file_path);
       study_ = std::make_shared<optuna::Study>(study_name, study_file_path, optuna::MINIMIZE, true);
     }
@@ -160,7 +160,7 @@ public:
     for (const auto& [param_name, param_weight] : param_weights_) {
       sum += param_weight * costs.at(param_name);
     }
-    FAB_PRINT("OPTUNA TOTAL COST", sum);
+    MJPC_PRINT("OPTUNA TOTAL COST", sum);
     return sum;
   }
 
@@ -195,7 +195,7 @@ public:
 
     // NOTE: This only triggers a trial run, which would span over multiple frames computing action,
     // accumulating results
-    FAB_PRINT("Start running trial id ", current_trial_idx_);
+    MJPC_PRINT("Start running trial id ", current_trial_idx_);
     run_trial(trials_[current_trial_idx_]);
     last_trial_started_ = true;
   }
@@ -208,7 +208,7 @@ public:
 
     if (current_trial_idx_ == (trials_.size() - 1)) {
       const optuna::FrozenTrial best_trial = study_->best_trial();
-      FAB_PRINT("BEST TRIAL", best_trial.number, best_trial.value);
+      MJPC_PRINT("BEST TRIAL", best_trial.number, best_trial.value);
 
       // Refresh [best_params_]
       best_params_.clear();
@@ -217,7 +217,7 @@ public:
           best_params_.insert_or_assign(param_name, best_trial.param_to<double>(param_name));
         }
       }
-      // FAB_PRINT("Saving study");
+      // MJPC_PRINT("Saving study");
       // save_study();
     }
     current_trial_idx_++;
@@ -286,16 +286,16 @@ protected:
     q0_ = task_->QueryJointPos(robot_dof);
     static auto q_last = q0_;
     qdot_ = task_->QueryJointVel(robot_dof);
-    FAB_PRINTDB("QPOS", q0_);
-    FAB_PRINTDB("QVEL", qdot_);
+    MJPC_PRINTDB("QPOS", q0_);
+    MJPC_PRINTDB("QVEL", qdot_);
     path_length_ += double(CaSX::norm_2(CaSX(q0_) - CaSX(q_last)).scalar());
     q_last = q0_;
     distances_to_goal_0_.push_back(evaluate_pace_to_goal());
     distances_to_closest_obstacle_.push_back(evaluate_distance_to_closest_obstacle());
-    FAB_PRINT("current_trial_idx_", current_trial_idx_);
-    FAB_PRINT("initial_distance_to_obstacles_", initial_distance_to_obstacles_);
-    FAB_PRINT("distances_to_goal_0_", distances_to_goal_0_.back());
-    FAB_PRINT("distances_to_closest_obstacle_", distances_to_closest_obstacle_.back());
+    MJPC_PRINT("current_trial_idx_", current_trial_idx_);
+    MJPC_PRINT("initial_distance_to_obstacles_", initial_distance_to_obstacles_);
+    MJPC_PRINT("distances_to_goal_0_", distances_to_goal_0_.back());
+    MJPC_PRINT("distances_to_closest_obstacle_", distances_to_closest_obstacle_.back());
   }
 
   FabParamWeightDict get_trial_result() const {

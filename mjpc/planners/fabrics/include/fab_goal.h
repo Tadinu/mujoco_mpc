@@ -3,8 +3,8 @@
 #include <memory>
 
 #include "mjpc/planners/fabrics/include/fab_common.h"
-#include "mjpc/planners/fabrics/include/fab_core_util.h"
 #include "mjpc/planners/fabrics/include/fab_math_util.h"
+#include "mjpc/utils/mjpc_core_util.h"
 
 enum class FabSubGoalType : uint8_t { STATIC, STATIC_JOINT_SPACE, DYNAMIC /* Analytic, Spline, etc.*/ };
 
@@ -173,25 +173,25 @@ public:
   FabGoalComposition() = default;
   FabGoalComposition(std::string name, const FabGoalConfig& config) : name_(std::move(name)) {
     for (const auto& [sub_goal_name, subgoal_config_map] : config) {
-      const auto type_text = fab_core::get_variant_value<std::string>(subgoal_config_map.at("type"));
+      const auto type_text = mjpc::get_variant_value<std::string>(subgoal_config_map.at("type"));
       auto sub_goal = std::make_shared<FabStaticSubGoal>(FabSubGoalConfig{
           .name = sub_goal_name,
           .type = (type_text == "static")               ? FabSubGoalType::STATIC
                   : (type_text == "static_joint_space") ? FabSubGoalType::STATIC_JOINT_SPACE
                                                         : FabSubGoalType::DYNAMIC,
-          .is_primary_goal = fab_core::get_variant_value<bool>(subgoal_config_map.at("is_primary_goal")),
-          .epsilon = fab_core::get_variant_value<double>(subgoal_config_map.at("epsilon")),
-          .indices = fab_core::get_variant_value<std::vector<int>>(subgoal_config_map.at("indices")),
-          .weight = fab_core::get_variant_value<double>(subgoal_config_map.at("weight")),
-          .parent_link_name = fab_core::get_variant_value<std::string>(subgoal_config_map.at("parent_link")),
-          .child_link_name = fab_core::get_variant_value<std::string>(subgoal_config_map.at("child_link")),
-          .desired_state = {.pose = FabPose{.pos = fab_core::get_variant_value<std::vector<double>>(
+          .is_primary_goal = mjpc::get_variant_value<bool>(subgoal_config_map.at("is_primary_goal")),
+          .epsilon = mjpc::get_variant_value<double>(subgoal_config_map.at("epsilon")),
+          .indices = mjpc::get_variant_value<std::vector<int>>(subgoal_config_map.at("indices")),
+          .weight = mjpc::get_variant_value<double>(subgoal_config_map.at("weight")),
+          .parent_link_name = mjpc::get_variant_value<std::string>(subgoal_config_map.at("parent_link")),
+          .child_link_name = mjpc::get_variant_value<std::string>(subgoal_config_map.at("child_link")),
+          .desired_state = {.pose = FabPose{.pos = mjpc::get_variant_value<std::vector<double>>(
                                                 subgoal_config_map.at("desired_pos")),
-                                            .rot = fab_core::get_variant_value<std::vector<double>>(
+                                            .rot = mjpc::get_variant_value<std::vector<double>>(
                                                 subgoal_config_map.at("desired_rot"))},
-                            .linear_vel = fab_core::get_variant_value<std::vector<double>>(
+                            .linear_vel = mjpc::get_variant_value<std::vector<double>>(
                                 subgoal_config_map.at("desired_vel")),
-                            .linear_acc = fab_core::get_variant_value<std::vector<double>>(
+                            .linear_acc = mjpc::get_variant_value<std::vector<double>>(
                                 subgoal_config_map.at("desired_acc"))}});
       add_sub_goal(sub_goal);
     }

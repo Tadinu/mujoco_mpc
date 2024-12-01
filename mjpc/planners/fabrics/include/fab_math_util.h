@@ -9,8 +9,8 @@
 
 // fabrics
 #include "mjpc/planners/fabrics/include/fab_common.h"
-#include "mjpc/planners/fabrics/include/fab_core_util.h"
 #include "mjpc/urdf_parser/include/common.h"
+#include "mjpc/utils/mjpc_core_util.h"
 
 struct FabRandom {
   static int seed;
@@ -277,20 +277,20 @@ static CaSX prismatic(const urdf::Vector3& xyz, const urdf::Vector3& rpy, const 
   const auto p2 = r20 * axis[0] * qi + r21 * axis[1] * qi + r22 * axis[2] * qi;
 
   // Homogeneous transformation matrix
-  fab_core::set_casx2(T, 0, 0, r00);
-  fab_core::set_casx2(T, 0, 0, r00);
-  fab_core::set_casx2(T, 0, 1, r01);
-  fab_core::set_casx2(T, 0, 2, r02);
-  fab_core::set_casx2(T, 1, 0, r10);
-  fab_core::set_casx2(T, 1, 1, r11);
-  fab_core::set_casx2(T, 1, 2, r12);
-  fab_core::set_casx2(T, 2, 0, r20);
-  fab_core::set_casx2(T, 2, 1, r21);
-  fab_core::set_casx2(T, 2, 2, r22);
-  fab_core::set_casx2(T, 0, 3, xyz[0] + p0);
-  fab_core::set_casx2(T, 1, 3, xyz[1] + p1);
-  fab_core::set_casx2(T, 2, 3, xyz[2] + p2);
-  fab_core::set_casx2(T, 3, 3, 1.0);
+  mjpc::set_casx2(T, 0, 0, r00);
+  mjpc::set_casx2(T, 0, 0, r00);
+  mjpc::set_casx2(T, 0, 1, r01);
+  mjpc::set_casx2(T, 0, 2, r02);
+  mjpc::set_casx2(T, 1, 0, r10);
+  mjpc::set_casx2(T, 1, 1, r11);
+  mjpc::set_casx2(T, 1, 2, r12);
+  mjpc::set_casx2(T, 2, 0, r20);
+  mjpc::set_casx2(T, 2, 1, r21);
+  mjpc::set_casx2(T, 2, 2, r22);
+  mjpc::set_casx2(T, 0, 3, xyz[0] + p0);
+  mjpc::set_casx2(T, 1, 3, xyz[1] + p1);
+  mjpc::set_casx2(T, 2, 3, xyz[2] + p2);
+  mjpc::set_casx2(T, 3, 3, 1.0);
   return T;
 }
 
@@ -329,20 +329,20 @@ static CaSX revolute(const urdf::Vector3& xyz, const urdf::Vector3& rpy, const u
   const auto s02 = (1 - cqi) * axis[0] * axis[2] + axis[1] * sqi;
 
   // Homogeneous transformation matrix
-  fab_core::set_casx2(T, 0, 0, r00 * s00 + r01 * s10 + r02 * s20);
-  fab_core::set_casx2(T, 1, 0, r10 * s00 + r11 * s10 + r12 * s20);
-  fab_core::set_casx2(T, 2, 0, r20 * s00 + r21 * s10 + r22 * s20);
-  fab_core::set_casx2(T, 0, 1, r00 * s01 + r01 * s11 + r02 * s21);
-  fab_core::set_casx2(T, 1, 1, r10 * s01 + r11 * s11 + r12 * s21);
-  fab_core::set_casx2(T, 2, 1, r20 * s01 + r21 * s11 + r22 * s21);
-  fab_core::set_casx2(T, 0, 2, r00 * s02 + r01 * s12 + r02 * s22);
-  fab_core::set_casx2(T, 1, 2, r10 * s02 + r11 * s12 + r12 * s22);
-  fab_core::set_casx2(T, 2, 2, r20 * s02 + r21 * s12 + r22 * s22);
+  mjpc::set_casx2(T, 0, 0, r00 * s00 + r01 * s10 + r02 * s20);
+  mjpc::set_casx2(T, 1, 0, r10 * s00 + r11 * s10 + r12 * s20);
+  mjpc::set_casx2(T, 2, 0, r20 * s00 + r21 * s10 + r22 * s20);
+  mjpc::set_casx2(T, 0, 1, r00 * s01 + r01 * s11 + r02 * s21);
+  mjpc::set_casx2(T, 1, 1, r10 * s01 + r11 * s11 + r12 * s21);
+  mjpc::set_casx2(T, 2, 1, r20 * s01 + r21 * s11 + r22 * s21);
+  mjpc::set_casx2(T, 0, 2, r00 * s02 + r01 * s12 + r02 * s22);
+  mjpc::set_casx2(T, 1, 2, r10 * s02 + r11 * s12 + r12 * s22);
+  mjpc::set_casx2(T, 2, 2, r20 * s02 + r21 * s12 + r22 * s22);
 
-  fab_core::set_casx2(T, 0, 3, xyz[0]);
-  fab_core::set_casx2(T, 1, 3, xyz[1]);
-  fab_core::set_casx2(T, 2, 3, xyz[2]);
-  fab_core::set_casx2(T, 3, 3, 1.0);
+  mjpc::set_casx2(T, 0, 3, xyz[0]);
+  mjpc::set_casx2(T, 1, 3, xyz[1]);
+  mjpc::set_casx2(T, 2, 3, xyz[2]);
+  mjpc::set_casx2(T, 3, 3, 1.0);
   return T;
 }
 
@@ -367,9 +367,9 @@ static CaSX rotation_rpy(const urdf::Vector3& rpy) {
 // Homogeneous transformation matrix with roll pitch yaw
 static CaSX transform(const urdf::Vector3& xyz, const urdf::Vector3& rpy) {
   CaSX T = CaSX::zeros(4, 4);
-  fab_core::set_casx2(T, {CASADI_INT_MIN, 3}, {CASADI_INT_MIN, 3}, rotation_rpy(rpy));
-  fab_core::set_casx2(T, {CASADI_INT_MIN, 3}, 3, CaSX(xyz.to_vector()));
-  fab_core::set_casx2(T, 3, 3, 1.0);
+  mjpc::set_casx2(T, {CASADI_INT_MIN, 3}, {CASADI_INT_MIN, 3}, rotation_rpy(rpy));
+  mjpc::set_casx2(T, {CASADI_INT_MIN, 3}, 3, CaSX(xyz.to_vector()));
+  mjpc::set_casx2(T, 3, 3, 1.0);
   return T;
 }
 }  // namespace fab_math

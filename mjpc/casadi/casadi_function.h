@@ -49,13 +49,13 @@ protected:
                            /*, {{"allow_free", true}}*/);
 #else
     // 1- Create [input_names_, input_values_] <- [inputs_]
-    input_names_ = fab_core::get_map_keys(inputs_);
+    input_names_ = mjpc::get_map_keys(inputs_);
     std::sort(input_names_.begin(), input_names_.end());
     std::transform(input_names_.begin(), input_names_.end(), std::back_inserter(input_values_),
                    [this](auto& input_key) { return inputs_[input_key]; });
 
     // 2- Create [expression_names_, expression_values_] <- [expressions_]
-    expression_names_ = fab_core::get_map_keys(expressions_);
+    expression_names_ = mjpc::get_map_keys(expressions_);
     std::sort(expression_names_.begin(), expression_names_.end());
     std::transform(expression_names_.begin(), expression_names_.end(), std::back_inserter(expression_values_),
                    [this](auto& exp_name) { return expressions_[exp_name]; });
@@ -71,14 +71,14 @@ public:
     CASADI_PRINT("Input values: ", input_values_);
     CASADI_PRINT("Expression names: ", expression_names_);
     // CASADI_PRINT("Expression values: ", expression_values_);
-    mjpc_casadi::print_named_map2<CaSX>(arguments_, "Args");
+    mjpc::print_named_map2<CaSX>(arguments_, "Args");
   }
 
   virtual CaSXDict evaluate(const CasadiArgMap& kwargs) {
     CASADI_PRINTDB(name_, "EVALUATING...");
     // Process arguments
     CASADI_PRINTDB("PRE-PROCESSED KWARGS", kwargs.size());
-    mjpc_casadi::print_named_mapdb(kwargs);
+    mjpc::print_named_mapdb(kwargs);
     CASADI_PRINTDB("----------------");
     // arguments_.clear();
     auto fill_arg = [this](const std::string& arg_name, const CasadiArg& arg,
@@ -86,7 +86,7 @@ public:
       const bool bArg_matched = arg_prefix_name_list.empty();
       if (bArg_matched) {
         CaSX arg_val;
-        if (mjpc_casadi::variant_to_casx(arg, arg_val)) {
+        if (mjpc::variant_to_casx(arg, arg_val)) {
           arguments_.insert_or_assign(arg_name, arg_val);
         }
       }
@@ -96,7 +96,7 @@ public:
     for (const auto& [arg_name, arg] : kwargs) {
       fill_arg(arg_name, arg, {});
     }
-    mjpc_casadi::print_named_map2db<CaSX>(arguments_, "POST-PROCESSED KWARGS");
+    mjpc::print_named_map2db<CaSX>(arguments_, "POST-PROCESSED KWARGS");
 
     // Evaluate, invoking [function_(inputs)]
     // Example:
@@ -121,7 +121,7 @@ public:
     for (auto& [name, val] : outputs) {
       const auto val_size = val.size();
       if ((val_size == decltype(val_size){1, 1}) || (val_size.second == 1)) {
-        val = mjpc_casadi::get_casx2(val, {CASADI_INT_MIN, CASADI_INT_MAX}, 0);
+        val = mjpc::get_casx2(val, {CASADI_INT_MIN, CASADI_INT_MAX}, 0);
       }
     }
     return outputs;

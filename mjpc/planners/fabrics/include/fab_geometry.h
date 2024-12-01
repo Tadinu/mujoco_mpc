@@ -22,22 +22,22 @@ public:
     // [h_, vars_]
     if (kwargs.contains("x")) {
       assert(kwargs.contains("xdot"));
-      h_ = *fab_core::get_arg_value<decltype(h_)>(kwargs, "h");
+      h_ = *mjpc::get_arg_value<decltype(h_)>(kwargs, "h");
       vars_ =
-          std::make_shared<FabVariables>(CaSXDict{{"x", *fab_core::get_arg_value<CaSX>(kwargs, "x")},
-                                                  {"xdot", *fab_core::get_arg_value<CaSX>(kwargs, "xdot")}});
+          std::make_shared<FabVariables>(CaSXDict{{"x", *mjpc::get_arg_value<CaSX>(kwargs, "x")},
+                                                  {"xdot", *mjpc::get_arg_value<CaSX>(kwargs, "xdot")}});
     } else if (kwargs.contains("var")) {
-      h_ = *fab_core::get_arg_value<decltype(h_)>(kwargs, "h");
-      vars_ = *fab_core::get_arg_value<decltype(vars_)>(kwargs, "var");
+      h_ = *mjpc::get_arg_value<decltype(h_)>(kwargs, "h");
+      vars_ = *mjpc::get_arg_value<decltype(vars_)>(kwargs, "var");
     } else if (kwargs.contains("s")) {
-      const auto s = *fab_core::get_arg_value<FabGeometryPtr>(kwargs, "s");
+      const auto s = *mjpc::get_arg_value<FabGeometryPtr>(kwargs, "s");
       h_ = s->h();
       vars_ = s->vars();
     }
 
     // [refTrajs_]
     if (kwargs.contains("refTrajs")) {
-      refTrajs_ = *fab_core::get_arg_value<decltype(refTrajs_)>(kwargs, "refTrajs");
+      refTrajs_ = *mjpc::get_arg_value<decltype(refTrajs_)>(kwargs, "refTrajs");
     }
   }
 
@@ -64,7 +64,7 @@ public:
   FabGeometry operator+(const FabGeometry& b) const { return FabGeometry(*this) += b; }
 
   FabGeometry& operator+=(const FabGeometry& b) {
-    assert(fab_core::check_compatibility(*this, b));
+    assert(mjpc::check_compatibility(*this, b));
     h_ = h_ + b.h_;
     vars_ = std::make_shared<FabVariables>(*vars_ + *b.vars_);
     return *this;

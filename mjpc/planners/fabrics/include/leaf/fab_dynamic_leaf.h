@@ -62,7 +62,7 @@ public:
     const auto Jdotqdot_dynamic = -xddot_ref_;
 #endif
     dynamic_map_ = std::make_shared<FabDynamicDifferentialMap>(name() + "_diffmap", fk_vars_, ref_names);
-    FAB_PRINTDB(dynamic_map_->ref_names());
+    MJPC_PRINTDB(dynamic_map_->ref_names());
     parent_vars_->add_parameters(reference_params);
   }
 

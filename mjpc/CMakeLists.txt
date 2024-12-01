@@ -49,6 +49,9 @@ set(LIB_MJPC_HEADERS
         agent.h
         trajectory.h
         utilities.h
+        core/mjpc_common.h
+        utils/mjpc_core_util.h
+        mjcf/mjcf_model.h
         optimizers/base_optimizer.h
         optimizers/second_order_optimizer.h
         optimizers/stochastic_optimizer.h
@@ -181,6 +184,8 @@ add_library(
         agent.cc
         trajectory.cc
         utilities.cc
+        utils/mjpc_core_util.cc
+        mjcf/mjcf_model.cc
         optimizers/second_order_optimizer.cc
         optimizers/stochastic_optimizer.cc
         tasks/tasks.cc

@@ -41,36 +41,17 @@ using FabLinkCollisionProps = std::map<std::string, std::vector<double> /*size o
 
 enum class FabControlMode : uint8_t { VEL, ACC };
 
-struct FabError : public std::runtime_error {
-  explicit FabError(const std::string& error_msg) : std::runtime_error(error_msg), message_(error_msg) {}
-
-  explicit FabError(const char* error_msg) : std::runtime_error(error_msg), message_(error_msg) {}
-
-  static FabError customized(std::string expression, std::string message) {
-    FabError error("");
-    error.expression_ = std::move(expression);
-    error.message_ = std::move(message);
-    return error;
+struct FabError : public mjpc::MjpcError {
+  explicit FabError(std::string error_msg = "") : MjpcError(std::move(error_msg)) {
+    message_ = "[Fabrics] " + message_;
   }
 
-#if 0
-  const char* what() const _NOEXCEPT override {
-#else
-  const char* what() const _GLIBCXX_TXN_SAFE_DYN _GLIBCXX_NOTHROW override {
-#endif
-    static std::string full_message;
-    full_message = expression_ + ": " + message_;
-    return full_message.c_str();
-  }
-
-  std::string expression_;
-  std::string message_;
+  explicit FabError(const char* error_msg = nullptr) : FabError(std::string(error_msg)) {}
 };
 
-struct FabParamNotFoundError : public std::runtime_error {
+struct FabParamNotFoundError : public mjpc::MjpcParamNotFoundError {
   explicit FabParamNotFoundError(const std::string& error_msg)
-      : std::runtime_error("[Param not found]: " + error_msg) {}
+      : MjpcParamNotFoundError("[Fabrics]: " + error_msg) {}
 
-  explicit FabParamNotFoundError(const char* error_msg)
-      : std::runtime_error("[Param not found]: " + std::string(error_msg)) {}
+  explicit FabParamNotFoundError(const char* error_msg) : FabParamNotFoundError(std::string(error_msg)) {}
 };

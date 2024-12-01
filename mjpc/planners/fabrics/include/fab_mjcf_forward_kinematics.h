@@ -7,6 +7,7 @@
 #include <mujoco/mujoco.h>
 
 // fabrics
+#include "mjpc/mjcf/mjcf_model.h"
 #include "mjpc/planners/fabrics/include/fab_common.h"
 #include "mjpc/planners/fabrics/include/fab_forward_kinematics.h"
 #include "mjpc/planners/fabrics/include/fab_math_util.h"
@@ -24,7 +25,7 @@ public:
 
   bool read_entity_model() override {
     if (false == read_mjcf()) {
-      FAB_PRINT("[FabMJCFForwardKinematics] failed reading MODEL", model_path());
+      MJPC_PRINT("[FabMJCFForwardKinematics] failed reading MODEL", model_path());
       return false;
     }
     return true;

@@ -21,14 +21,14 @@ public:
 
   void set_geometry(const FabConfigFunc& geometry) {
     const auto [h_geometry, var_names] = geometry(x_, xdot_, leaf_name_);
-    parent_vars_->add_parameters(fab_core::parse_symbolic_casx(h_geometry, var_names));
+    parent_vars_->add_parameters(mjpc::parse_symbolic_casx(h_geometry, var_names));
     geom_ = std::make_shared<FabGeometry>(name() + "_geom",
                                           FabGeometryArgs{{"h", h_geometry}, {"var", leaf_vars_}});
   }
 
   void set_finsler_structure(const FabConfigFunc& finsler_structure) {
     const auto [lag_geometry, var_names] = finsler_structure(x_, xdot_, leaf_name_);
-    parent_vars_->add_parameters(fab_core::parse_symbolic_casx(lag_geometry, var_names));
+    parent_vars_->add_parameters(mjpc::parse_symbolic_casx(lag_geometry, var_names));
     lag_ = std::make_shared<FabLagrangian>(name() + "_lag", lag_geometry,
                                            FabLagrangianArgs{{"var", leaf_vars_}});
   }
@@ -47,8 +47,8 @@ public:
       : FabGenericGeometryLeaf(
             ("limit_joint_" + std::to_string(joint_index) + "_" + std::to_string(limit_index)) + "_leaf",
             parent_vars,
-            ((limit_index == 0)   ? (fab_core::get_casx(parent_vars->position_var(), joint_index) - limit)
-             : (limit_index == 1) ? (limit - fab_core::get_casx(parent_vars->position_var(), joint_index))
+            ((limit_index == 0)   ? (mjpc::get_casx(parent_vars->position_var(), joint_index) - limit)
+             : (limit_index == 1) ? (limit - mjpc::get_casx(parent_vars->position_var(), joint_index))
                                   : CaSX())) {
     set_forward_map();
   }

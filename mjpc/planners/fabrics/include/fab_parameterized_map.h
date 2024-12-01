@@ -5,10 +5,10 @@
 
 #include "mjpc/planners/fabrics/include/fab_casadi_function.h"
 #include "mjpc/planners/fabrics/include/fab_common.h"
-#include "mjpc/planners/fabrics/include/fab_core_util.h"
 #include "mjpc/planners/fabrics/include/fab_diff_map.h"
 #include "mjpc/planners/fabrics/include/fab_math_util.h"
 #include "mjpc/planners/fabrics/include/fab_variables.h"
+#include "mjpc/utils/mjpc_core_util.h"
 
 class FabParameterizedGoalMap : public FabDifferentialMap {
 public:
@@ -89,9 +89,9 @@ public:
                                      const CaSX& constraint_var, const CaSX& radius_body_var)
       : FabParameterizedGeometryMap(
             std::move(name),
-            CaSX::abs(CaSX::dot(fab_core::get_casx(constraint_var, std::array<casadi_int, 2>{0, 3}), fk) +
-                      fab_core::get_casx(constraint_var, 3)) /
-                    CaSX::norm_2(fab_core::get_casx(constraint_var, std::array<casadi_int, 2>{0, 3})) -
+            CaSX::abs(CaSX::dot(mjpc::get_casx(constraint_var, std::array<casadi_int, 2>{0, 3}), fk) +
+                      mjpc::get_casx(constraint_var, 3)) /
+                    CaSX::norm_2(mjpc::get_casx(constraint_var, std::array<casadi_int, 2>{0, 3})) -
                 radius_body_var,
             vars) {}
 };

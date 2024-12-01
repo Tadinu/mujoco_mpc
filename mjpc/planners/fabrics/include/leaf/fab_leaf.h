@@ -48,24 +48,24 @@ public:
   virtual FabDifferentialMapPtr map() const { return diffmap_; }
 
   void print_self() const {
-    FAB_PRINT("LEAF", name());
+    MJPC_PRINT("LEAF", name());
     vars()->print_self();
-    FAB_PRINT("PARENT VARS");
+    MJPC_PRINT("PARENT VARS");
     parent_vars_->print_self();
-    FAB_PRINT("DIFF MAP");
+    MJPC_PRINT("DIFF MAP");
     diffmap_->print_self();
 
     // NOTE: [geom_, lag_]'s vars may not be always available
     if (geom_ && geom_->vars()) {
-      FAB_PRINT("GEOMETRY");
+      MJPC_PRINT("GEOMETRY");
       geom_->vars()->print_self();
     }
 
     if (lag_ && lag_->vars()) {
-      FAB_PRINT("LAGRANGIAN");
+      MJPC_PRINT("LAGRANGIAN");
       lag_->vars()->print_self();
     }
-    FAB_PRINT("=============");
+    MJPC_PRINT("=============");
   }
 
   virtual void set_potential(const FabConfigFunc& potential) {}
@@ -92,17 +92,17 @@ public:
     auto&& x = res.at("phi");
     const auto J = res.at("J");
     const auto Jdot = res.at("Jdot");
-    auto&& xdot = CaSX::dot(J, fab_core::get_variant_value<CaSX>(kwargs.at("qdot")));
+    auto&& xdot = CaSX::dot(J, mjpc::get_variant_value<CaSX>(kwargs.at("qdot")));
 #if 1
     return {{"x", x}, {"xdot", xdot}};
 #else
     if (!geom_ || !lag_) {
       return {{"x", x}, {"xdot", xdot}};
     }
-    const auto state_variable_names = fab_core::get_map_keys(geom_->vars()->state_variables());
+    const auto state_variable_names = mjpc::get_map_keys(geom_->vars()->state_variables());
     CasadiArgMap task_space_arguments = {{state_variable_names[0], x}, {state_variable_names[1], xdot}};
     for (const auto& [arg_name, arg_value] : kwargs) {
-      task_space_arguments[arg_name] = fab_core::get_variant_value<CaSX>(arg_value);
+      task_space_arguments[arg_name] = mjpc::get_variant_value<CaSX>(arg_value);
     }
     const auto eval_geom = geom_->evaluate(task_space_arguments);
     const auto xddot = eval_geom.at("xddot");

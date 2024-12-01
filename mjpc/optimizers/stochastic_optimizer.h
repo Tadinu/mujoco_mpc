@@ -447,7 +447,7 @@ int optimize(TOptimizable& op, const F& stepf, size_t bsize, size_t nepochs, TRe
   cout << "nepochs: " << nepochs << endl;
   cout << "nbatches: " << nbatches << endl;
   cout << "beta:";
-  FAB_PRINT(op.beta_);
+  MJPC_PRINT(op.beta_);
 
   size_t a;
   for (a = 0; a < nepochs; ++a) {
@@ -498,7 +498,7 @@ int optimize(TOptimizable& op, const F& stepf, size_t bsize, size_t nepochs, TRe
   const int out_epochs = converged ? a : -a;
   cout << "elasped epochs: " << out_epochs << endl;
   cout << "beta_hat:";
-  FAB_PRINT(op.beta_);
+  MJPC_PRINT(op.beta_);
   cout << "model vals: " << op.m_.y_ << std::endl;
   return out_epochs;
 }

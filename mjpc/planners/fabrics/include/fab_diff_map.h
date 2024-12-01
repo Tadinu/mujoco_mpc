@@ -5,8 +5,8 @@
 
 #include "mjpc/planners/fabrics/include/fab_casadi_function.h"
 #include "mjpc/planners/fabrics/include/fab_common.h"
-#include "mjpc/planners/fabrics/include/fab_core_util.h"
 #include "mjpc/planners/fabrics/include/fab_variables.h"
+#include "mjpc/utils/mjpc_core_util.h"
 
 using FabDiffMapArg = FabNamedMap<int8_t, CaSX>;
 
@@ -21,7 +21,7 @@ public:
     const auto qdot = vars_->velocity_var();
     J_ = CaSX::jacobian(phi_, q);
     int8_t jdot_sign = -1;
-    if (auto* jdot_sign_ptr = fab_core::get_arg_value<int8_t>(kwargs, "Jdot_sign")) {
+    if (auto* jdot_sign_ptr = mjpc::get_arg_value<int8_t>(kwargs, "Jdot_sign")) {
       jdot_sign = *jdot_sign_ptr;
     }
     Jdot_ = jdot_sign * CaSX::jacobian(CaSX::mtimes(J_, qdot), q);
@@ -55,13 +55,13 @@ public:
   }
 
   void print_self() const {
-    FAB_PRINT("VARS");
+    MJPC_PRINT("VARS");
     vars_->print_self();
-    FAB_PRINT("q", q(), q().size());
-    FAB_PRINT("qdot", qdot(), qdot().size());
-    FAB_PRINT("phi", phi(), phi().size());
-    FAB_PRINT("J", J(), J().size());
-    FAB_PRINT("Jdot", Jdot_);
+    MJPC_PRINT("q", q(), q().size());
+    MJPC_PRINT("qdot", qdot(), qdot().size());
+    MJPC_PRINT("phi", phi(), phi().size());
+    MJPC_PRINT("J", J(), J().size());
+    MJPC_PRINT("Jdot", Jdot_);
   }
 
 protected:
@@ -133,7 +133,7 @@ public:
   FabExplicitDifferentialMap(std::string name, const CaSX& phi, const FabVariablesPtr& vars,
                              const FabDiffMapArg& kwargs)
       : FabDifferentialMap(std::move(name), phi, vars, kwargs) {
-    this->J_ = *fab_core::get_arg_value<decltype(this->J_)>(kwargs, "J");
-    this->Jdot_ = *fab_core::get_arg_value<decltype(this->Jdot_)>(kwargs, "Jdot");
+    this->J_ = *mjpc::get_arg_value<decltype(this->J_)>(kwargs, "J");
+    this->Jdot_ = *mjpc::get_arg_value<decltype(this->Jdot_)>(kwargs, "Jdot");
   }
 };

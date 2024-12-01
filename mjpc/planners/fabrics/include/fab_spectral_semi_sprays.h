@@ -10,11 +10,11 @@
 
 #include "mjpc/planners/fabrics/include/fab_casadi_function.h"
 #include "mjpc/planners/fabrics/include/fab_common.h"
-#include "mjpc/planners/fabrics/include/fab_core_util.h"
 #include "mjpc/planners/fabrics/include/fab_diff_map.h"
 #include "mjpc/planners/fabrics/include/fab_geometry.h"
 #include "mjpc/planners/fabrics/include/fab_math_util.h"
 #include "mjpc/planners/fabrics/include/fab_variables.h"
+#include "mjpc/utils/mjpc_core_util.h"
 
 using FabSpecArgs = FabGeometryArgs;
 
@@ -33,7 +33,7 @@ public:
     M_ = M;
     // [x_ref_name_, xdot_ref_name_, xddot_ref_name_]
     if (kwargs.contains("ref_names")) {
-      auto ref_names = *fab_core::get_arg_value<std::vector<std::string>>(kwargs, "ref_names");
+      auto ref_names = *mjpc::get_arg_value<std::vector<std::string>>(kwargs, "ref_names");
       // NOTE: [ref_names] could be accumulative, having size >=3
       assert(ref_names.size() >= 3);
       x_ref_name_ = std::move(ref_names[0]);
@@ -43,27 +43,27 @@ public:
 
     // [f_]
     if (kwargs.contains("f")) {
-      f_ = *fab_core::get_arg_value<decltype(f_)>(kwargs, "f");
+      f_ = *mjpc::get_arg_value<decltype(f_)>(kwargs, "f");
     }
 
     // [h_]
     if (kwargs.contains("h")) {
-      h_ = *fab_core::get_arg_value<decltype(h_)>(kwargs, "h");
+      h_ = *mjpc::get_arg_value<decltype(h_)>(kwargs, "h");
     }
 
     // [vars_]
     if (kwargs.contains("x")) {
       assert(kwargs.contains("xdot"));
       vars_ =
-          std::make_shared<FabVariables>(CaSXDict{{"x", *fab_core::get_arg_value<CaSX>(kwargs, "x")},
-                                                  {"xdot", *fab_core::get_arg_value<CaSX>(kwargs, "xdot")}});
+          std::make_shared<FabVariables>(CaSXDict{{"x", *mjpc::get_arg_value<CaSX>(kwargs, "x")},
+                                                  {"xdot", *mjpc::get_arg_value<CaSX>(kwargs, "xdot")}});
     } else if (kwargs.contains("var")) {
-      vars_ = *fab_core::get_arg_value<decltype(vars_)>(kwargs, "var");
+      vars_ = *mjpc::get_arg_value<decltype(vars_)>(kwargs, "var");
     }
 
     // [refTrajs_]
     if (kwargs.contains("refTrajs")) {
-      refTrajs_ = *fab_core::get_arg_value<decltype(refTrajs_)>(kwargs, "refTrajs");
+      refTrajs_ = *mjpc::get_arg_value<decltype(refTrajs_)>(kwargs, "refTrajs");
     }
 
     // [J_ref_, J_ref_inv_]
@@ -72,8 +72,8 @@ public:
       J_ref_ = fab_math::CASX_IDENTITY(size);
       J_ref_inv_ = fab_math::CASX_IDENTITY(size);
     } else if (kwargs.contains("J_ref")) {
-      J_ref_ = *fab_core::get_arg_value<decltype(J_ref_)>(kwargs, "J_ref");
-      FAB_PRINT("Casadi pseudo inverse is used in Lagrangian");
+      J_ref_ = *mjpc::get_arg_value<decltype(J_ref_)>(kwargs, "J_ref");
+      MJPC_PRINT("Casadi pseudo inverse is used in Lagrangian");
       const auto size = x_ref().size().first;
       const auto J_ref_transpose = J_ref_.T();
       J_ref_inv_ = CaSX::mtimes(J_ref_transpose, CaSX::inv(CaSX::mtimes(J_ref_, J_ref_transpose) +
@@ -89,7 +89,7 @@ public:
   CaSX M() const { return M_; }
 
   CaSX Minv() const {
-    FAB_PRINT("Casadi pseudo inverse is used in spec");
+    MJPC_PRINT("Casadi pseudo inverse is used in spec");
     return CaSX::pinv(M_ + fab_math::CASX_IDENTITY(x().size().first) * FAB_EPS);
   }
 
@@ -102,7 +102,7 @@ public:
   bool empty() const { return !(has_f() || has_h()); }
 
   FabSpectralSemiSprays operator+(const FabSpectralSemiSprays& b) const {
-    assert(fab_core::check_compatibility(*this, b));
+    assert(mjpc::check_compatibility(*this, b));
 
     // [all+vars]
     auto all_vars = std::make_shared<FabVariables>(*vars_ + *b.vars());
@@ -131,7 +131,7 @@ public:
     if (!all_ref_names.empty()) {
       all_ref_arguments = {{"ref_names", all_ref_names}, {"J_ref", J_ref}};
     }
-    fab_core::print_named_mapdb(all_ref_arguments);
+    mjpc::print_named_mapdb(all_ref_arguments);
 
     if (has_h() && b.has_h()) {
       return FabSpectralSemiSprays(
@@ -139,16 +139,16 @@ public:
           {{"h", h() + b.h()},
            {"var", std::move(all_vars)},
            {"ref_names",
-            fab_core::get_variant_value<std::vector<std::string>>(all_ref_arguments["ref_names"])},
-           {"J_ref", fab_core::get_variant_value<CaSX>(all_ref_arguments["J_ref"])}});
+            mjpc::get_variant_value<std::vector<std::string>>(all_ref_arguments["ref_names"])},
+           {"J_ref", mjpc::get_variant_value<CaSX>(all_ref_arguments["J_ref"])}});
     } else {
       return FabSpectralSemiSprays(
           name() + "_spec", M() + b.M(),
           {{"f", f() + b.f()},
            {"var", std::move(all_vars)},
            {"ref_names",
-            fab_core::get_variant_value<std::vector<std::string>>(all_ref_arguments["ref_names"])},
-           {"J_ref", fab_core::get_variant_value<CaSX>(all_ref_arguments["J_ref"])}});
+            mjpc::get_variant_value<std::vector<std::string>>(all_ref_arguments["ref_names"])},
+           {"J_ref", mjpc::get_variant_value<CaSX>(all_ref_arguments["J_ref"])}});
     }
   }
 
@@ -167,32 +167,32 @@ protected:
     const auto f_pulled = f_1 + f_2;
     const auto x = vars_->position_var();
     const auto xdot = vars_->velocity_var();
-    FAB_PRINTDB("M_pulled", M_pulled, M_pulled.size());
-    FAB_PRINTDB("x", x, x.size());
-    FAB_PRINTDB("dm.phi", dm.phi(), dm.phi().size());
+    MJPC_PRINTDB("M_pulled", M_pulled, M_pulled.size());
+    MJPC_PRINTDB("x", x, x.size());
+    MJPC_PRINTDB("dm.phi", dm.phi(), dm.phi().size());
 
     const auto M_pulled_subst_x = CaSX::substitute(M_pulled, x, dm.phi());
 #if FAB_DEBUG
     const auto dm_phidot = dm.phidot();
-    FAB_PRINT("===========");
-    FAB_PRINT("DM VARS");
+    MJPC_PRINT("===========");
+    MJPC_PRINT("DM VARS");
     dm.vars()->print_self();
-    FAB_PRINT("xdot", xdot, xdot.size());
-    FAB_PRINT("dm_phidot", dm_phidot, dm_phidot.size());
-    FAB_PRINT("xdot sparsity", xdot.sparsity());
-    FAB_PRINT("dm_phidot sparsity", dm_phidot.sparsity());
+    MJPC_PRINT("xdot", xdot, xdot.size());
+    MJPC_PRINT("dm_phidot", dm_phidot, dm_phidot.size());
+    MJPC_PRINT("xdot sparsity", xdot.sparsity());
+    MJPC_PRINT("dm_phidot sparsity", dm_phidot.sparsity());
     for (auto i = 0; i < xdot.size1(); ++i) {
-      const auto xdot_i = fab_core::get_casx(xdot, i);
-      const auto dm_phidot_i = fab_core::get_casx(dm_phidot, i);
-      FAB_PRINT("xdot[", i, "]:", xdot_i, "- dm_phidot[", i, "]:", dm_phidot_i);
-      FAB_PRINT("scalar?", xdot_i.is_scalar(), dm_phidot_i.is_scalar());
-      FAB_PRINT("sparsity", xdot_i.sparsity(), dm_phidot_i.sparsity());
-      FAB_PRINT("nnz", xdot_i.nnz(), dm_phidot_i.nnz());
+      const auto xdot_i = mjpc::get_casx(xdot, i);
+      const auto dm_phidot_i = mjpc::get_casx(dm_phidot, i);
+      MJPC_PRINT("xdot[", i, "]:", xdot_i, "- dm_phidot[", i, "]:", dm_phidot_i);
+      MJPC_PRINT("scalar?", xdot_i.is_scalar(), dm_phidot_i.is_scalar());
+      MJPC_PRINT("sparsity", xdot_i.sparsity(), dm_phidot_i.sparsity());
+      MJPC_PRINT("nnz", xdot_i.nnz(), dm_phidot_i.nnz());
     }
 #endif
-    FAB_PRINTDB("M_pulled_subst_x", M_pulled_subst_x, M_pulled_subst_x.size());
-    FAB_PRINTDB("xdot", xdot, xdot.size());
-    FAB_PRINTDB("dm.phidot", dm.phidot(), dm.phidot().size());
+    MJPC_PRINTDB("M_pulled_subst_x", M_pulled_subst_x, M_pulled_subst_x.size());
+    MJPC_PRINTDB("xdot", xdot, xdot.size());
+    MJPC_PRINTDB("dm.phidot", dm.phidot(), dm.phidot().size());
     const auto M_pulled_subst_x_xdot = CaSX::substitute(M_pulled_subst_x, xdot, dm.phidot());
     const auto f_pulled_subst_x = CaSX::substitute(f_pulled, x, dm.phi());
     auto f_pulled_subst_x_xdot = CaSX::substitute(f_pulled_subst_x, xdot, dm.phidot());
@@ -219,8 +219,8 @@ protected:
     const auto M_pulled = M();
     const auto x = vars_->position_var();
     const auto xdot = vars_->velocity_var();
-    FAB_PRINTDB("M_pulled", M_pulled, x, xdot);
-    FAB_PRINTDB("dm.phi()", dm.phi());
+    MJPC_PRINTDB("M_pulled", M_pulled, x, xdot);
+    MJPC_PRINTDB("dm.phi()", dm.phi());
     const auto M_pulled_subst_x = CaSX::substitute(M_pulled, x, dm.phi());
     const auto M_pulled_subst_x_xdot = CaSX::substitute(M_pulled_subst_x, xdot, dm.phidot());
     const auto f_pulled = f() - CaSX::mtimes(M(), dm.xddot_ref());
