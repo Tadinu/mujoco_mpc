@@ -15,25 +15,26 @@
 
 #include "mjpc/optimizers/riemannian_opt/Riemannian/GradientDescent.h"
 #include "mjpc/optimizers/riemannian_opt/Riemannian/TNT.h"
+#include "mjpc/planners/gradient/policy.h"
 #include "mjpc/planners/planner.h"
 #include "mjpc/task.h"
+#include "mjpc/trajectory.h"
 
 using namespace std;
 using namespace Optimization;
 using namespace Riemannian;
 
-#define DATA_SIZE (20)
-
 class RiemannianOptimizer : public BaseOptimizer {
 public:
-  RiemannianOptimizer(mjModel *mj_model, mjData *mj_data, mjpc::Task *mj_task, mjpc::Planner *mj_planner)
-      : BaseOptimizer(mj_model, mj_data, mj_task, mj_planner) {}
+  RiemannianOptimizer(mjModel *mj_model, mjData *mj_data, mjpc::Task *mj_task, mjpc::Planner *mj_planner,
+                      int data_dim)
+      : BaseOptimizer(mj_model, mj_data, mj_task, mj_planner), data_dim_(data_dim) {}
 
-  void optimize() override;
+  Eigen::VectorXd optimize(const mjpc::TrajectoryPtr &trajectory, int policy_idx,
+                           int thread_worker_id) override;
   Eigen::VectorXd project_to_tangent_space(const Eigen::VectorXd &X, const Eigen::VectorXd &V);
-  std::vector<double> opt_vals() const override { return std::vector(x_.data(), x_.data() + x_.size()); }
 
 private:
-  Eigen::VectorXd x_ = Eigen::VectorXd::Zero(DATA_SIZE);
+  int data_dim_ = 0;
 };
 using RiemannianOptimizerPtr = std::shared_ptr<RiemannianOptimizer>;

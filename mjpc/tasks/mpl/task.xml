@@ -2,7 +2,7 @@
   <compiler angle="radian" texturedir="texture"/>
   <include file="../../common.xml"/>
 
-  <size memory="100M"/>
+  <size memory="1G"/>
 
   <custom>
     <numeric name="agent_planner" data="0" />

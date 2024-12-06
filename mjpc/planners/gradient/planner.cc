@@ -253,12 +253,11 @@ void GradientPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
     mappings[policy.representation]->Compute(nominal_policy.times, nominal_policy.num_spline_points,
                                              nominal_trajectory->times.data(),
                                              nominal_trajectory->horizon - 1);
-#if 1
+
     // compute [parameter_update] as total derivatives, from [nominal_policy]:[k]
     mju_mulMatTVec(nominal_policy.parameter_update.data(), mappings[policy.representation]->Get(),
                    nominal_policy.k.data(), model->nu * (nominal_trajectory->horizon - 1),
                    model->nu * nominal_policy.num_spline_points);
-#endif
 
     // stop timer
     gradient_time += GetDuration(gradient_start);

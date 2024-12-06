@@ -120,16 +120,15 @@ struct GradientDescentResult : public SmoothOptimizerResult<Variable, Scalar> {
  */
 template <typename Variable, typename Tangent, typename Scalar = double, typename... Args>
 GradientDescentResult<Variable, Scalar> GradientDescent(
-    const Objective<Variable, Scalar, Args...> &f, const VectorField<Variable, Tangent, Args...> &grad_f,
+    const Objective<Variable, Scalar, Args...> &f_objective,
+    const VectorField<Variable, Tangent, Args...> &grad_f,
     const RiemannianMetric<Variable, Tangent, Scalar, Args...> &metric,
-    const Retraction<Variable, Tangent, Args...> &retract, const Variable &x0, Args &...args,
+    const Retraction<Variable, Tangent, Args...> &retract, const Variable &x0,
     const GradientDescentParams<Scalar> &params = GradientDescentParams<Scalar>(),
     const std::optional<GradientDescentUserFunction<Variable, Tangent, Scalar, Args...>> &user_function =
-        std::nullopt) {
+        std::nullopt,
+    Args &...args) {
   /// Argument checking
-
-  // Termination criteria
-
   if (params.max_computation_time < 0)
     throw std::invalid_argument("Maximum computation time must be a nonnegative real value");
 
@@ -150,8 +149,6 @@ GradientDescentResult<Variable, Scalar> GradientDescent(
     throw std::invalid_argument(
         "Sufficient fractional decrease parameter for step acceptance in "
         "backtracking line search must be a value in the range (0, 1)");
-
-  /// Declare and initialize some useful variables
 
   // Square root of machine precision for Scalars
   Scalar sqrt_eps = sqrt(std::numeric_limits<Scalar>::epsilon());
@@ -200,7 +197,7 @@ GradientDescentResult<Variable, Scalar> GradientDescent(
 
   // Set initial iterate and function value
   x = x0;
-  f_x = f(x, args...);
+  f_x = f_objective(x, args...);
 
   // Compute gradient
   grad_f_x = grad_f(x, args...);
@@ -229,6 +226,7 @@ GradientDescentResult<Variable, Scalar> GradientDescent(
     // Record output
     result.time.push_back(elapsed_time);
     result.objective_values.push_back(f_x);
+    result.gradfx = grad_f_x;
     result.gradient_norms.push_back(grad_f_x_norm);
 
     if (params.log_iterates) result.iterates.push_back(x);
@@ -267,11 +265,10 @@ GradientDescentResult<Variable, Scalar> GradientDescent(
 
       // Compute function value at the proposed iterate and its improvement over
       // current iterate
-      f_x_proposed = f(x_proposed, args...);
+      f_x_proposed = f_objective(x_proposed, args...);
       df = f_x - f_x_proposed;
 
       accept = (df > params.sigma * t_A * grad_f_x_norm * grad_f_x_norm);
-
     } while ((!accept) && (ls_iters < params.max_ls_iterations));
 
     if (params.verbose) {
@@ -299,7 +296,9 @@ GradientDescentResult<Variable, Scalar> GradientDescent(
 
     // Call the user-supplied function to provide access to internal algorithm
     // state
-    if (user_function) (*user_function)(iteration, elapsed_time, x, f_x, grad_f_x, h, df, args...);
+    if (user_function) {
+      (*user_function)(iteration, elapsed_time, x, f_x, grad_f_x, h, df, args...);
+    }
 
     // Display output, if requested
     if (params.verbose) {

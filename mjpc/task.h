@@ -111,7 +111,7 @@ public:
 
   // CIO
   void InitCIO() {}
-  virtual bool IsCIOSupported() const { return false; }
+  virtual bool IsCIOSupported() const { return true; }
   virtual std::vector<double> GetObservationsData(bool with_noise = true) const { return {}; }
 
   // Idto
