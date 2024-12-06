@@ -28,7 +28,8 @@ public:
 
   double operator()(const Eigen::VectorXd& x, Eigen::VectorXd& grad);
 
-  void optimize() override;
+  Eigen::VectorXd optimize(const mjpc::TrajectoryPtr& trajectory, int policy_idx,
+                           int thread_worker_id) override;
   std::vector<double> opt_vals() const override { return std::vector(x_.data(), x_.data() + x_.size()); }
 
   double autograd(const std::function<autodiff::real(const autodiff::ArrayXreal& d)>& f,

@@ -122,6 +122,8 @@ struct SmoothOptimizerParams : public OptimizerParams {
  */
 template <typename Variable, typename Scalar = double>
 struct SmoothOptimizerResult : public OptimizerResult<Variable, Scalar> {
+  Variable gradfx;
+
   /// The norm of the gradient at the returned estimate
   Scalar gradfx_norm;
 

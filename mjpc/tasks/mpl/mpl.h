@@ -47,7 +47,7 @@ protected:
 
 private:
   ResidualFn residual_;
-  bool underactuated_ = false;
+  bool underactuated_ = true;
   bool is_reaching_ = true;
 };
 }  // namespace mjpc

@@ -37,146 +37,144 @@
 #define MJPC_GRADIENT_PLANNER_USE_CEM (1)
 
 namespace mjpc {
+    // first-order gradient descent planner
+    class GradientPlanner : public Planner {
+    public:
+        // constructor
+        GradientPlanner() {
+            mappings.emplace_back(new ZeroSplineMapping);
+            mappings.emplace_back(new LinearSplineMapping);
+            mappings.emplace_back(new CubicSplineMapping);
+        }
 
-// first-order gradient descent planner
-class GradientPlanner : public Planner {
-public:
-  // constructor
-  GradientPlanner() {
-    mappings.emplace_back(new ZeroSplineMapping);
-    mappings.emplace_back(new LinearSplineMapping);
-    mappings.emplace_back(new CubicSplineMapping);
-  }
+        // ----- methods ----- //
 
-  // ----- methods ----- //
+        // initialize planner settings
+        void Initialize(mjModel *model, const Task &task) override;
 
-  // initialize planner settings
-  void Initialize(mjModel* model, const Task& task) override;
+        // allocate memory
+        void Allocate() override;
 
-  // allocate memory
-  void Allocate() override;
+        // reset memory to zeros
+        void Reset(int horizon, const double *initial_repeated_action = nullptr) override;
 
-  // reset memory to zeros
-  void Reset(int horizon, const double* initial_repeated_action = nullptr) override;
+        // set state
+        void SetState(const State &state) override;
 
-  // set state
-  void SetState(const State& state) override;
+        // optimize nominal policy via gradient descent
+        void OptimizePolicy(int horizon, ThreadPool &pool) override;
 
-  // optimize nominal policy via gradient descent
-  void OptimizePolicy(int horizon, ThreadPool& pool) override;
+        // compute trajectory using nominal policy
+        void NominalTrajectory(int horizon, ThreadPool &pool) override;
 
-  // compute trajectory using nominal policy
-  void NominalTrajectory(int horizon, ThreadPool& pool) override;
+        // compute action from policy
+        void ActionFromPolicy(double *action, const double *state, double time, bool use_previous = false) override;
 
-  // compute action from policy
-  void ActionFromPolicy(double* action, const double* state, double time, bool use_previous = false) override;
+        // resample nominal policy for current time
+        void ResamplePolicy(int horizon);
 
-  // resample nominal policy for current time
-  void ResamplePolicy(int horizon);
+        // compute candidate trajectories
+        void Rollouts(int horizon, ThreadPool &pool);
 
-  // compute candidate trajectories
-  void Rollouts(int horizon, ThreadPool& pool);
+        // return trajectory with best total return
+        const Trajectory *BestTrajectory() override;
 
-  // return trajectory with best total return
-  const Trajectory* BestTrajectory() override;
+        // visualize candidate traces in GUI
+        void Traces(mjvScene *scn) override;
 
-  // visualize candidate traces in GUI
-  void Traces(mjvScene* scn) override;
+        // planner-specific GUI elements
+        void GUI(mjUI &ui) override;
 
-  // planner-specific GUI elements
-  void GUI(mjUI& ui) override;
+        // planner-specific plots
+        void Plots(mjvFigure *fig_planner, mjvFigure *fig_timer, int planner_shift, int timer_shift, int planning,
+                   int *shift) override;
 
-  // planner-specific plots
-  void Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, int planner_shift, int timer_shift, int planning,
-             int* shift) override;
+        // return number of parameters optimized by planner
+        int NumParameters() override { return policy.num_spline_points * policy.model->nu; };
 
-  // return number of parameters optimized by planner
-  int NumParameters() override { return policy.num_spline_points * policy.model->nu; };
+        // ----- members ----- //
+        mjModel *model;
+        const Task *task;
 
-  // ----- members ----- //
-  mjModel* model;
-  const Task* task;
+        // state
+        std::vector<double> state;
+        double time;
+        std::vector<double> mocap;
+        std::vector<double> userdata;
 
-  // state
-  std::vector<double> state;
-  double time;
-  std::vector<double> mocap;
-  std::vector<double> userdata;
-
-  // policy
-  GradientPolicy policy;
-  GradientPolicy previous_policy;
-  GradientPolicy candidate_policy[kMaxTrajectory];
-  GradientPolicy& nominal_policy = candidate_policy[0];
-  GradientPolicy winner_policy() const { return candidate_policy[winner]; }
+        // policy
+        GradientPolicy policy;
+        GradientPolicy previous_policy;
+        GradientPolicy candidate_policy[kMaxTrajectory];
+        GradientPolicy &nominal_policy = candidate_policy[0];
+        GradientPolicy winner_policy() const { return candidate_policy[winner]; }
 
 #if MJPC_GRADIENT_PLANNER_USE_CEM
-  void UpdatePolicyVariance();
+        void UpdatePolicyVariance();
 #endif
 
-  // nominal trajectory
-  TrajectoryPtr& nominal_trajectory = trajectory[0];
+        // nominal trajectory
+        TrajectoryPtr &nominal_trajectory = trajectory[0];
 
-  // order of indices of rolled out trajectories, ordered by total return
-  std::vector<int> trajectory_order;
+        // order of indices of rolled out trajectories, ordered by total return
+        std::vector<int> trajectory_order;
 
-  // scratch
-  std::vector<double> parameters_scratch;
-  std::vector<double> times_scratch;
+        // scratch
+        std::vector<double> parameters_scratch;
+        std::vector<double> times_scratch;
 
-  // dimensions
-  int dim_state;             // state
-  int dim_state_derivative;  // state derivative
-  int dim_action;            // action
-  int dim_sensor;            // output (i.e., all sensors)
-  int dim_max;               // maximum dimension
+        // dimensions
+        int dim_state; // state
+        int dim_state_derivative; // state derivative
+        int dim_action; // action
+        int dim_sensor; // output (i.e., all sensors)
+        int dim_max; // maximum dimension
 
-  // candidate trajectories
-  int num_trajectory;
+        // candidate trajectories
+        int num_trajectory;
 
-  // model derivatives
-  ModelDerivatives model_derivative;
+        // model derivatives
+        ModelDerivatives model_derivative;
 
-  // cost derivatives
-  CostDerivatives cost_derivative;
+        // cost derivatives
+        CostDerivatives cost_derivative;
 
-  // gradient descent
-  Gradient gradient;
+        // gradient descent
+        Gradient gradient;
 
-  // spline mapping
-  std::vector<std::unique_ptr<SplineMapping>> mappings;
+        // spline mapping
+        std::vector<std::unique_ptr<SplineMapping> > mappings;
 
-  // step sizes
-  double linesearch_steps[kMaxTrajectory];
+        // step sizes
+        double linesearch_steps[kMaxTrajectory];
 
-  // best trajectory id
-  int winner = -1;
+        // best trajectory id
+        int winner = -1;
 
-  // settings
-  GradientPlannerSettings settings;
+        // settings
+        GradientPlannerSettings settings;
 
-  // values
-  double action_step;
-  double expected;
-  double improvement;
-  double surprise;
+        // values
+        double action_step;
+        double expected;
+        double improvement;
+        double surprise;
 
-  // compute time
-  double nominal_compute_time;
-  double model_derivative_compute_time;
-  double cost_derivative_compute_time;
-  double rollouts_compute_time;
-  double gradient_compute_time;
-  double policy_update_compute_time;
+        // compute time
+        double nominal_compute_time;
+        double model_derivative_compute_time;
+        double cost_derivative_compute_time;
+        double rollouts_compute_time;
+        double gradient_compute_time;
+        double policy_update_compute_time;
 
-protected:
-  mutable std::shared_mutex mtx_;
-  int derivative_skip_ = 0;
+    protected:
+        mutable std::shared_mutex mtx_;
+        int derivative_skip_ = 0;
 #if MJPC_GRADIENT_PLANNER_USE_CEM
-  CEMSampler cross_entropy_sampler;
+        CEMSampler cross_entropy_sampler;
 #endif
-};
-
-}  // namespace mjpc
+    };
+} // namespace mjpc
 
 #endif  // MJPC_PLANNERS_GRADIENT_PLANNER_H_

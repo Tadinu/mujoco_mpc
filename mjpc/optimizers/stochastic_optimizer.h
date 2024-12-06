@@ -627,9 +627,11 @@ public:
   }
   RMSpropOptimizer(const vector<vector<double>>& X, const vector<double>& y, size_t N, size_t D, double step)
       : m(X, y), opt(N, D, m), step(step) {}
-  void optimize() override {
+  Eigen::VectorXd optimize(const mjpc::TrajectoryPtr& trajectory, int policy_idx,
+                           int thread_worker_id) override {
     cout << "RMSprop ..." << endl;
     stograd::optimize(opt, step, 2 /* batch size */, 1000 /*nepochs*/, 1e-3 /*eps*/);
+    return Eigen::Map<Eigen::VectorXd>(opt.beta_.data(), opt.beta_.size());
   }
 
   std::vector<double> opt_vals() const override { return opt.beta_; }

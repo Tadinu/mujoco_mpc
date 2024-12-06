@@ -21,8 +21,8 @@ double SecondOrderOptimizer::operator()(const Eigen::VectorXd& x, Eigen::VectorX
   // obs.from_data(x.data(), (x.size() - CIOObservation::pose_vel_acc_size) / CIOObservation::contact_size);
   const double last_cost = cio_planner->RolloutNominalTrajectory(x);
 #if 1
-  cio_planner->ComputeDerivatives();
-  const auto& cost_grad = cio_planner->cost_derivative.cu;
+  const auto cost_derivative = cio_planner->ComputeDerivatives(cio_planner->nominal_trajectory);
+  const auto& cost_grad = cost_derivative.cu;
   grad.noalias() = Eigen::VectorXd::Map(cost_grad.data(), cost_grad.size());
 #else
   const auto f = [this, last_cost](const autodiff::ArrayXreal& d) -> autodiff::real { return last_cost; };
@@ -32,10 +32,11 @@ double SecondOrderOptimizer::operator()(const Eigen::VectorXd& x, Eigen::VectorX
 #endif
 }
 
-void SecondOrderOptimizer::optimize() {
+Eigen::VectorXd SecondOrderOptimizer::optimize(const mjpc::TrajectoryPtr& trajectory, int policy_idx,
+                                               int thread_worker_id) {
   auto* cio_planner = dynamic_cast<mjpc::CIOPlanner*>(mj_planner_);
   if (!cio_planner) {
-    return;
+    return x_;
   }
   LBFGSpp::LBFGSBParam<double> param;
   LBFGSpp::LBFGSBSolver<double> solver(param);
@@ -53,7 +54,7 @@ void SecondOrderOptimizer::optimize() {
     // Variable bounds
     const int n = x_.size();
     if (n == 0) {
-      return;
+      return x_;
     }
     Eigen::VectorXd lb = Eigen::VectorXd::Constant(n, -1);  // lower
     Eigen::VectorXd ub = Eigen::VectorXd::Constant(n, 1);   // upper
@@ -67,5 +68,6 @@ void SecondOrderOptimizer::optimize() {
     std::cout << "f(x) = " << fx << std::endl;
     std::cout << "grad = " << solver.final_grad().transpose() << std::endl;
     std::cout << "projected grad norm = " << solver.final_grad_norm() << std::endl;
+    return x_;
   }
 }
