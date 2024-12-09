@@ -463,9 +463,21 @@
         <!-- Fingers -->
         <position name="A_index_ABD"  class="MPL" joint="index_ABD"  ctrlrange="0 0.34"/>
         <position name="A_index_MCP"  class="MPL" joint="index_MCP"  ctrlrange="0 1.6"/>
-        <position name="A_middle_MCP" class="MPL" joint="middle_MCP" ctrlrange="0 1.6"/>
-        <position name="A_ring_MCP"   class="MPL" joint="ring_MCP" 	 ctrlrange="0 1.6"/>
+        <position name="A_index_PIP"  class="MPL" joint="index_PIP"  ctrlrange="0 1.6"/>
+        <position name="A_index_DIP"  class="MPL" joint="index_DIP"  ctrlrange="0 1.6"/>
+
+        <position name="A_middle_MCP"  class="MPL" joint="middle_MCP" ctrlrange="0 1.6"/>
+        <position name="A_middle_PIP"  class="MPL" joint="middle_PIP"  ctrlrange="0 1.6"/>
+        <position name="A_middle_DIP"  class="MPL" joint="middle_DIP"  ctrlrange="0 1.6"/>
+
+        <position name="A_ring_ABD"  class="MPL" joint="ring_ABD"  ctrlrange="0 0.34"/>
+        <position name="A_ring_MCP"  class="MPL" joint="ring_MCP" ctrlrange="0 1.6"/>
+        <position name="A_ring_PIP"  class="MPL" joint="ring_PIP"  ctrlrange="0 1.6"/>
+        <position name="A_ring_DIP"  class="MPL" joint="ring_DIP"  ctrlrange="0 1.6"/>
+
         <position name="A_pinky_ABD"  class="MPL" joint="pinky_ABD"  ctrlrange="0 0.34"/>
-        <position name="A_pinky_MCP"  class="MPL" joint="pinky_MCP"  ctrlrange="0 1.6"/>
+        <position name="A_pinky_MCP"  class="MPL" joint="pinky_MCP" ctrlrange="0 1.6"/>
+        <position name="A_pinky_PIP"  class="MPL" joint="pinky_PIP"  ctrlrange="0 1.6"/>
+        <position name="A_pinky_DIP"  class="MPL" joint="pinky_DIP"  ctrlrange="0 1.6"/>
     </actuator>
 </mujoco>

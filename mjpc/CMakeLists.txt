@@ -69,6 +69,7 @@ set(LIB_MJPC_HEADERS
         tasks/grippers/grippers.h
         tasks/mpl/mpl.h
         tasks/mpl/mpl_cost.h
+        tasks/mpl/mpl_grasp_cost.h
         tasks/humanoid/stand/stand.h
         tasks/humanoid/tracking/tracking.h
         tasks/humanoid/walk/walk.h

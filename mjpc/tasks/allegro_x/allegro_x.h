@@ -7,6 +7,7 @@
 
 // mjpc
 #include "mjpc/task.h"
+#include "mjpc/tasks/mpl/mpl_grasp_cost.h"
 
 // idto
 #include "mjpc/planners/idto/idto_planner.h"
@@ -21,10 +22,10 @@ public:
 
   class ResidualFn : public BaseResidualFn {
   public:
-    explicit ResidualFn(const AllegroX* task) : BaseResidualFn(task) {
-    }
+    explicit ResidualFn(const AllegroX* task) : BaseResidualFn(task) {}
 
     void Residual(const mjModel* model, const mjData* data, double* residual) const override;
+    MPLGraspCostCalculator cost_calc_;
   };
 
   AllegroX() : residual_(this) { idto_configs_path_ = GetModelPath("allegro_x/allegro_hand.yaml"); }
@@ -63,4 +64,4 @@ private:
   void UpdateMeshcatFromIdtoConfigs() override;
   void CreateDrakePlantModel(drake::multibody::MultibodyPlant<double>* plant) const override;
 };
-} // namespace mjpc
+}  // namespace mjpc

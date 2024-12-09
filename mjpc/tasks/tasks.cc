@@ -48,7 +48,7 @@
 #include "mjpc/tasks/mpl/mpl.h"
 
 namespace mjpc {
-std::vector<std::shared_ptr<Task>> GetTasks() {
+std::vector<std::shared_ptr<Task> > GetTasks() {
   return {
       std::make_shared<MPL>(),
       std::make_shared<manipulation_x::Bring>(),

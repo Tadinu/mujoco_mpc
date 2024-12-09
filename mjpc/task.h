@@ -426,7 +426,7 @@ public:
 
   mjtNum* QuerySitePos(const char* site_name) const {
     if (data_) {
-      const int site_id = QueryGeomId(site_name);
+      const int site_id = QuerySiteId(site_name);
       return (site_id > -1) ? &data_->site_xpos[3 * site_id] : nullptr;
     }
     return nullptr;

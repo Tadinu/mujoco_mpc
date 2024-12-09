@@ -32,6 +32,49 @@ std::string AllegroX::Name() const { return "AllegroX"; }
 void AllegroX::ResidualFn::Residual(const mjModel* model, const mjData* data, double* residual) const {
   int counter = 0;
   const auto target_prefix = dynamic_cast<const AllegroX*>(task_)->target_type_name();
+#if 0
+  // Contact point
+  std::map<std::string, std::vector<mjContact*>> contacts;
+  const std::vector<std::string> grasp_points_names = {"ball_pt1", "ball_pt2", "ball_pt3", "ball_pt4"};
+  for (const auto& grasp_point_name : grasp_points_names) {
+    for (int i = 0; i < data->ncon; ++i) {
+      std::cout << i << std::endl;
+      const auto& contact_i = data->contact[i];
+
+      // Get contact force/torque, rotate into traj frame, then site frame.
+      // Note that contact.frame is column major.
+      mjtNum conforce[6], conray[3];
+      // get contact force:torque in contact frame
+      mj_contactForce(model, data, i, conforce);
+
+      // convert contact normal force to global frame, normalize
+      mju_mulMatTVec3(conray, contact_i.frame, conforce);
+      mju_normalize3(conray);
+      mjpc::print(conray);
+    }
+  }
+
+  // ---------- Grasp points poses ----------
+#endif
+
+#if 1
+  static const std::vector<std::string> fingertip_names = {"rf_tip", "mf_tip", "ff_tip", "th_tip"};
+  static const std::vector<std::string> grasp_points_names = {"ball_pt1", "ball_pt2", "ball_pt3", "ball_pt4"};
+  for (const auto& fingertip_name : fingertip_names) {
+    auto* fingertip_pos = task_->QuerySitePos(fingertip_name.c_str());
+    mjtNum min_distance = 1000;
+    for (const auto& grasp_point_name : grasp_points_names) {
+      auto* point_pos_i = SensorByName(model, data, "p_" + grasp_point_name);
+      auto* point_quat_i = SensorByName(model, data, "q_" + grasp_point_name);
+
+      mjtNum distance = mju_dist3(fingertip_pos, point_pos_i);
+      if (distance < min_distance) {
+        min_distance = distance;
+      }
+    }
+    residual[counter++] = min_distance;
+  }
+#else
 
   // ---------- Cube position ----------
   double* target_position = SensorByName(model, data, target_prefix + "_position");
@@ -66,11 +109,44 @@ void AllegroX::ResidualFn::Residual(const mjModel* model, const mjData* data, do
   mju_copy(residual + counter, data->qvel + 6, 16);
   counter += 16;
 
+  // residual[counter++] = cost_calc_.TotalCost();
+#endif
+
   // Sanity check
   CheckSensorDim(model, counter);
 }
 
 void AllegroX::TransitionLocked(mjModel* model, mjData* data) {
+  // Re-setup [cost_calc_]
+  // residual_.cost_calc_.Setup(model, data, this);
+#if 0
+  // Move fingers to their closest grasp points
+  static const std::vector<std::string> fingertip_names = {"rf_tip", "mf_tip", "ff_tip", "th_tip"};
+  static const std::vector<std::string> grasp_points_names = {"ball_pt1", "ball_pt2", "ball_pt3", "ball_pt4"};
+  for (const auto& fingertip_name : fingertip_names) {
+    auto* fingertip_pos = QueryGeomPos(data, fingertip_name);
+    mjtNum min_distance = 1000;
+    std::string min_distance_grasp_point_name;
+
+    for (const auto& grasp_point_name : grasp_points_names) {
+      auto* point_pos_i = SensorByName(model, data, "p_" + grasp_point_name);
+      auto* point_quat_i = SensorByName(model, data, "q_" + grasp_point_name);
+
+      mjtNum distance = mju_dist3(fingertip_pos, point_pos_i);
+      if (distance < min_distance) {
+        min_distance = distance;
+        min_distance_grasp_point_name = grasp_point_name;
+      }
+    }
+
+    // Move fingertip to grasp point of [min_distance_grasp_point_name]
+    auto* grasp_point_pos = SensorByName(model, data, "p_" + min_distance_grasp_point_name);
+    auto* grasp_point_quat = SensorByName(model, data, "q_" + min_distance_grasp_point_name);
+    SetSitePos(grasp_point_pos);
+    SetSiteQuat(grasp_point_quat);
+    data->site_pos = grasp_point_pos;
+#endif
+
   // Check for contact between the target and the floor
   int target_geom = mj_name2id(model, mjOBJ_GEOM, target_geom_name().c_str());
   int floor = mj_name2id(model, mjOBJ_GEOM, "floor");
@@ -226,4 +302,4 @@ void AllegroX::CreateDrakePlantModel(drake::multibody::MultibodyPlant<double>* p
   plant->RegisterCollisionGeometry(plant->world_body(), ground_pose, Box(25, 25, 10), "ground",
                                    CoulombFriction<double>(1.0, 1.0));
 }
-} // namespace mjpc
+}  // namespace mjpc

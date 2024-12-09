@@ -147,6 +147,7 @@
               <geom class="distal_visual"/>
               <geom class="distal_collision"/>
               <body name="ff_tip">
+                <site name="ff_tip" type="capsule" size="0.0125 0.0125 0" fromto="0 0 0.02 0 0 0.027" rgba="1 0 1 0.5"/>
                 <geom class="fingertip_visual"/>
                 <geom class="fingertip_collision"/>
                 <site name="tip" pos="0 0 0"/>
@@ -173,6 +174,7 @@
               <geom class="distal_visual"/>
               <geom class="distal_collision"/>
               <body name="mf_tip">
+                <site name="mf_tip" type="capsule" size="0.0125 0.0125 0" fromto="0 0 0.02 0 0 0.027" rgba="1 0 1 0.5"/>
                 <geom class="fingertip_visual"/>
                 <geom class="fingertip_collision"/>
               </body>
@@ -198,6 +200,7 @@
               <geom class="distal_visual"/>
               <geom class="distal_collision"/>
               <body name="rf_tip">
+                <site name="rf_tip" type="capsule" size="0.0125 0.0125 0" fromto="0 0 0.02 0 0 0.027" rgba="1 0 1 0.5"/>
                 <geom class="fingertip_visual"/>
                 <geom class="fingertip_collision"/>
               </body>
@@ -223,6 +226,7 @@
               <geom class="visual" mesh="link_15.0"/>
               <geom class="thumb_distal_collision"/>
               <body name="th_tip">
+                <site name="th_tip" type="capsule" size="0.0125 0.0125 0" fromto="0 0 0.035 0 0 0.043" rgba="1 0 1 0.5"/>
                 <geom class="thumbtip_visual"/>
                 <geom class="thumbtip_collision"/>
               </body>
@@ -231,7 +235,30 @@
         </body>
       </body>
     </body>
+
+    <!-- finger-tips mocaps -->
+    <body name="th_tip_mocap" mocap="true">
+      <geom type="sphere" size="0.01"/>
+    </body>
+    <body name="ff_tip_mocap" mocap="true">
+      <geom type="sphere" size="0.01"/>
+    </body>
+    <body name="mf_tip_mocap" mocap="true">
+      <geom type="sphere" size="0.01"/>
+    </body>
+    <body name="rf_tip_mocap" mocap="true">
+      <geom type="sphere" size="0.01"/>
+    </body>
   </worldbody>
+
+  <!--
+  <equality>
+    <weld body1="ff_tip_mocap" body2="ff_tip"/>
+    <weld body1="mf_tip_mocap" body2="mf_tip"/>
+    <weld body1="rf_tip_mocap" body2="rf_tip"/>
+    <weld body1="th_tip_mocap" body2="th_tip"/>
+  </equality>
+  -->
 
   <contact>
     <exclude body1="palm" body2="ff_base"/>
@@ -239,6 +266,17 @@
     <exclude body1="palm" body2="rf_base"/>
     <exclude body1="palm" body2="th_base"/>
     <exclude body1="palm" body2="th_proximal"/>
+    <exclude body1="palm" body2="th_proximal"/>
+
+    <exclude body1="rf_distal" body2="rf_tip"/>
+    <exclude body1="mf_distal" body2="mf_tip"/>
+    <exclude body1="ff_distal" body2="ff_tip"/>
+    <exclude body1="th_distal" body2="th_tip"/>
+
+    <exclude body1="ff_tip_mocap" body2="ff_tip"/>
+    <exclude body1="mf_tip_mocap" body2="mf_tip"/>
+    <exclude body1="rf_tip_mocap" body2="rf_tip"/>
+    <exclude body1="th_tip_mocap" body2="th_tip"/>
   </contact>
 
   <actuator>
@@ -260,8 +298,18 @@
     <position name="tha3" joint="thj3" class="thumb_distal"/>
   </actuator>
 
-  <!-- Traces for visualizing rollouts --> 
+  <!-- Traces for visualizing rollouts -->
   <sensor>
+    <touch name="S_rf_tip" site="rf_tip"/>
+    <touch name="S_mf_tip" site="mf_tip"/>
+    <touch name="S_ff_tip" site="ff_tip"/>
+    <touch name="S_th_tip" site="th_tip"/>
+
+    <force name="Sf_rf_tip" site="rf_tip"/>
+    <force name="Sf_mf_tip" site="mf_tip"/>
+    <force name="Sf_ff_tip" site="ff_tip"/>
+    <force name="Sf_th_tip" site="th_tip"/>
+
     <framepos name="trace1" objtype="body" objname="rf_tip"/>
     <framepos name="trace2" objtype="body" objname="ff_tip"/>
     <framepos name="trace3" objtype="body" objname="mf_tip"/>

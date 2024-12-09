@@ -386,6 +386,17 @@
     	<touch name="S_pinky_proximal" 	site="pinky_proximal"/>
     	<touch name="S_pinky_medial" 	site="pinky_medial"/>
     	<touch name="S_pinky_distal" 	site="pinky_distal"/>
+
+        <force name="Sf_thumb_distal" site="thumb_distal"/>
+        <torque name="St_thumb_distal" site="thumb_distal"/>
+        <force name="Sf_index_distal" site="index_distal"/>
+        <torque name="St_index_distal" site="index_distal"/>
+        <force name="Sf_middle_distal" site="middle_distal"/>
+        <torque name="St_middle_distal" site="middle_distal"/>
+        <force name="Sf_ring_distal" site="ring_distal"/>
+        <torque name="St_ring_distal" site="ring_distal"/>
+        <force name="Sf_pinky_distal" site="pinky_distal"/>
+        <torque name="St_pinky_distal" site="pinky_distal"/>
 	</sensor>
 
 
