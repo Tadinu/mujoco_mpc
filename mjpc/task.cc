@@ -26,7 +26,6 @@
 #include "mjpc/utilities.h"
 
 namespace mjpc {
-
 namespace {
 void MissingParameterError(const mjModel* m, int sensorid) {
   mju_error(
@@ -34,7 +33,7 @@ void MissingParameterError(const mjModel* m, int sensorid) {
       " sensor ID = %d (%s)",
       sensorid, m->names + m->name_sensoradr[sensorid]);
 }
-}  // namespace
+} // namespace
 
 DrakeMeshcatPtr Task::meshcat_ = std::make_shared<drake::geometry::Meshcat>();
 
@@ -174,7 +173,7 @@ void Task::TransitionLocked(mjModel* model, mjData* data) {
   QueryObstacleStatesX();
   QueryGoalState();
   last_goal_reached_ = QueryGoalReached();
-  if (last_goal_reached_) {
+  if (last_goal_reached_ && planner_) {
     planner_->ClearTrace();
   }
 }
@@ -295,5 +294,4 @@ double Task::CostValue(const double* residual) const {
   std::lock_guard<std::mutex> lock(mutex_);
   return InternalResidual()->CostValue(residual);
 }
-
-}  // namespace mjpc
+} // namespace mjpc

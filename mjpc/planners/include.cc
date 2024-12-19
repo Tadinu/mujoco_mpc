@@ -17,6 +17,7 @@
 #include <memory>
 #include <vector>
 
+#include "mjpc/planners/bimanual/bimanual_planner.h"
 #include "mjpc/planners/cio/cio_planner.h"
 #include "mjpc/planners/cross_entropy/planner.h"
 #include "mjpc/planners/fabrics/include/fab_planner.h"
@@ -33,6 +34,7 @@
 
 namespace mjpc {
 const char kPlannerNames[] =
+    "Bimanual\n"
     "CIO\n"
     "IDTO\n"
     "Fabrics\n"
@@ -51,6 +53,7 @@ std::vector<std::unique_ptr<mjpc::Planner>> LoadPlanners() {
   std::vector<std::unique_ptr<mjpc::Planner>> planners;
 
   // NOTE: The adding order below must match [kPlannerNames]
+  planners.emplace_back(new PandaBimanualPlanner);
   planners.emplace_back(new CIOPlanner);
   planners.emplace_back(new IdtoPlanner);
   planners.emplace_back(new FabPlanner);
@@ -65,5 +68,4 @@ std::vector<std::unique_ptr<mjpc::Planner>> LoadPlanners() {
   planners.emplace_back(new mjpc::SampleGradientPlanner);
   return planners;
 }
-
-}  // namespace mjpc
+} // namespace mjpc

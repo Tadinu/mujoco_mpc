@@ -64,6 +64,7 @@ set(LIB_MJPC_HEADERS
         tasks/allegro_x/allegro_x.h
         tasks/bimanual/handover/handover.h
         tasks/bimanual/reorient/reorient.h
+        tasks/bimanual/cobring/cobring.h
         tasks/cartpole/cartpole.h
         tasks/fingers/fingers.h
         tasks/grippers/grippers.h
@@ -199,6 +200,7 @@ add_library(
         tasks/bimanual/insert/insert.h
         tasks/bimanual/handover/handover.cc
         tasks/bimanual/reorient/reorient.cc
+        tasks/bimanual/cobring/cobring.cc
         tasks/cartpole/cartpole.cc
         tasks/fingers/fingers.cc
         tasks/grippers/grippers.cc
@@ -374,6 +376,7 @@ target_compile_definitions(testspeed PRIVATE MJSIMULATE_STATIC)
 add_subdirectory(tasks)
 add_subdirectory(ispc)
 add_subdirectory(planners/idto)
+add_subdirectory(planners/bimanual)
 add_subdirectory(contacts)
 add_subdirectory(optimizers/riemannian_opt)
 

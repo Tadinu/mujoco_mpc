@@ -16,7 +16,6 @@
 #define MJPC_UTILITIES_H_
 
 #include <absl/container/flat_hash_map.h>
-#include <mujoco/mujoco.h>
 #include <omp.h>
 
 #include <atomic>
@@ -29,21 +28,33 @@
 #include <string_view>
 #include <type_traits>
 #include <vector>
+#include <Eigen/Core>
+#include <Eigen/Geometry>
+
+// Abseil
+#include "absl/container/btree_set.h"
+#include "absl/types/span.h"
+
+// mujoco
+#include <mujoco/mujoco.h>
+#include "mjpc/utils/mjpc_core_util.h"
 
 #define MJPC_OPENMP_ENABLED (1)
 #define MJPC_OPENMP_THREADS_NUM (1000)
 
 namespace mjpc {
-
 // maximum number of traces that are visualized
 inline constexpr int kMaxTraces = 99;
+inline constexpr mjtNum TRANSLATION_ZERO[3] = {0, 0, 0};
+inline constexpr mjtNum ROTATION_IDENTITY[4] = {1, 0, 0, 0};
+inline constexpr mjtNum POSE_IDENTITY[7] = {0, 0, 0, 1, 0, 0, 0};
 
 // make model differentiable by setting solimp[0] to zero
 void MakeDifferentiable(mjModel* model);
 
 inline bool IsSelectedControl(const std::vector<int>& indices, int idx) {
   return indices.empty() || std::find(indices.begin(), indices.end(), idx) != indices.end();
-};
+}
 
 // Joint
 inline int QueryJointId(const mjModel* model, const char* joint_name) {
@@ -58,6 +69,11 @@ inline int QueryJointPosAddress(const mjModel* model, const char* joint_name) {
 inline int QueryJointDofAddress(const mjModel* model, const char* joint_name) {
   int joint_id = QueryJointId(model, joint_name);
   return (model && (joint_id >= 0) && (joint_id < model->njnt)) ? model->jnt_dofadr[joint_id] : 0;
+}
+
+// Dof
+inline int QueryDofId(const mjModel* model, const char* dof_name) {
+  return model ? mj_name2id(model, mjOBJ_DOF, dof_name) : -1;
 }
 
 // NOTE: model_->nq,nv are actuated joints/controls configured in MJ model
@@ -120,6 +136,39 @@ inline mjtNum* QueryBodyPos(const mjData* data, int body_id, bool inertia_com = 
     return inertia_com ? &data->xipos[3 * body_id] : &data->xpos[3 * body_id];
   }
   return nullptr;
+}
+
+static std::pair<Eigen::Vector3d, Eigen::Quaterniond> QueryBodyPose(const mjModel* model, const mjData* data,
+                                                                    const std::string& child_body_name,
+                                                                    const std::string& parent_body_name =
+                                                                        {}) {
+  std::pair<Eigen::Vector3d, Eigen::Quaterniond> res;
+  mjtNum parent_pose[7];
+  mju_copy(parent_pose, POSE_IDENTITY, 7);
+  if (!parent_body_name.empty()) {
+    auto parent_body_id = QueryBodyId(model, parent_body_name.c_str());
+    mju_copy3(&parent_pose[0], QueryBodyPos(data, parent_body_id));
+    mju_copy3(&parent_pose[3], QueryBodyQuat(data, parent_body_id));
+  }
+
+  mjtNum rel_pose[7];
+  mju_copy(rel_pose, POSE_IDENTITY, 7);
+  auto child_body_id = QueryBodyId(model, child_body_name.c_str());
+  mjpc_localpos(&rel_pose[0], QueryBodyPos(data, child_body_id), &parent_pose[0],
+               &parent_pose[3]);
+  mjpc_localquat(&rel_pose[3], QueryBodyQuat(data, child_body_id), &parent_pose[3]);
+
+  mju_copy3(res.first.data(), &rel_pose[0]);
+#if 0
+  res.second = Quaterniond(link_pose[3], // w
+                           link_pose[4], // x
+                           link_pose[5], // y
+                           link_pose[6]  // z
+      );
+#else
+  res.second = Eigen::Quaterniond(&rel_pose[3]);
+#endif
+  return res;
 }
 
 inline mjtNum* QueryBodyVel(const mjData* data, int body_id, bool linear = true) {
@@ -617,7 +666,6 @@ void PrincipalEigenVector4(double* res, const double* mat, double eigenvalue_ini
 // set scaled symmetric block matrix in band matrix
 void SetBlockInBand(double* band, const double* block, double scale, int ntotal, int nband, int nblock,
                     int shift, int row_skip = 0, bool add = true);
-
-}  // namespace mjpc
+} // namespace mjpc
 
 #endif  // MJPC_UTILITIES_H_

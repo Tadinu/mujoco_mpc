@@ -105,24 +105,38 @@ public:
   }
 
   // Fabrics
-  void InitFabrics() {}
+  void InitFabrics() {
+  }
+
   virtual bool IsFabricsSupported() const { return false; }
   virtual FabPlannerConfigPtr GetFabricsConfig() const { return std::make_shared<FabPlannerConfig>(); }
 
   // CIO
-  void InitCIO() {}
+  void InitCIO() {
+  }
+
   virtual bool IsCIOSupported() const { return true; }
   virtual std::vector<double> GetObservationsData(bool with_noise = true) const { return {}; }
 
   // Idto
-  virtual void CreateDrakePlantModel(drake::multibody::MultibodyPlant<double>* plant) const {}
+  virtual void CreateDrakePlantModel(drake::multibody::MultibodyPlant<double>* plant) const {
+  }
+
   void InitIdto();
-  virtual void InitMeshcat() {}
-  virtual void UpdateMeshcatFromIdtoConfigs() {}
+
+  virtual void InitMeshcat() {
+  }
+
+  virtual void UpdateMeshcatFromIdtoConfigs() {
+  }
+
   IdtoPlannerConfigPtr idto_configs_ = nullptr;
   std::string idto_configs_path_;
   static DrakeMeshcatPtr Meshcat() { return meshcat_; }
   static DrakeMeshcatPtr meshcat_;
+
+  // Bimanual
+  virtual bool IsBimanualSupported() const { return false; }
 
   // delegates to ResidualLocked, while holding a lock
   std::unique_ptr<AbstractResidualFn> Residual() const;
@@ -160,18 +174,29 @@ public:
   // holding a lock
   virtual double CostValue(const double* residual) const;
 
-  virtual void ModifyScene(const mjModel* model, const mjData* data, mjvScene* scene) const {}
+  virtual void ModifyScene(const mjModel* model, const mjData* data, mjvScene* scene) const {
+  }
 
   virtual std::string Name() const = 0;
   virtual std::string XmlPath() const = 0;
   virtual std::string RobotModelPath() const { return {}; }
   virtual std::string GetBaseBodyName() const { return {}; }
-  virtual std::vector<std::string> GetEndtipNames() const { /* Ones in URDF, not XML */ return {}; }
-  virtual std::vector<std::string> GetCollisionLinkNames() const { /* Ones in URDF, not XML */ return {}; }
+
+  virtual std::vector<std::string> GetEndtipNames() const {
+    /* Ones in URDF, not XML */
+    return {};
+  }
+
+  virtual std::vector<std::string> GetCollisionLinkNames() const {
+    /* Ones in URDF, not XML */
+    return {};
+  }
+
   virtual FabSelfCollisionNamePairs GetSelfCollisionNamePairs() const {
     /* Ones in URDF, not XML */
     return {};
   }
+
   virtual FabLinkCollisionProps GetCollisionLinkProps() const { return {}; }
   virtual std::vector<FabJointLimit> GetJointLimits() const { return {}; }
   virtual std::vector<FabSubGoalPtr> GetSubGoals() const { return {}; }
@@ -216,20 +241,22 @@ public:
 
   // NOTE: model_->nq,nv are actuated joints/controls configured in MJ model
   // dof: full dof of the robot
-  std::vector<double> QueryJointPos(int dof) const {
+  std::vector<double> QueryJointPos(int dof, const std::string& first_joint_name = {}) const {
     if (model_ && data_) {
       std::vector<double> qpos(dof, 0);
-      mju_copy(qpos.data(), data_->qpos + QueryJointPosAddress(first_joint_name_.c_str()),
+      const auto& joint_name = first_joint_name.empty() ? first_joint_name_ : first_joint_name;
+      mju_copy(qpos.data(), data_->qpos + QueryJointPosAddress(joint_name.c_str()),
                std::min(model_->nq, dof));
       return qpos;
     }
     return {};
   }
 
-  std::vector<double> QueryJointVel(int dof) const {
+  std::vector<double> QueryJointVel(int dof, const std::string& first_joint_name = {}) const {
     if (model_ && data_) {
       std::vector<double> qvel(dof, 0);
-      mju_copy(qvel.data(), data_->qvel + QueryJointDofAddress(first_joint_name_.c_str()),
+      const auto& joint_name = first_joint_name.empty() ? first_joint_name_ : first_joint_name;
+      mju_copy(qvel.data(), data_->qvel + QueryJointDofAddress(joint_name.c_str()),
                std::min(model_->nv, dof));
       return qvel;
     }
@@ -257,6 +284,10 @@ public:
     return nullptr;
   }
 
+  mjtNum* QueryBodyQuat(const char* body_name, bool inertia_com = true) const {
+    return QueryBodyQuat(QueryBodyId(body_name), inertia_com);
+  }
+
   mjtNum* QueryBodyRotMat(int body_id, bool inertia_com = true) const {
     if (data_) {
       if (inertia_com) {
@@ -270,11 +301,19 @@ public:
     return nullptr;
   }
 
+  mjtNum* QueryBodyRotMat(const char* body_name, bool inertia_com = true) const {
+    return QueryBodyRotMat(QueryBodyId(body_name), inertia_com);
+  }
+
   mjtNum* QueryBodyPos(int body_id, bool inertia_com = true) const {
     if (data_) {
       return inertia_com ? &data_->xipos[3 * body_id] : &data_->xpos[3 * body_id];
     }
     return nullptr;
+  }
+
+  mjtNum* QueryBodyPos(const char* body_name, bool inertia_com = true) const {
+    return QueryBodyPos(QueryBodyId(body_name), inertia_com);
   }
 
   mjtNum* QueryBodyVel(int body_id, bool linear = true) const {
@@ -292,6 +331,10 @@ public:
     return nullptr;
   }
 
+  mjtNum* QueryBodyVel(const char* body_name, bool inertia_com = true) const {
+    return QueryBodyVel(QueryBodyId(body_name), inertia_com);
+  }
+
   mjtNum* QueryBodyAcc(int body_id, bool linear = true) const {
     if (data_) {
       static double lacc[3] = {0};
@@ -305,6 +348,10 @@ public:
       return &lacc[0];
     }
     return nullptr;
+  }
+
+  mjtNum* QueryBodyAcc(const char* body_name, bool inertia_com = true) const {
+    return QueryBodyAcc(QueryBodyId(body_name), inertia_com);
   }
 
   // Body mocap
@@ -504,15 +551,16 @@ public:
   FabDynamicsState goal_state_ =
       FabDynamicsState{.default_lin = std::vector(3, 0.), .default_ang = std::vector(3, 0.)};
   virtual bool IsGoalFixed() const { return true; }
+
   virtual bool QueryGoalReached() {
     auto* goal_pos = GetGoalPos();
     return goal_pos &&
            (rmp::vectorFromScalarArray<3>(GetRobotPos()) - rmp::vectorFromScalarArray<3>(goal_pos)).norm() <
-               0.005;
+           0.005;
   }
 
   Eigen::Vector3d rotMatrixToEulerAngles(Eigen::Matrix3d& R) const {
-    return R.eulerAngles(0, 1, 2);  // XYZ or RPY
+    return R.eulerAngles(0, 1, 2); // XYZ or RPY
   }
 
   virtual void QueryGoalState() {
@@ -549,7 +597,9 @@ public:
   virtual bool AreObstaclesFixed() const { return (GetDynamicObstaclesNum() == 0); }
   int GetObstaclesDim() const { return AreObstaclesFixed() ? 3 : GetDynamicObstaclesDimension(); }
   virtual int GetDynamicObstaclesDimension() const { return 3; }
-  virtual void QueryObstacleStatesX() {}
+
+  virtual void QueryObstacleStatesX() {
+  }
 
   std::vector<StateX> GetObstacleStatesX() const {
     std::vector<StateX> obstacle_statesX;
@@ -585,7 +635,8 @@ protected:
   virtual void TransitionLocked(mjModel* model, mjData* data);
 
   // implementation of Task::Reset() which can assume a lock is held
-  virtual void ResetLocked(const mjModel* model) {}
+  virtual void ResetLocked(const mjModel* model) {
+  }
 
   // mutex which should be held on changes to InternalResidual.
   mutable std::mutex mutex_;
@@ -594,6 +645,6 @@ private:
   // initial residual parameters from model
   void SetFeatureParameters(const mjModel* model);
 };
-}  // namespace mjpc
+} // namespace mjpc
 
 #endif  // MJPC_TASK_H_

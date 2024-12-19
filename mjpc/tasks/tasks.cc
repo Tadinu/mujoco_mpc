@@ -21,6 +21,7 @@
 #include "mjpc/tasks/acrobot/acrobot.h"
 #include "mjpc/tasks/allegro/allegro.h"
 #include "mjpc/tasks/allegro_x/allegro_x.h"
+#include "mjpc/tasks/bimanual/cobring/cobring.h"
 #include "mjpc/tasks/bimanual/handover/handover.h"
 #include "mjpc/tasks/bimanual/insert/insert.h"
 #include "mjpc/tasks/bimanual/reorient/reorient.h"
@@ -48,7 +49,7 @@
 #include "mjpc/tasks/mpl/mpl.h"
 
 namespace mjpc {
-std::vector<std::shared_ptr<Task> > GetTasks() {
+std::vector<std::shared_ptr<Task>> GetTasks() {
   return {
       std::make_shared<MPL>(),
       std::make_shared<manipulation_x::Bring>(),
@@ -61,6 +62,7 @@ std::vector<std::shared_ptr<Task> > GetTasks() {
       std::make_shared<Acrobot>(),
       std::make_shared<Allegro>(),
       std::make_shared<AllegroX>(),
+      std::make_shared<panda::CoBring>(),
       std::make_shared<aloha::Handover>(),
       std::make_shared<aloha::Insert>(),
       std::make_shared<aloha::Reorient>(),

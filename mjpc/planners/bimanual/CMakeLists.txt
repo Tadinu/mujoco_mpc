@@ -1,0 +1,44 @@
+message("DQ_DIR ${DQ_DIR}")
+set(BIMANUAL_HEADERS
+        utils.h
+        trajectory_buffer.h
+        obstacle.h
+        joint_motion_generator.h
+        goal_type.h
+        end_condition.h
+        eigen_decomposition_op.h
+        damping_design.h
+        costp_controller.h
+        dual_panda_costp_controller.h
+        controller_type.h
+        cf_manager.h
+        cf_agent.h
+        bimanual_planner.h
+        panda_joint_impedance_controller.h
+        dq_franka_robot.h
+)
+
+target_sources(
+        libmjpc PRIVATE
+        bimanual_planner.cpp
+        cf_agent.cpp
+        cf_manager.cpp
+        costp_controller.cpp
+        dual_panda_costp_controller.cpp
+        end_condition.cpp
+        dq_franka_robot.cpp
+        joint_motion_generator.cpp
+        obstacle.cpp
+        trajectory_buffer.cpp
+        utils.cpp
+        panda_joint_impedance_controller.cpp
+        ${BIMANUAL_HEADERS}
+)
+target_link_libraries(
+        libmjpc
+        ${DQ_DIR}/lib/libdqrobotics.so
+)
+target_include_directories(libmjpc
+        PUBLIC
+        ${DQ_DIR}/include
+)

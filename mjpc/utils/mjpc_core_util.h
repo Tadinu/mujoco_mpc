@@ -45,25 +45,25 @@ static void printdb(const TArgs&... var) {
 template <typename... TArgs>
 static void print_variant(const MjpcVariant<TArgs...>& var, const std::string& var_name = "") {
   (
-      [&]() {
-        if (const auto* var_value_ptr = std::get_if<TArgs>(&var)) {
-          const auto var_value = *var_value_ptr;
-          if (!var_name.empty()) {
-            std::cout << var_name << ": ";
-          }
-          if constexpr (std::is_same_v<TArgs, std::any>) {
-            if (var_value.has_value()) {
-              try {
-                std::cout << std::any_cast<std::string>(var_value) << std::endl;
-              } catch (const std::bad_any_cast& e) {
-              }
-            }
-          } else {
-            std::cout << var_value << std::endl;
-          }
+    [&]() {
+      if (const auto* var_value_ptr = std::get_if<TArgs>(&var)) {
+        const auto var_value = *var_value_ptr;
+        if (!var_name.empty()) {
+          std::cout << var_name << ": ";
         }
-      }(),
-      ...);
+        if constexpr (std::is_same_v<TArgs, std::any>) {
+          if (var_value.has_value()) {
+            try {
+              std::cout << std::any_cast<std::string>(var_value) << std::endl;
+            } catch (const std::bad_any_cast& e) {
+            }
+          }
+        } else {
+          std::cout << var_value << std::endl;
+        }
+      }
+    }(),
+    ...);
 }
 
 template <typename... TArgs>
@@ -113,7 +113,8 @@ static void print_named_map2db(const TMap& map, const char* label = nullptr) {
 // ANY -------------------------------------------------------------------------------------------------------
 //
 template <typename T, typename... Types>
-struct is_any_type : std::disjunction<std::is_same<T, Types>...> {};
+struct is_any_type : std::disjunction<std::is_same<T, Types>...> {
+};
 
 template <typename T, typename... Types>
 static constexpr bool is_any() {
@@ -157,12 +158,12 @@ template <typename... TArgs>
 static std::any get_variant_value_any(const MjpcVariant<TArgs...>& var) {
   std::any res;
   (
-      [&]() {
-        if (const auto* value_ptr = std::get_if<TArgs>(&var)) {
-          res = std::any(*value_ptr);
-        }
-      }(),
-      ...);
+    [&]() {
+      if (const auto* value_ptr = std::get_if<TArgs>(&var)) {
+        res = std::any(*value_ptr);
+      }
+    }(),
+    ...);
   return res;
 }
 
@@ -311,4 +312,47 @@ static std::vector<T> tokenize(const std::string& text, const std::string& delim
   return results;
 #endif
 }
-}  // namespace mjpc
+
+// MATH ---------------------
+//
+// Ref: https://github.com/google-deepmind/mujoco/blob/main/src/user/user_util.h
+// convert global to local axis relative to given frame
+static void mjpc_localaxis(double* al, const double* ag, const double* quat) {
+  double mat[9];
+  double qneg[4] = {quat[0], -quat[1], -quat[2], -quat[3]};
+  mju_quat2Mat(mat, qneg);
+  mju_mulMatVec3(al, ag, mat);
+}
+
+// convert global to local position relative to given frame
+static void mjpc_localpos(double* pl, const double* pg, const double* pos, const double* quat) {
+  double a[3] = {pg[0] - pos[0], pg[1] - pos[1], pg[2] - pos[2]};
+  mjpc_localaxis(pl, a, quat);
+}
+
+// compute quaternion rotation from parent to child
+static void mjpc_localquat(double* local, const double* child, const double* parent) {
+  double pneg[4] = {parent[0], -parent[1], -parent[2], -parent[3]};
+  mju_mulQuat(local, pneg, child);
+}
+
+// Ref: mj_fullM
+// Convert sparse inertia matrix M into full (i.e. dense) matrix.
+static void mjpc_fullMatrix(const mjModel* m, mjtNum* dst, const mjtNum* M /* inertial matrix: qM*/,
+                            int start_idx, int size) {
+  int adr = 0;
+  mju_zero(dst, size * size);
+
+  for (int i = start_idx; i < start_idx + size; ++i) {
+    int _i = i - start_idx;
+    int j = i;
+    while (j >= 0) {
+      int _j = j - start_idx;
+      dst[_i * size + _j] = M[adr];
+      dst[_j * size + _i] = M[adr];
+      j = m->dof_parentid[j];
+      adr++;
+    }
+  }
+}
+} // namespace mjpc
