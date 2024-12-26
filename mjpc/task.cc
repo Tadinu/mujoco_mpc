@@ -35,6 +35,7 @@ void MissingParameterError(const mjModel* m, int sensorid) {
 }
 } // namespace
 
+#if MJPC_PLANNER_IDTO_ENABLED
 DrakeMeshcatPtr Task::meshcat_ = std::make_shared<drake::geometry::Meshcat>();
 
 void Task::InitIdto() {
@@ -60,6 +61,7 @@ void Task::InitIdto() {
   UpdateMeshcatFromIdtoConfigs();
 #endif
 }
+#endif // MJPC_PLANNER_IDTO_ENABLED
 
 // initial residual parameters from model
 void Task::SetFeatureParameters(const mjModel* model) {

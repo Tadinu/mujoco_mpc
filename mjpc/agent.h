@@ -34,7 +34,6 @@
 #include "mjpc/utilities.h"
 
 namespace mjpc {
-
 // figures
 struct AgentPlots {
   mjvFigure action;
@@ -48,12 +47,14 @@ public:
   friend class AgentTest;
 
   // constructor
-  Agent() : planners_(mjpc::LoadPlanners()), estimators_(mjpc::LoadEstimators()) {}
+  Agent() : planners_(mjpc::LoadPlanners()), estimators_(mjpc::LoadEstimators()) {
+  }
+
   explicit Agent(const mjModel* model, std::shared_ptr<Task> task);
 
   // destructor
   ~Agent() {
-    if (model_) mj_deleteModel(model_);  // we made a copy in Initialize
+    if (model_) mj_deleteModel(model_); // we made a copy in Initialize
   }
 
   // ----- methods ----- //
@@ -122,6 +123,7 @@ public:
     UniqueMjModel model{nullptr, mj_deleteModel};
     std::string error;
   };
+
   LoadModelResult LoadModel() const;
 
   // Sets a custom model (not from the task), to be returned by the next
@@ -133,7 +135,10 @@ public:
   mjpc::Estimator& ActiveEstimator() const { return *estimators_[estimator_]; }
   int ActiveEstimatorIndex() const { return estimator_; }
   double ComputeTime() const { return agent_compute_time_; }
+
   Task* ActiveTask() const { return tasks_[active_task_id_].get(); }
+  Task* GuiTask() const { return tasks_[gui_task_id].get(); }
+
   // a residual function that can be used from trajectory rollouts. must only
   // be used from trajectory rollout threads (no locking).
   const mjpc::AbstractResidualFn* PlanningResidual() const { return residual_fn_.get(); }
@@ -247,7 +252,6 @@ private:
   std::vector<double> geom_solimp_;
   std::vector<double> pair_solimp_;
 };
-
-}  // namespace mjpc
+} // namespace mjpc
 
 #endif  // MJPC_AGENT_H_

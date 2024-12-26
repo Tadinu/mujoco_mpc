@@ -12,10 +12,11 @@ protected:
   CasadiFunction() = default;
 
   CasadiFunction(std::string name, CaSXDict expressions, CaSXDict inputs = {}, CaSXDict arguments = {})
-      : name_(std::move(name)),
-        expressions_(std::move(expressions)),
-        inputs_(std::move(inputs)),
-        arguments_(std::move(arguments)) {}
+    : name_(std::move(name)),
+      expressions_(std::move(expressions)),
+      inputs_(std::move(inputs)),
+      arguments_(std::move(arguments)) {
+  }
 
   std::vector<std::string> input_names_;
   CaSXVector input_values_;
@@ -43,8 +44,8 @@ protected:
     CASADI_PRINTDB("EXPRESSIONS", expression_names_.size(), expression_values_.size(), expression_names_);
 
     // 3- Create [function_]
-    CASADI_PRINT("CREATE FUNCTION");
-    print_self();
+    CASADI_PRINTDB("CREATE FUNCTION");
+    //print_self();
     function_ = CaFunction(name_, input_values_, expression_values_, input_names_, expression_names_
                            /*, {{"allow_free", true}}*/);
 #else

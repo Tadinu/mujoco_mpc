@@ -37,7 +37,7 @@ public:
     mjcf_model_ = std::dynamic_pointer_cast<mjpc::MjcfModel>(entity_model_);
     mjcf_model_->base_link_name = base_link_name_;
     mjcf_model_->endtip_names = endtip_names_;
-    return mjcf_model_->fromMjcfFile(entity_model_file_);
+    return mjcf_model_->FromMjcfFile(entity_model_file_);
   }
 
 protected:

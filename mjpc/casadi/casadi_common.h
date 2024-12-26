@@ -50,8 +50,9 @@ static constexpr auto CASADI_INT_MAX = std::numeric_limits<casadi_int>::max();
 namespace mjpc {
 template <typename TScalar>
 static CaSX CASX_IDENTITY(const TScalar size) {
-  return CaSX::eye(size); /*with structural zeros*/  //+ CaSX::zeros(size, size); /*with scalar zeros*/
+  return CaSX::eye(size); /*with structural zeros*/ //+ CaSX::zeros(size, size); /*with scalar zeros*/
 }
+
 static CaSX CASX_TRANSF_IDENTITY = CASX_IDENTITY(4);
 
 static CaSX CASX_3D_ZERO = CaSX::zeros(3);
@@ -82,15 +83,15 @@ static CaSXDict get_casx_dict(const MjpcNamedMap<TArgs...>& vars) {
   CaSXDict res;
   for (const auto& item_var : vars) {
     (
-        [&]() {
-          const auto& name = item_var.first;
-          const auto& var = item_var.second;
-          TArgs val;
-          if (get_variant_value2<TArgs>(var, val)) {
-            res.insert_or_assign(name, CaSX(val));
-          }
-        }(),
-        ...);
+      [&]() {
+        const auto& name = item_var.first;
+        const auto& var = item_var.second;
+        TArgs val;
+        if (get_variant_value2<TArgs>(var, val)) {
+          res.insert_or_assign(name, CaSX(val));
+        }
+      }(),
+      ...);
   }
   return res;
 }
@@ -99,34 +100,34 @@ template <typename... TArgs>
 static bool variant_to_casx(const MjpcVariant<TArgs...>& var, CaSX& out) {
   bool res = false;
   (
-      [&]() {
-        // std::cout << typeid(TArgs).name() << std::endl;
-        if constexpr (is_convertible_to_casx<TArgs>()) {
-          TArgs val;
-          if (mjpc::get_variant_value2<TArgs>(var, val)) {
-            out = CaSX(val);
-            res = true;
-          }
+    [&]() {
+      // std::cout << typeid(TArgs).name() << std::endl;
+      if constexpr (is_convertible_to_casx<TArgs>()) {
+        TArgs val;
+        if (mjpc::get_variant_value2<TArgs>(var, val)) {
+          out = CaSX(val);
+          res = true;
         }
-      }(),
-      ...);
+      }
+    }(),
+    ...);
   return res;
 }
 
 template <typename... TArgs>
 static void print_casadi_variant(const MjpcVariant<TArgs...>& var, const std::string& var_name = "") {
   (
-      [&]() {
-        if (const auto* var_value_ptr = std::get_if<TArgs>(&var)) {
-          const auto var_value = *var_value_ptr;
-          if constexpr (std::is_same_v<TArgs, CaSX>) {
-            std::cout << var_value << ": " << var_value.size() << std::endl;
-          } else {
-            mjpc::print_variant(var, var_name);
-          }
+    [&]() {
+      if (const auto* var_value_ptr = std::get_if<TArgs>(&var)) {
+        const auto var_value = *var_value_ptr;
+        if constexpr (std::is_same_v<TArgs, CaSX>) {
+          std::cout << var_value << ": " << var_value.size() << std::endl;
+        } else {
+          mjpc::print_variant(var, var_name);
         }
-      }(),
-      ...);
+      }
+    }(),
+    ...);
 }
 
 template <typename T>
@@ -153,10 +154,10 @@ static bool is_casx_sparse(const CaSX& expr) { return CaSX::symvar(expr).empty()
 // NOTE: Not all symbolic expression go through this parsing function!
 static CaSXDict parse_symbolic_casx(const CaSX& expr, const std::vector<std::string>& var_names) {
   CaSXDict out_vars_dict;
-  MJPC_PRINT("PARSE SYMBOLIC VARS OUTPUT:");
+  MJPC_PRINTDB("PARSE SYMBOLIC VARS OUTPUT:");
   for (const auto& var : CaSX::symvar(expr)) {
     if (mjpc::has_collection_element(var_names, var.name())) {
-      MJPC_PRINT(var.name(), var);
+      MJPC_PRINTDB(var.name(), var);
       out_vars_dict.insert_or_assign(var.name(), var);
     }
   }
@@ -181,9 +182,9 @@ static bool check_compatibility(const TGeometricComponent1& a, const TGeometricC
   if (a.x().size() != b.x().size()) {
     throw MjpcError::customized("Operation invalid",
                                 "Different dimensions: " + std::to_string(a.x().size().first) + "x" +
-                                    std::to_string(a.x().size().second) + "vs. " +
-                                    std::to_string(b.x().size().first) + "x" +
-                                    std::to_string(b.x().size().second));
+                                std::to_string(a.x().size().second) + "vs. " +
+                                std::to_string(b.x().size().first) + "x" +
+                                std::to_string(b.x().size().second));
   }
 
   if (!CaSX::is_equal(a.x(), b.x())) {
@@ -341,4 +342,4 @@ static void add_gaussian_noise(TCasadi& x) {
     }
   }
 }
-}  // namespace mjpc
+} // namespace mjpc

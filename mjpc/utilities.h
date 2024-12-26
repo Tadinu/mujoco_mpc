@@ -56,6 +56,19 @@ inline bool IsSelectedControl(const std::vector<int>& indices, int idx) {
   return indices.empty() || std::find(indices.begin(), indices.end(), idx) != indices.end();
 }
 
+// Spec
+inline mjsBody* FindWorldBodySpec(mjSpec* model_spec) {
+  return mjs_findBody(model_spec, "world");
+}
+
+inline mjsKey* FindKeySpec(mjSpec* model_spec, const char* key_name) {
+  return mjs_asKey(mjs_findElement(model_spec, mjOBJ_KEY, key_name));
+}
+
+inline mjsSite* FindSiteSpec(mjSpec* model_spec, const char* site_name) {
+  return mjs_asSite(mjs_findElement(model_spec, mjOBJ_SITE, site_name));
+}
+
 // Joint
 inline int QueryJointId(const mjModel* model, const char* joint_name) {
   return model ? mj_name2id(model, mjOBJ_JOINT, joint_name) : -1;
@@ -63,12 +76,75 @@ inline int QueryJointId(const mjModel* model, const char* joint_name) {
 
 inline int QueryJointPosAddress(const mjModel* model, const char* joint_name) {
   int joint_id = QueryJointId(model, joint_name);
-  return (model && (joint_id >= 0) && (joint_id < model->njnt)) ? model->jnt_qposadr[joint_id] : 0;
+  return (model && (joint_id > -1) && (joint_id < model->njnt)) ? model->jnt_qposadr[joint_id] : 0;
 }
 
 inline int QueryJointDofAddress(const mjModel* model, const char* joint_name) {
   int joint_id = QueryJointId(model, joint_name);
-  return (model && (joint_id >= 0) && (joint_id < model->njnt)) ? model->jnt_dofadr[joint_id] : 0;
+  return (model && (joint_id > -1) && (joint_id < model->njnt)) ? model->jnt_dofadr[joint_id] : 0;
+}
+
+// NOTE: model_->nq,nv are actuated joints/controls configured in MJ model
+// This applies only for continuous-ids joints
+// dof_num: full dof of the robot
+inline std::vector<double> QueryJointPositions(const mjModel* model, const mjData* data, int dof_num = -1,
+                                               const std::string& first_joint_name = {}) {
+  if (model && data) {
+    if (dof_num < 0) {
+      dof_num = model->nq;
+    }
+    std::vector<double> qpos(dof_num, 0);
+    mju_copy(qpos.data(),
+             data->qpos + (first_joint_name.empty()
+                             ? 0
+                             : QueryJointPosAddress(model, first_joint_name.c_str())),
+             std::min(model->nq, dof_num));
+    return qpos;
+  }
+  return {};
+}
+
+inline Eigen::VectorXd QueryJointPositionsEigen(const mjModel* model, const mjData* data, int dof_num = -1,
+                                                const std::string& first_joint_name = {}) {
+  std::vector<double> qpos_vec = mjpc::QueryJointPositions(model, data);
+  return Eigen::Map<Eigen::VectorXd>(qpos_vec.data(), qpos_vec.size());
+}
+
+inline double QuerySingleJointPos(const mjModel* model, const mjData* data, int jnt_id) {
+  if (model && data && (jnt_id > -1)) {
+    assert(jnt_id < model->nq);
+    return data->qpos[jnt_id];
+  }
+  return 0.;
+}
+
+// NOTE: This applies only for continous-ids joints
+inline std::vector<double> QueryJointVels(const mjModel* model, const mjData* data, int dof_num,
+                                          const std::string& first_joint_name = {}) {
+  if (model && data) {
+    std::vector<double> qvel(dof_num, 0);
+    mju_copy(qvel.data(), data->qvel + (first_joint_name.empty()
+                                          ? 0
+                                          : QueryJointDofAddress(model, first_joint_name.c_str())),
+             std::min(model->nv, dof_num));
+    return qvel;
+  }
+  return {};
+}
+
+inline double QuerySingleJointVel(const mjModel* model, const mjData* data, int dof_id) {
+  if (model && data && (dof_id > -1)) {
+    assert(dof_id < model->nv);
+    return data->qvel[dof_id];
+  }
+  return 0.;
+}
+
+inline void PrintJoints(const mjModel* model, const mjData* data) {
+  for (int i = 0; i < model->njnt; ++i) {
+    int name_jntadr = model->name_jntadr[i];
+    mjpc::print(std::string(model->names + name_jntadr), mjpc::QuerySingleJointPos(model, data, i));
+  }
 }
 
 // Dof
@@ -76,26 +152,21 @@ inline int QueryDofId(const mjModel* model, const char* dof_name) {
   return model ? mj_name2id(model, mjOBJ_DOF, dof_name) : -1;
 }
 
-// NOTE: model_->nq,nv are actuated joints/controls configured in MJ model
-// dof: full dof of the robot
-inline std::vector<double> QueryJointPos(const mjModel* model, const mjData* data, int dof,
-                                         const std::string& first_joint_name) {
-  if (model && data) {
-    std::vector<double> qpos(dof, 0);
-    mju_copy(qpos.data(), data->qpos + QueryJointPosAddress(model, first_joint_name.c_str()),
-             std::min(model->nq, dof));
-    return qpos;
-  }
-  return {};
+// Actuator
+inline int QueryActuatorId(const mjModel* model, const char* actuator_name) {
+  return model ? mj_name2id(model, mjOBJ_ACTUATOR, actuator_name) : -1;
 }
 
-inline std::vector<double> QueryJointVel(const mjModel* model, const mjData* data, int dof,
-                                         const std::string& first_joint_name) {
-  if (model && data) {
-    std::vector<double> qvel(dof, 0);
-    mju_copy(qvel.data(), data->qvel + QueryJointDofAddress(model, first_joint_name.c_str()),
-             std::min(model->nv, dof));
-    return qvel;
+// Key
+inline int QueryKeyId(const mjModel* model, const std::string& key_name) {
+  return model ? mj_name2id(model, mjOBJ_KEY, key_name.c_str()) : -1;
+}
+
+inline std::vector<double> QueryKeyJointPositions(const mjModel* model, const std::string& key_name) {
+  if (model) {
+    const int key_id = QueryKeyId(model, key_name);
+    auto* key_pos = &model->key_qpos[key_id * model->nq];
+    return (key_id > -1) ? std::vector(key_pos, key_pos + model->nq) : std::vector<double>{};
   }
   return {};
 }
@@ -106,7 +177,7 @@ inline int QueryBodyId(const mjModel* model, const char* body_name) {
 }
 
 inline mjtNum* QueryBodyQuat(const mjData* data, int body_id, bool inertia_com = true) {
-  if (data) {
+  if (data && (body_id > -1)) {
     if (inertia_com) {
       static mjtNum quat[4];
       mju_mat2Quat(quat, &data->ximat[9 * body_id]);
@@ -119,7 +190,7 @@ inline mjtNum* QueryBodyQuat(const mjData* data, int body_id, bool inertia_com =
 }
 
 inline mjtNum* QueryBodyRotMat(const mjData* data, int body_id, bool inertia_com = true) {
-  if (data) {
+  if (data && (body_id > -1)) {
     if (inertia_com) {
       return &data->ximat[9 * body_id];
     } else {
@@ -132,16 +203,21 @@ inline mjtNum* QueryBodyRotMat(const mjData* data, int body_id, bool inertia_com
 }
 
 inline mjtNum* QueryBodyPos(const mjData* data, int body_id, bool inertia_com = true) {
-  if (data) {
+  if (data && (body_id > -1)) {
     return inertia_com ? &data->xipos[3 * body_id] : &data->xpos[3 * body_id];
   }
   return nullptr;
 }
 
-static std::pair<Eigen::Vector3d, Eigen::Quaterniond> QueryBodyPose(const mjModel* model, const mjData* data,
-                                                                    const std::string& child_body_name,
-                                                                    const std::string& parent_body_name =
-                                                                        {}) {
+inline Eigen::Vector3d QueryBodyPosEigen(const mjData* data, int body_id, bool inertia_com = true) {
+  auto* pos = QueryBodyPos(data, body_id, inertia_com);
+  return pos ? Eigen::Vector3d(Eigen::Map<Eigen::Vector3d>(pos, 3)) : Eigen::Vector3d::Zero();
+}
+
+inline std::pair<Eigen::Vector3d, Eigen::Quaterniond> QueryBodyPoseEigen(
+    const mjModel* model, const mjData* data,
+    const std::string& child_body_name,
+    const std::string& parent_body_name = {}) {
   std::pair<Eigen::Vector3d, Eigen::Quaterniond> res;
   mjtNum parent_pose[7];
   mju_copy(parent_pose, POSE_IDENTITY, 7);
@@ -154,25 +230,24 @@ static std::pair<Eigen::Vector3d, Eigen::Quaterniond> QueryBodyPose(const mjMode
   mjtNum rel_pose[7];
   mju_copy(rel_pose, POSE_IDENTITY, 7);
   auto child_body_id = QueryBodyId(model, child_body_name.c_str());
+  // TODO: Check mj_local2Global() can be used here or not
+#if 0
+  mj_local2Global(data, QueryBodyPos(data, child_body_id), QueryBodyRotMat(data, child_body_id, true),
+                  QueryBodyPos(data, child_body_id, true), QueryBodyQuat(data, child_body_id, true),
+                  child_body_id, model->body_sameframe[child_body_id]);
+#endif
+
   mjpc_localpos(&rel_pose[0], QueryBodyPos(data, child_body_id), &parent_pose[0],
-               &parent_pose[3]);
+                &parent_pose[3]);
   mjpc_localquat(&rel_pose[3], QueryBodyQuat(data, child_body_id), &parent_pose[3]);
 
   mju_copy3(res.first.data(), &rel_pose[0]);
-#if 0
-  res.second = Quaterniond(link_pose[3], // w
-                           link_pose[4], // x
-                           link_pose[5], // y
-                           link_pose[6]  // z
-      );
-#else
-  res.second = Eigen::Quaterniond(&rel_pose[3]);
-#endif
+  res.second = mjpc::QuatToEigen(&rel_pose[3]);
   return res;
 }
 
 inline mjtNum* QueryBodyVel(const mjData* data, int body_id, bool linear = true) {
-  if (data) {
+  if (data && (body_id > -1)) {
     static double lvel[3] = {0};
 #if 1
     mju_copy3(lvel, linear ? &data->cvel[6 * body_id + 3] : &data->cvel[6 * body_id]);
@@ -187,7 +262,7 @@ inline mjtNum* QueryBodyVel(const mjData* data, int body_id, bool linear = true)
 }
 
 inline mjtNum* QueryBodyAcc(const mjData* data, int body_id, bool linear = true) {
-  if (data) {
+  if (data && (body_id > -1)) {
     static double lacc[3] = {0};
 #if 1
     mju_copy3(lacc, linear ? &data->cacc[6 * body_id + 3] : &data->cacc[6 * body_id]);
@@ -214,15 +289,16 @@ inline void SetBodyMocapPos(const mjModel* model, const mjData* data, const char
                             const double* pos) {
   if (data) {
     int bodyMocapId = QueryBodyMocapId(model, body_name);
-    mju_copy3(&data->mocap_pos[3 * bodyMocapId], pos);
-    //  std::cout << body_name << ":" << bodyMocapId << " " << pos[0] << " " << pos[1] << std::endl;
+    if (bodyMocapId > -1) {
+      mju_copy3(&data->mocap_pos[3 * bodyMocapId], pos);
+    }
   }
 }
 
 inline mjtNum* QueryBodyMocapPos(const mjModel* model, const mjData* data, const char* body_name) {
   if (data) {
     int bodyMocapId = QueryBodyMocapId(model, body_name);
-    return &data->mocap_pos[3 * bodyMocapId];
+    return (bodyMocapId > -1) ? &data->mocap_pos[3 * bodyMocapId] : nullptr;
   }
   return nullptr;
 }
@@ -231,14 +307,16 @@ inline void SetBodyMocapQuat(const mjModel* model, const mjData* data, const cha
                              const double* quat) {
   if (data) {
     int bodyMocapId = QueryBodyMocapId(model, body_name);
-    mju_copy3(&data->mocap_quat[4 * bodyMocapId], quat);
+    if (bodyMocapId > -1) {
+      mju_copy4(&data->mocap_quat[4 * bodyMocapId], quat);
+    }
   }
 }
 
 inline mjtNum* QueryBodyMocapQuat(const mjModel* model, const mjData* data, const char* body_name) {
   if (data) {
     int bodyMocapId = QueryBodyMocapId(model, body_name);
-    return &data->mocap_quat[4 * bodyMocapId];
+    return (bodyMocapId > -1) ? &data->mocap_quat[4 * bodyMocapId] : nullptr;
   }
   return nullptr;
 }
@@ -256,6 +334,21 @@ inline mjtNum QueryBodyMass(const mjModel* model, const char* body_name) {
     return (bodyId > -1) ? model->body_mass[bodyId] : 0;
   }
   return 0;
+}
+
+inline void PrintBodyMocaps(const mjModel* model, const mjData* data) {
+  for (auto i = 0; i < model->nbody; ++i) {
+    auto mocap_id = model->body_mocapid[i];
+    if (mocap_id >= 0) {
+      const auto mocap_name = std::string(mj_id2name(model, mjOBJ_BODY, i));
+      auto* mocap_pos = QueryBodyMocapPos(model, data, mocap_name.c_str());
+      auto* mocap_quat = QueryBodyMocapQuat(model, data, mocap_name.c_str());
+      Eigen::Vector3d pos = Eigen::Map<Eigen::Vector3d>(mocap_pos, 3);
+      Eigen::Vector4d quat = Eigen::Map<Eigen::Vector4d>(mocap_quat, 4);
+      print("mocap body:", i, mocap_name,
+            "pos:", pos.transpose(), "quat:", quat.transpose());
+    }
+  }
 }
 
 // Geom
@@ -283,13 +376,16 @@ inline mjtNum* QueryGeomQuat(const mjModel* model, const mjData* data, const cha
   return nullptr;
 }
 
-inline std::vector<double> QueryGeomSize(const mjModel* model, const char* geom_name) {
+inline std::vector<double> QueryGeomSize(const mjModel* model, int geom_id) {
   std::vector<double> size(3, 0.0);
-  int geom_id = QueryGeomId(model, geom_name);
   if (geom_id > -1) {
     mju_copy3(size.data(), &model->geom_size[3 * geom_id]);
   }
   return size;
+}
+
+inline std::vector<double> QueryGeomSize(const mjModel* model, const char* geom_name) {
+  return QueryGeomSize(model, QueryGeomId(model, geom_name));
 }
 
 inline double QueryGeomSizeMax(const mjModel* model, const char* geom_name) {
@@ -307,8 +403,83 @@ inline double QueryGeomSizeMax(const mjModel* model, const std::vector<const cha
 }
 
 inline void SetGeomColor(const mjvScene* scene, const mjModel* model, uint geom_id, const float* rgba) {
-  if (scene && (geom_id < model->ngeom)) {
+  if (scene && (geom_id > -1) && (geom_id < model->ngeom)) {
     memcpy(scene->geoms[geom_id].rgba, rgba, sizeof(float) * 4);
+  }
+}
+
+// Site
+inline int QuerySiteId(const mjModel* model, const char* site_name) {
+  return model ? mj_name2id(model, mjOBJ_SITE, site_name) : -1;
+}
+
+inline mjtNum* QuerySitePos(const mjData* data, int site_id) {
+  if (data && (site_id > -1)) {
+    return &data->site_xpos[3 * site_id];
+  }
+  return nullptr;
+}
+
+inline mjtNum* QuerySitePos(const mjModel* model, const mjData* data, const char* site_name) {
+  return QuerySitePos(data, QuerySiteId(model, site_name));
+}
+
+inline Eigen::Vector3d QuerySitePosEigen(const mjData* data, int site_id) {
+  auto* pos = QuerySitePos(data, site_id);
+  return pos ? Eigen::Vector3d(Eigen::Map<Eigen::Vector3d>(pos, 3)) : Eigen::Vector3d::Zero();
+}
+
+inline mjtNum* QuerySiteQuat(const mjData* data, int site_id) {
+  if (data) {
+    static mjtNum quat[4];
+    mju_mat2Quat(quat, &data->site_xmat[9 * site_id]);
+    return &quat[0];
+  }
+  return nullptr;
+}
+
+inline mjtNum* QuerySiteQuat(const mjModel* model, const mjData* data, const char* site_name) {
+  return QuerySiteQuat(data, QuerySiteId(model, site_name));
+}
+
+inline std::vector<double> QuerySiteSize(const mjModel* model, int site_id) {
+  std::vector<double> size(3, 0.0);
+  if (model && (site_id > -1)) {
+    mju_copy3(size.data(), &model->site_size[3 * site_id]);
+  }
+  return size;
+}
+
+inline std::vector<double> QuerySiteSize(const mjModel* model, const char* site_name) {
+  return QuerySiteSize(model, QuerySiteId(model, site_name));
+}
+
+inline double QuerySiteSizeMax(const mjModel* model, const char* site_name) {
+  const auto size = QuerySiteSize(model, site_name);
+  return std::max({size[0], size[1], size[2]});
+}
+
+inline void MoveBodyMocapToSite(const mjModel* model, const mjData* data,
+                                const char* body_name, const char* site_name) {
+  SetBodyMocapPos(model, data, body_name, QuerySitePos(model, data, site_name));
+  SetBodyMocapQuat(model, data, body_name, QuerySiteQuat(model, data, site_name));
+}
+
+inline void MoveBodyMocapToSite(const mjModel* model, const mjData* data,
+                                const char* body_name, int site_id) {
+  SetBodyMocapPos(model, data, body_name, QuerySitePos(data, site_id));
+  SetBodyMocapQuat(model, data, body_name, QuerySiteQuat(data, site_id));
+}
+
+inline void PrintSites(const mjModel* model, const mjData* data) {
+  for (auto i = 0; i < model->nsite; ++i) {
+    const auto site_name = std::string(mj_id2name(model, mjOBJ_SITE, i));
+    auto* site_pos = QuerySitePos(data, i);
+    auto* site_quat = QuerySiteQuat(data, i);
+    Eigen::Vector3d pos = Eigen::Map<Eigen::Vector3d>(site_pos, 3);
+    Eigen::Vector4d quat = Eigen::Map<Eigen::Vector4d>(site_quat, 4);
+    print("site:", i, site_name,
+          "pos:", pos.transpose(), "quat:", quat.transpose());
   }
 }
 

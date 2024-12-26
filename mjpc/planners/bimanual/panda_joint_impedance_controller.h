@@ -29,12 +29,12 @@ public:
   void setStiffnessScale(const double& stiffness_scale);
 
   VectorNd getQ() const {
-    auto q = mj_task_->QueryJointPos(N, first_joint_name_);
+    auto q = mj_task_->QueryJointPositions(N, first_joint_name_);
     return Eigen::Map<VectorNd>(q.data(), N);
   }
 
   VectorNd getQD() const {
-    auto qd = mj_task_->QueryJointVel(N, first_joint_name_);
+    auto qd = mj_task_->QueryJointVels(N, first_joint_name_);
     return Eigen::Map<VectorNd>(qd.data(), N);
   }
 

@@ -237,8 +237,8 @@ void FabPlanner::SetTuningArguments(const FabParamWeightDict& params) {
 
 void FabPlanner::Plan(const FabParamDict& params) {
   const auto robot_dof = robot_->dof();
-  std::vector<double> q = task_->QueryJointPos(robot_dof);
-  std::vector<double> qdot = task_->QueryJointVel(robot_dof);
+  std::vector<double> q = task_->QueryJointPositions(robot_dof);
+  std::vector<double> qdot = task_->QueryJointVels(robot_dof);
   MJPC_PRINTDB("QPOS", q);
   MJPC_PRINTDB("QVEL", qdot);
   arguments_ = {{"q", std::move(q)}, {"qdot", std::move(qdot)}};

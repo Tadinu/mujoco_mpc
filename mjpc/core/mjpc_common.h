@@ -24,11 +24,18 @@ namespace mjpc {
 using MjpcSharedMutexLock = std::shared_lock<std::shared_mutex>;
 using MjpcMutexLock = std::lock_guard<std::mutex>;
 
+enum class MjOwnerAppType : int8_t {
+  MJAPP,
+  MJPC
+};
+
 struct MjpcError : public std::runtime_error {
   explicit MjpcError(std::string error_msg = "")
-      : std::runtime_error(error_msg), message_(std::move(error_msg)) {}
+    : std::runtime_error(error_msg), message_(std::move(error_msg)) {
+  }
 
-  explicit MjpcError(const char* error_msg = nullptr) : MjpcError(std::string(error_msg)) {}
+  explicit MjpcError(const char* error_msg = nullptr) : MjpcError(std::string(error_msg)) {
+  }
 
   static MjpcError customized(std::string expression, std::string message) {
     MjpcError error(std::move(message));
@@ -53,9 +60,11 @@ protected:
 
 struct MjpcParamNotFoundError : public std::runtime_error {
   explicit MjpcParamNotFoundError(const std::string& error_msg)
-      : std::runtime_error("[Param not found]: " + error_msg) {}
+    : std::runtime_error("[Param not found]: " + error_msg) {
+  }
 
   explicit MjpcParamNotFoundError(const char* error_msg)
-      : std::runtime_error("[Param not found]: " + std::string(error_msg)) {}
+    : std::runtime_error("[Param not found]: " + std::string(error_msg)) {
+  }
 };
-}  // namespace mjpc
+} // namespace mjpc

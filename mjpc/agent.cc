@@ -55,8 +55,7 @@ inline constexpr double kMaxPlanningHorizon = 2.5;
 
 // maximum number of actions to plot
 const int kMaxActionPlots = 25;
-
-}  // namespace
+} // namespace
 
 Agent::Agent(const mjModel* model, std::shared_ptr<Task> task) : Agent::Agent() {
   SetTaskList({std::move(task)});
@@ -71,7 +70,7 @@ Agent::Agent(const mjModel* model, std::shared_ptr<Task> task) : Agent::Agent() 
 void Agent::Initialize(const mjModel* model) {
   // ----- model ----- //
   mjModel* old_model = model_;
-  model_ = mj_copyModel(nullptr, model);  // agent's copy of model
+  model_ = mj_copyModel(nullptr, model); // agent's copy of model
   for (auto& task : tasks_) {
     task->Initialize(model_);
   }
@@ -322,8 +321,8 @@ void Agent::PlanIteration(ThreadPool* pool) {
     residual_fn_ = task->Residual();
 
     // Tuning on/off -> switch between symbolic & scalar fabrics config, need to re-init task fabrics
-    const bool tuning_switched = (planner.tuning_on_ != tune_enabled);
-    planner.tuning_on_ = tune_enabled;
+    const bool tuning_switched = (planner.is_tuning_on() != tune_enabled);
+    planner.set_tuning_on(tune_enabled);
     if (tuning_switched) {
       planner.InitTaskFabrics();
     }
@@ -335,8 +334,8 @@ void Agent::PlanIteration(ThreadPool* pool) {
 
       // compute time
       agent_compute_time_ = std::chrono::duration_cast<std::chrono::microseconds>(
-                                std::chrono::steady_clock::now() - agent_start)
-                                .count();
+              std::chrono::steady_clock::now() - agent_start)
+          .count();
 
       // counter
       count_ += 1;
@@ -376,7 +375,7 @@ void Agent::Plan(std::atomic<bool>& exitrequest, std::atomic<int>& uiloadrequest
     if (model_ && uiloadrequest.load() == 0) {
       PlanIteration(&pool);
     }
-  }  // exitrequest sent -- stop planning
+  } // exitrequest sent -- stop planning
 }
 
 void Agent::RunBeforeStep(StepJob job) {
@@ -629,7 +628,6 @@ void Agent::GUI(mjUI& ui) {
         // but mjITEM_SELECT is going to treat is as an int. the
         // ResidualSelection and DefaultResidualSelection functions hide the
         // necessary casting when reading such values.
-
       } else {
         mju_error_s("Selection list not found for %s", name);
         return;
@@ -690,7 +688,7 @@ void Agent::GUI(mjUI& ui) {
       {mjITEM_CHECKINT, "Action", 2, &action_enabled, ""},
       {mjITEM_CHECKINT, "Plots", 2, &plot_enabled, ""},
       {mjITEM_CHECKINT, "Traces", 2, &visualize_enabled, ""},
-                        {mjITEM_CHECKINT, "Tune", 2, &tune_enabled, ""},
+      {mjITEM_CHECKINT, "Tune", 2, &tune_enabled, ""},
       {mjITEM_SEPARATOR, "Agent Settings", 1},
       {mjITEM_SLIDERNUM, "Horizon", 2, &horizon_, "0 1"},
       {mjITEM_SLIDERNUM, "Timestep", 2, &timestep_, "0 1"},
@@ -731,11 +729,11 @@ void Agent::GUI(mjUI& ui) {
 // task-based GUI event
 void Agent::TaskEvent(mjuiItem* it, mjData* data, std::atomic<int>& uiloadrequest, int& run) {
   switch (it->itemid) {
-    case 0:  // task reset
+    case 0: // task reset
       ActiveTask()->Reset(model_);
       ActiveTask()->reset = 0;
       break;
-    case 2:  // task switch
+    case 2: // task switch
       // the GUI changed the value of gui_task_id, but it's unsafe to switch
       // tasks now.
       // turn off agent and traces
@@ -746,7 +744,7 @@ void Agent::TaskEvent(mjuiItem* it, mjData* data, std::atomic<int>& uiloadreques
       ActiveTask()->visualize = 0;
       ActiveTask()->reset = 0;
       allocate_enabled = true;
-      // request model loading
+    // request model loading
       uiloadrequest.fetch_add(1);
       break;
   }
@@ -755,14 +753,14 @@ void Agent::TaskEvent(mjuiItem* it, mjData* data, std::atomic<int>& uiloadreques
 // agent-based GUI event
 void Agent::AgentEvent(mjuiItem* it, mjData* data, std::atomic<int>& uiloadrequest, int& run) {
   switch (it->itemid) {
-    case 0:  // reset
+    case 0: // reset
       if (model_) {
         this->Reset();
         this->PlotInitialize();
         this->PlotReset();
       }
       break;
-    case 1:  // planner change
+    case 1: // planner change
       if (model_) {
         // reset plots
         this->PlotInitialize();
@@ -780,13 +778,13 @@ void Agent::AgentEvent(mjuiItem* it, mjData* data, std::atomic<int>& uiloadreque
         uiloadrequest.fetch_sub(1);
       }
       break;
-    case 2:  // estimator change
+    case 2: // estimator change
       // check for estimators
       if (!GetCustomNumericData(model_, "estimator") || !estimator_enabled) {
         estimator_ = 0;
         break;
       }
-      // reset
+    // reset
       if (model_) {
         // reset plots
         this->PlotInitialize();
@@ -796,12 +794,12 @@ void Agent::AgentEvent(mjuiItem* it, mjData* data, std::atomic<int>& uiloadreque
         ActiveEstimator().Reset(data);
 
         // reset agent
-        reset_estimator = false;     // skip estimator reset
-        uiloadrequest.fetch_sub(1);  // reset
-        reset_estimator = true;      // restore estimator reset
+        reset_estimator = false; // skip estimator reset
+        uiloadrequest.fetch_sub(1); // reset
+        reset_estimator = true; // restore estimator reset
       }
       break;
-    case 4:  // controller on/off
+    case 4: // controller on/off
       if (model_) {
         mju_zero(data->ctrl, model_->nu);
       }
@@ -811,7 +809,7 @@ void Agent::AgentEvent(mjuiItem* it, mjData* data, std::atomic<int>& uiloadreque
 // agent-based GUI event
 void Agent::EstimatorEvent(mjuiItem* it, mjData* data, std::atomic<int>& uiloadrequest, int& run) {
   switch (it->itemid) {
-    case 0:  // reset estimator
+    case 0: // reset estimator
       if (model_) {
         this->ActiveEstimator().Reset(data);
         this->PlotInitialize();
@@ -1143,5 +1141,4 @@ void Agent::PlotShow(mjrRect* rect, mjrContext* con) {
   viewport.bottom += rect->height / num_sections;
   mjr_figure(viewport, &plots_.cost, con);
 }
-
-}  // namespace mjpc
+} // namespace mjpc

@@ -20,8 +20,6 @@ using DQ_robotics::i_;
 using DQ_robotics::j_;
 using DQ_robotics::k_;
 using DQ_robotics::DQPanda;
-using DQ_robotics::pi;
-using DQ_robotics::pinv;
 
 namespace mjpc {
 CoSTPController::CoSTPController(mjModel* model, mjData* data, Task* task):
@@ -109,7 +107,7 @@ void CoSTPController::calculateControlPreliminaries(const Vector14d& q) {
   // Calculating the angle_ between the plücker lines
   VectorXd t1 = l_.vec4();
   VectorXd t2 = lz_.vec4();
-  angle_ = (180 / pi) * acos(t1.dot(t2));
+  angle_ = (180 / M_PI) * acos(t1.dot(t2));
   angle_ = abs(angle_);
 }
 
@@ -119,7 +117,8 @@ void CoSTPController::relativePoseControl(MatrixXd& Jac, Vector14d& err) {
   // Get Jacobian
   Jac = RelPJ_;
   // PseudoInverse
-  MatrixXd robustInv = Jac.transpose() * pinv(Jac * Jac.transpose() + 0.001 * Matrix8d::Identity());
+  MatrixXd robustInv = Jac.transpose() * DQ_robotics::pinv(
+                           Jac * Jac.transpose() + 0.001 * Matrix8d::Identity());
   err = robustInv * rel_error_;
 }
 
@@ -145,11 +144,12 @@ void CoSTPController::positionControlImpl(MatrixXd& Jac, Vector14d& err, const V
   Jac = geomJac_.middleRows(3, 3);
   // Funnel tracking
   double task_funnel_err_norm = pow(abs_error_.norm(), 2);
-  // MatrixXd robustInv = Jac.transpose() * pinv(Jac * Jac.transpose() +
+  // MatrixXd robustInv = Jac.transpose() *DQ_robotics::pinv(Jac * Jac.transpose() +
   //                                             0.01 * MatrixXd::Identity(3, 3));
   MatrixXd funnel_Jac = 2 * abs_error_.transpose() * Jac;
   MatrixXd robustInv =
-      funnel_Jac.transpose() * pinv(funnel_Jac * funnel_Jac.transpose() + 0.01 * MatrixXd::Identity(1, 1));
+      funnel_Jac.transpose() * DQ_robotics::pinv(
+          funnel_Jac * funnel_Jac.transpose() + 0.01 * Matrix1d::Identity());
   err = robustInv * task_funnel_err_norm;
   // err = robustInv * abs_error_;
   double v = (Jac * err).norm();
@@ -157,11 +157,12 @@ void CoSTPController::positionControlImpl(MatrixXd& Jac, Vector14d& err, const V
     err *= abs_error_.norm() * 1000 / v;
   }
   Vector3d x_c = gains_[ct] * (Jac * err) * 0.001;
-  Vector3d x_c_p = gains_[ct] * 0.001 * (Jac * ((Matrix14d::Identity() - pinv(RelPJ_) * RelPJ_) * err));
+  Vector3d x_c_p = gains_[ct] * 0.001 * (
+                     Jac * ((Matrix14d::Identity() - DQ_robotics::pinv(RelPJ_) * RelPJ_) * err));
   MatrixXd FullJac(11, 14);
   FullJac << RelPJ_, geomJac_.middleRows(3, 3);
   MatrixXd fullRobustInv =
-      FullJac.transpose() * pinv(FullJac * FullJac.transpose() + 0.01 * Matrix11d::Identity());
+      FullJac.transpose() * DQ_robotics::pinv(FullJac * FullJac.transpose() + 0.01 * Matrix11d::Identity());
   Eigen::Matrix<double, 11, 1> x_ff_extended;
   x_ff_extended.setZero();
   x_ff_extended.tail(3) = x_ff;
@@ -173,7 +174,7 @@ void CoSTPController::positionControlImpl(MatrixXd& Jac, Vector14d& err, const V
 #if 0
   Vector3d x_ff_ = 0.001 * (Jac * dq_v_ff) * v_act_ / v_cmd;
   Vector3d x_ff_p =
-      0.001 * (Jac * ((Matrix14d::Identity() - pinv(RelPJ_) * RelPJ_) * dq_v_ff)) * v_act_ / v_cmd;
+      0.001 * (Jac * ((Matrix14d::Identity() -DQ_robotics::pinv(RelPJ_) * RelPJ_) * dq_v_ff)) * v_act_ / v_cmd;
 #endif
 }
 
@@ -202,7 +203,8 @@ void CoSTPController::EETiltControl(MatrixXd& Jac, Vector14d& err) {
   MatrixXd J_rz = temp1.haminus4() * C4() * Jr_r + temp2.hamiplus4() * Jr_r;
   Jac = -2 * err_t.transpose() * J_rz;
   // PseudoInverse
-  MatrixXd robustInv = Jac.transpose() * pinv(Jac * Jac.transpose() + 0.1 * Matrix1d::Identity());
+  MatrixXd robustInv = Jac.transpose() *
+                       DQ_robotics::pinv(Jac * Jac.transpose() + 0.1 * Matrix1d::Identity());
   err = robustInv * e_n_;
 }
 
@@ -234,7 +236,8 @@ void CoSTPController::jointLimitAvoidanceControl(MatrixXd& Jac, Vector14d& err, 
   double lambda = 0.5;
   dot_s_ = -lambda * s;
   // PseudoInverse
-  MatrixXd robustInv = Jac.transpose() * pinv(Jac * Jac.transpose() + 0.001 * Matrix1d::Identity());
+  MatrixXd robustInv = Jac.transpose() * DQ_robotics::pinv(
+                           Jac * Jac.transpose() + 0.001 * Matrix1d::Identity());
   err = robustInv * dot_s_;
 
   // Task with single joint activation
@@ -261,7 +264,7 @@ void CoSTPController::jointLimitAvoidanceControl(MatrixXd& Jac, Vector14d& err, 
   //   double lambda = 0.5;
   //   dot_s_ = -lambda * s;
   //   // PseudoInverse
-  //   MatrixXd robustInv = Jac.transpose() * pinv(Jac * Jac.transpose() +
+  //   MatrixXd robustInv = Jac.transpose() *DQ_robotics::pinv(Jac * Jac.transpose() +
   //                                               0.001 * Matrix1d::Identity());
   //   err = robustInv * dot_s_;
   // }
@@ -371,7 +374,7 @@ Vector14d CoSTPController::control(const Vector14d& q, const Vector14d& qD, cons
       Jac_total = Jac;
     } else {
       delta_q += gains_[control_type] * (
-        (Matrix14d::Identity() - pinv(Jac_total) * Jac_total) * err);
+        (Matrix14d::Identity() - DQ_robotics::pinv(Jac_total) * Jac_total) * err);
       MatrixXd tmp(Jac_total.rows() + Jac.rows(), Jac.cols());
       tmp << Jac_total, Jac;
       Jac_total = tmp;

@@ -22,14 +22,22 @@
 
 struct CIOPose {
   CIOPose() = default;
-  explicit CIOPose(const Eigen::Vector3d& position) : trans(position) {}
-  explicit CIOPose(const Eigen::Quaterniond& orientation) : quat(orientation) {}
+
+  explicit CIOPose(const Eigen::Vector3d& position) : trans(position) {
+  }
+
+  explicit CIOPose(const Eigen::Quaterniond& orientation) : quat(orientation) {
+  }
+
   CIOPose(const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation)
-      : trans(position), quat(orientation) {}
+    : trans(position), quat(orientation) {
+  }
+
   Eigen::Vector3d position() const { return trans.vector(); }
   Eigen::Quaterniond orientation() const { return quat; }
+
   Eigen::Vector3d rpy() const {
-    Eigen::Vector3d eulerAngles = quat.toRotationMatrix().eulerAngles(2, 1, 0);  // ZYX order
+    Eigen::Vector3d eulerAngles = quat.toRotationMatrix().eulerAngles(2, 1, 0); // ZYX order
     return {eulerAngles(2), eulerAngles(1), eulerAngles(0)};
   }
 
@@ -38,16 +46,17 @@ struct CIOPose {
   void add_noise();
   constexpr int size() const { return size_byte() / sizeof(double); }
   constexpr int size_byte() const { return sizeof(trans) + sizeof(quat); }
+
   std::vector<double> data() const {
     std::vector<double> out(size());
     std::memcpy(out.data(), trans.translation().data(), sizeof(trans));
-    std::memcpy(out.data() + (sizeof(trans) / sizeof(double)), quat.coeffs().data(), sizeof(quat));
+    std::memcpy(out.data() + (sizeof(trans) / sizeof(double)), mjpc::QuatFromEigen(quat), sizeof(quat));
     return out;
   }
 
   void from_data(const double* data) {
     std::memcpy(trans.translation().data(), data, sizeof(trans));
-    std::memcpy(quat.coeffs().data(), data + (sizeof(trans) / sizeof(double)), sizeof(quat));
+    quat = mjpc::QuatToEigen(data + (sizeof(trans) / sizeof(double)));
   }
 };
 
@@ -57,12 +66,14 @@ struct CIOVelocity {
   void add_noise();
   constexpr int size() const { return size_byte() / sizeof(double); }
   constexpr int size_byte() const { return sizeof(linear_vel) + sizeof(angular_vel); }
+
   std::vector<double> data() const {
     std::vector<double> out(size());
     std::memcpy(out.data(), linear_vel.data(), sizeof(linear_vel));
     std::memcpy(out.data() + (sizeof(linear_vel) / sizeof(double)), angular_vel.data(), sizeof(angular_vel));
     return out;
   }
+
   void from_data(const double* data) {
     std::memcpy(linear_vel.data(), data, sizeof(linear_vel));
     std::memcpy(angular_vel.data(), data + (sizeof(linear_vel) / sizeof(double)), sizeof(angular_vel));
@@ -75,12 +86,14 @@ struct CIOAcceleration {
   void add_noise();
   constexpr int size() const { return size_byte() / sizeof(double); }
   constexpr int size_byte() const { return sizeof(linear_acc) + sizeof(angular_acc); }
+
   std::vector<double> data() const {
     std::vector<double> out(size());
     std::memcpy(out.data(), linear_acc.data(), sizeof(linear_acc));
     std::memcpy(out.data() + (sizeof(linear_acc) / sizeof(double)), angular_acc.data(), sizeof(angular_acc));
     return out;
   }
+
   void from_data(const double* data) {
     std::memcpy(linear_acc.data(), data, sizeof(linear_acc));
     std::memcpy(angular_acc.data(), data + (sizeof(linear_acc) / sizeof(double)), sizeof(angular_acc));
@@ -119,12 +132,14 @@ struct CIOContact {
   void add_noise();
   constexpr int size() const { return size_byte() / sizeof(double); }
   constexpr int size_byte() const { return sizeof(f) + sizeof(ro); }
+
   std::vector<double> data() const {
     std::vector<double> out(size());
     std::memcpy(out.data(), f.data(), sizeof(f));
     std::memcpy(out.data() + (sizeof(f) / sizeof(double)), ro.data(), sizeof(ro));
     return out;
   }
+
   void from_data(const double* data) {
     std::memcpy(f.data(), data, sizeof(f));
     std::memcpy(ro.data(), data + (sizeof(f) / sizeof(double)), sizeof(ro));
@@ -145,6 +160,7 @@ struct CIOObservation {
   static const int pose_vel_acc_size;
   static const int contact_size;
   void add_noise();
+
   std::vector<double> data() const {
     std::vector<double> out(pose_size + vel_size + acc_size + contacts.size() * contact_size);
     std::memcpy(out.data(), pose.data().data(), pose_size * sizeof(double));
@@ -157,6 +173,7 @@ struct CIOObservation {
     }
     return out;
   }
+
   void from_data(const double* data, int elem_num) {
     pose.from_data(data);
     vel.from_data(data + pose_size);
@@ -167,6 +184,7 @@ struct CIOObservation {
       contacts[i].from_data(data + pose_vel_acc_size + i * contact_size);
     }
   }
+
   void from_data(const std::vector<double>& data_vec) { from_data(data_vec.data(), (int)data_vec.size()); }
 };
 
@@ -182,8 +200,8 @@ struct CIOConfig {
   double delT = 0.001;
   double delT_phase = 0.5;
   double mass = 1.0;
-  double mu = 0.9;      // Friction coefficient
-  double lamb = 0.001;  // Regularization parameter
+  double mu = 0.9; // Friction coefficient
+  double lamb = 0.001; // Regularization parameter
 
   std::vector<CIOStageWeight> stage_weights = {
       CIOStageWeight{.w_CI = 0.1, .w_physics = 0.1, .w_kinematics = 0.0, .w_task = 1.0},
@@ -198,21 +216,26 @@ struct CIOConfig {
 class CIOObject {
 public:
   CIOObject() = default;
+
   CIOObject(int body_id, int geom_id, double step_size = 0.5)
-      : body_id_(body_id), geom_id_(geom_id), step_size_(step_size) {}
+    : body_id_(body_id), geom_id_(geom_id), step_size_(step_size) {
+  }
 
   void set_mj_info(const mjModel* model, const mjData* data, const mjpc::Task* task) {
     mj_model_ = model;
     mj_data_ = data;
     mj_task_ = task;
   }
+
   int id() const { return body_id_; }
   int geom_id() const { return geom_id_; }
   double mass() const { return mj_task_->QueryBodyMass(id()); }
+
   CIOPose pose() const {
     return CIOPose(Eigen::Vector3d(mj_task_->QueryBodyPos(id())),
-                   Eigen::Quaterniond(mj_task_->QueryBodyQuat(id())));
+                   mjpc::QuatToEigen(mj_task_->QueryBodyQuat(id())));
   }
+
   CIOVelocity vel() const {
     return CIOVelocity{.linear_vel = Eigen::Vector3d(mj_task_->QueryBodyVel(id())),
                        .angular_vel = Eigen::Vector3d(mj_task_->QueryBodyVel(id(), false))};
@@ -230,7 +253,10 @@ public:
   virtual Eigen::Vector3d project_point(const Eigen::Vector3d& point) const {
     return Eigen::Vector3d::Zero();
   }
-  virtual void discretize() {}
+
+  virtual void discretize() {
+  }
+
   virtual bool check_inside(const Eigen::Vector3d& point) { return false; }
 
 protected:
@@ -242,6 +268,7 @@ protected:
   double step_size_ = 0.001;
   double rad_bounds_ = 1e-1;
 };
+
 using CIOObjectPtr = std::shared_ptr<CIOObject>;
 
 #if 1
@@ -249,7 +276,9 @@ using CIOObjectPtr = std::shared_ptr<CIOObject>;
 class CIOLine {
 public:
   CIOLine() = default;
-  CIOLine(Eigen::Vector3d p1, Eigen::Vector3d p2) : p1_(std::move(p1)), p2_(std::move(p2)) {}
+
+  CIOLine(Eigen::Vector3d p1, Eigen::Vector3d p2) : p1_(std::move(p1)), p2_(std::move(p2)) {
+  }
 
   Eigen::Vector3d p1() const { return p1_; }
   Eigen::Vector3d p2() const { return p2_; }
@@ -274,7 +303,8 @@ private:
 class CIOTriangle {
 public:
   CIOTriangle(Eigen::Vector3d p1, Eigen::Vector3d p2, Eigen::Vector3d p3)
-      : p1_(std::move(p1)), p2_(std::move(p2)), p3_(std::move(p3)) {}
+    : p1_(std::move(p1)), p2_(std::move(p2)), p3_(std::move(p3)) {
+  }
 
   Eigen::Vector3d p1() const { return p1_; }
   Eigen::Vector3d p2() const { return p2_; }
@@ -333,12 +363,16 @@ public:
 class CIORectangle {
 public:
   CIORectangle(Eigen::Vector3d p1, Eigen::Vector3d p2, Eigen::Vector3d p3, Eigen::Vector3d p4)
-      : p1_(std::move(p1)), p2_(std::move(p2)), p3_(std::move(p3)), p4_(std::move(p4)) {}
+    : p1_(std::move(p1)), p2_(std::move(p2)), p3_(std::move(p3)), p4_(std::move(p4)) {
+  }
+
   CIORectangle(std::vector<Eigen::Vector3d> points)
-      : p1_(std::move(points[0])),
-        p2_(std::move(points[1])),
-        p3_(std::move(points[2])),
-        p4_(std::move(points[3])) {}
+    : p1_(std::move(points[0])),
+      p2_(std::move(points[1])),
+      p3_(std::move(points[2])),
+      p4_(std::move(points[3])) {
+  }
+
   Eigen::Vector3d p1() const { return p1_; }
   Eigen::Vector3d p2() const { return p2_; }
   Eigen::Vector3d p3() const { return p3_; }
@@ -396,11 +430,13 @@ private:
 class CIOEllipse {
 public:
   CIOEllipse() = default;
+
   CIOEllipse(Eigen::Vector3d center, Eigen::Quaterniond orientation, double a, double b)
-      : center_point_(std::move(center)),
-        absolute_orientation_(std::move(orientation)),
-        major_semi_(a),
-        minor_semi_(b) {}
+    : center_point_(std::move(center)),
+      absolute_orientation_(std::move(orientation)),
+      major_semi_(a),
+      minor_semi_(b) {
+  }
 
   double p1() const { return major_semi_; }
   double p2() const { return minor_semi_; }
@@ -425,6 +461,7 @@ public:
     BOTTOM = 4,
     TOP = 5,
   };
+
   CIOCuboid(int body_id, int geom_id) : CIOObject(body_id, geom_id) {
     for (int i = 0; i < 8; i++) {
       points_.emplace_back(Eigen::Vector3d::Zero());
@@ -434,7 +471,7 @@ public:
   CIOCuboid(int body_id, int geom_id, Eigen::Vector3d p0, Eigen::Vector3d p1, Eigen::Vector3d p2,
             Eigen::Vector3d p3, Eigen::Vector3d p4, Eigen::Vector3d p5, Eigen::Vector3d p6,
             Eigen::Vector3d p7)
-      : CIOObject(body_id, geom_id) {
+    : CIOObject(body_id, geom_id) {
     points_.emplace_back(std::move(p0));
     points_.emplace_back(std::move(p1));
     points_.emplace_back(std::move(p2));
@@ -446,11 +483,12 @@ public:
   }
 
   CIOCuboid(int body_id, int geom_id, std::vector<Eigen::Vector3d> points)
-      : CIOObject(body_id, geom_id), points_(std::move(points)) {}
+    : CIOObject(body_id, geom_id), points_(std::move(points)) {
+  }
 
   CIOCuboid(int body_id, int geom_id, const Eigen::Vector3d& center, const Eigen::Vector3d& radius,
             const Eigen::Quaterniond& orientation)
-      : CIOObject(body_id, geom_id) {
+    : CIOObject(body_id, geom_id) {
     set_points(center, radius, orientation);
   }
 
@@ -609,11 +647,13 @@ public:
     BOTTOM = 0,
     TOP = 1,
   };
+
   CIOCylinder(Eigen::Vector3d center, double radius, double height, Eigen::Quaterniond orientation)
-      : center_point_(std::move(center)),
-        radius_(radius),
-        height_(height),
-        absolute_orientation_(std::move(orientation)) {}
+    : center_point_(std::move(center)),
+      radius_(radius),
+      height_(height),
+      absolute_orientation_(std::move(orientation)) {
+  }
 
   Eigen::Vector3d center() const { return center_point_; }
   Eigen::Quaterniond orientation() const { return absolute_orientation_; }
@@ -648,10 +688,12 @@ class CIOCone : public CIOObject {
 public:
   CIOCone(Eigen::Vector3d origin_point, double angle, double height,
           const Eigen::Vector3d& absolute_direction)
-      : origin_point_(std::move(origin_point)),
-        angle_(angle),
-        height_(height),
-        absolute_direction_(absolute_direction.normalized()) {}
+    : origin_point_(std::move(origin_point)),
+      angle_(angle),
+      height_(height),
+      absolute_direction_(absolute_direction.normalized()) {
+  }
+
   Eigen::Vector3d origin() const { return origin_point_; }
   Eigen::Vector3d direction() const { return absolute_direction_; }
   Eigen::Vector3d center() const { return origin() + (0.5 * h()) * direction(); }
@@ -689,7 +731,8 @@ public:
     if (point_axis_angle < this->angle_) {
       return origin() + vec_point_on_cone * cos(beta) * point_vec.norm();
     } else if ((point_axis_angle >= this->angle_) &&
-               (point_axis_angle - this->angle_) <= M_PI_2) {  // TODO: is this condition correct?
+               (point_axis_angle - this->angle_) <= M_PI_2) {
+      // TODO: is this condition correct?
       return origin() + vec_point_on_cone * cos(point_axis_angle - this->angle_) * point_vec.norm();
     } else {
       return Eigen::Vector3d::Zero();
@@ -706,8 +749,10 @@ private:
 class CIOSphere : public CIOObject {
 public:
   CIOSphere() = default;
+
   CIOSphere(int body_id, int geom_id, double radius, double step_size = 0.5)
-      : CIOObject(body_id, geom_id, step_size), radius_(radius) {}
+    : CIOObject(body_id, geom_id, step_size), radius_(radius) {
+  }
 
   // Projects the given point onto the surface of this object
   Eigen::Vector3d project_point(const Eigen::Vector3d& point) const override {
@@ -719,6 +764,7 @@ public:
 private:
   double radius_ = 0;
 };
+
 using CIOSpherePtr = std::shared_ptr<CIOSphere>;
 #else
 class CIOLine : public CIOObject {

@@ -148,7 +148,7 @@ void rmp::RaycastingPolicy<TSpace>::startEval(const PState& agent_state,
       const auto distance = _.first;
       if ((distance != -1) && (distance < distance_min)) {
         distance_min = distance;
-        ray_direction = _.second;  // This is already guaranteed a unit direction vector
+        ray_direction = _.second; // This is already guaranteed a unit direction vector
       }
     }
 
@@ -203,8 +203,8 @@ void rmp::RaycastingPolicy<TSpace>::startEval(const PState& agent_state,
         metric_sum_.push_back(A_metric);
         metric_x_force_sum_.push_back(A_metric * f_obs);
       }
-    }  // End if distance_min is valid
-  }  // End rayshooting loop
+    } // End if distance_min is valid
+  } // End rayshooting loop
 }
 
 /**
@@ -255,12 +255,10 @@ rmp::RaycastingPolicy<rmp::CylindricalSpace>::PValue rmp::RaycastingPolicy<rmp::
     return {Vector::Zero(), Matrix::Zero()};
   }
 
-  Matrix sum_inverse = sum.completeOrthogonalDecomposition().pseudoInverse();
-  Vector f = sum_inverse * sumv;
   last_evaluated_state_.pos_ = agent_state.pos_;
   last_evaluated_state_.vel_ = agent_state.vel_;
 
-  return {f, sum};
+  return {mjpc::pinv(sum) * sumv /*f*/, sum};
 }
 
 /**

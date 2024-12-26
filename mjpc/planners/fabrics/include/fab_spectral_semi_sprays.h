@@ -23,9 +23,11 @@ public:
   FabSpectralSemiSprays() = default;
   ~FabSpectralSemiSprays() override = default;
 
-  explicit FabSpectralSemiSprays(std::string name) : FabGeometry(std::move(name)) {}
+  explicit FabSpectralSemiSprays(std::string name) : FabGeometry(std::move(name)) {
+  }
+
   FabSpectralSemiSprays(std::string name, const CaSX& M, const FabSpecArgs& kwargs)
-      : FabGeometry(std::move(name)) {
+    : FabGeometry(std::move(name)) {
     initialize(M, kwargs);
   }
 
@@ -73,7 +75,7 @@ public:
       J_ref_inv_ = fab_math::CASX_IDENTITY(size);
     } else if (kwargs.contains("J_ref")) {
       J_ref_ = *mjpc::get_arg_value<decltype(J_ref_)>(kwargs, "J_ref");
-      MJPC_PRINT("Casadi pseudo inverse is used in Lagrangian");
+      MJPC_PRINTDB("Casadi pseudo inverse is used in Lagrangian");
       const auto size = x_ref().size().first;
       const auto J_ref_transpose = J_ref_.T();
       J_ref_inv_ = CaSX::mtimes(J_ref_transpose, CaSX::inv(CaSX::mtimes(J_ref_, J_ref_transpose) +
@@ -89,7 +91,7 @@ public:
   CaSX M() const { return M_; }
 
   CaSX Minv() const {
-    MJPC_PRINT("Casadi pseudo inverse is used in spec");
+    MJPC_PRINTDB("Casadi pseudo inverse is used in spec");
     return CaSX::pinv(M_ + fab_math::CASX_IDENTITY(x().size().first) * FAB_EPS);
   }
 

@@ -21,32 +21,41 @@ public:
     first_joint_name_ = "joint1";
     fabrics_control_mode_ = FabControlMode::ACC;
   }
+
   std::string Name() const override;
   std::string XmlPath() const override;
   std::string RobotModelPath() const override;
+
   std::string GetBaseBodyName() const override {
     static std::string name = MJPC_MANIPULATION_X_URDF ? "panda_link0" : "link0";
     return name;
   }
+
   std::vector<std::string> GetEndtipNames() const override {
     // Ones in URDF, not XML
     static std::vector<std::string> names = MJPC_MANIPULATION_X_URDF
-                                                ? std::vector<string>{"panda_leftfinger", "panda_rightfinger"}
-                                                : std::vector<string>{"left_finger", "right_finger"};
+                                              ? std::vector<string>{"panda_leftfinger", "panda_rightfinger"}
+                                              : std::vector<string>{"left_finger", "right_finger"};
     return names;
   }
+
   std::vector<std::string> GetCollisionLinkNames() const override {
     // Ones in URDF, not XML
     // NOTE: In XML, link5 collisions, composed of 3 subparts, is not obvious to fetch
     static std::vector<std::string> names = MJPC_MANIPULATION_X_URDF
-        ? std::vector<string>{ // "panda_hand", "panda_link3", "panda_link4" -> "panda_with_finger.urdf"
-            "panda_link0", "panda_link1", "panda_link2", "panda_link3", "panda_link4",
-            "panda_link5", "panda_link6", "panda_link7", "panda_hand"}// -> "panda_for_fk.urdf"
-        : std::vector<string>{"link0", "link1", "link2", "link3", "link4",
-                              "link5", "link6", "link7", "hand"};
+                                              ? std::vector<string>{
+                                                  // "panda_hand", "panda_link3", "panda_link4" -> "panda_with_finger.urdf"
+                                                  "panda_link0", "panda_link1", "panda_link2", "panda_link3",
+                                                  "panda_link4",
+                                                  "panda_link5", "panda_link6", "panda_link7",
+                                                  "panda_hand"} // -> "panda_for_fk.urdf"
+                                              : std::vector<string>{
+                                                  "link0", "link1", "link2", "link3", "link4",
+                                                  "link5", "link6", "link7", "hand"};
 
     return names;
   }
+
   FabLinkCollisionProps GetCollisionLinkProps() const override {
     static constexpr bool is_urdf = MJPC_MANIPULATION_X_URDF;
     static FabLinkCollisionProps props = {
@@ -59,26 +68,32 @@ public:
         {is_urdf ? "panda_hand" : "hand", {QueryGeomSizeMax("hand_c")}}};
     return props;
   }
+
   FabSelfCollisionNamePairs GetSelfCollisionNamePairs() const override {
     // Ones in URDF, not XML
     return MJPC_MANIPULATION_X_URDF
-               ? FabSelfCollisionNamePairs{{"panda_hand",
-                                            {"panda_link0", "panda_link1", "panda_link2", "panda_link3",
-                                             "panda_link4", "panda_link5", "panda_link6", "panda_link7"}}}
-               : FabSelfCollisionNamePairs{
-                     {"hand", {"link0", "link1", "link2", "link3", "link4", "link5", "link6", "link7"}}};
+             ? FabSelfCollisionNamePairs{{"panda_hand",
+                                          {"panda_link0", "panda_link1", "panda_link2", "panda_link3",
+                                           "panda_link4", "panda_link5", "panda_link6", "panda_link7"}}}
+             : FabSelfCollisionNamePairs{
+                 {"hand", {"link0", "link1", "link2", "link3", "link4", "link5", "link6", "link7"}}};
   }
+
   int GetStaticObstaclesNum() const override { return AreObstaclesFixed() ? 3 : 0; }
+
   int GetDynamicObstaclesNum() const override {
-    return (planner_ && planner_->tuning_on_) ? static_cast<int>(GetCollisionLinkNames().size())
-                                              : (AreObstaclesFixed() ? 0 : 3);
+    return (planner_ && planner_->is_tuning_on())
+             ? static_cast<int>(GetCollisionLinkNames().size())
+             : (AreObstaclesFixed() ? 0 : 3);
   }
+
   int GetPlaneConstraintsNum() const override { return 1; }
 
   int GetActionDim() const override {
     const auto goal_child_link_name = GetSubGoals()[0]->child_link_name();
     return ((goal_child_link_name == "panda_hand") || (goal_child_link_name == "hand")) ? 7 : 9;
   }
+
   std::vector<FabSubGoalPtr> GetSubGoals() const override {
     static constexpr bool is_urdf = MJPC_MANIPULATION_X_URDF;
     // Static subgoals with static [desired_state.pos]
@@ -136,14 +151,15 @@ public:
 
   bool AreObstaclesFixed() const override { return false; }
   int GetDynamicObstaclesDimension() const override { return 3; }
+
   std::vector<FabJointLimit> GetJointLimits() const override {
-    return {{-2.8973, 2.8973},   // panda_joint1
-            {-1.7628, 1.7628},   // panda_joint2
-            {-2.8973, 2.8973},   // panda_joint3
-            {-3.0718, -0.0698},  // panda_joint4
-            {-2.8973, 2.8973},   // panda_joint5
-            {-0.0175, 3.7525},   // panda_joint6
-            {-2.8973, 2.8973}};  // panda_joint7
+    return {{-2.8973, 2.8973}, // panda_joint1
+            {-1.7628, 1.7628}, // panda_joint2
+            {-2.8973, 2.8973}, // panda_joint3
+            {-3.0718, -0.0698}, // panda_joint4
+            {-2.8973, 2.8973}, // panda_joint5
+            {-0.0175, 3.7525}, // panda_joint6
+            {-2.8973, 2.8973}}; // panda_joint7
   }
 
   // NOTES on mutex:
@@ -163,6 +179,7 @@ public:
 
   // Obstacles
   virtual void MoveObstacles();
+
   void QueryObstacleStatesX() override {
     MJPC_LOCK_TASK_DATA_ACCESS;
     obstacle_statesX_.clear();
@@ -178,13 +195,13 @@ public:
 
       static constexpr int LIN_IDX = 3;
 #if 1
-      mjtNum obstacle_i_full_vel[6];  // rot+lin
+      mjtNum obstacle_i_full_vel[6]; // rot+lin
       mj_objectVelocity(model_, data_, mjOBJ_BODY, obstacle_i_id, obstacle_i_full_vel,
                         /*flg_local=*/0);
       mjtNum obstacle_i_lin_vel[StateX::dim];
       mju_copy(obstacle_i_lin_vel, &obstacle_i_full_vel[LIN_IDX], StateX::dim);
 
-      mjtNum obstacle_i_full_acc[6];  // rot+lin
+      mjtNum obstacle_i_full_acc[6]; // rot+lin
       mj_objectAcceleration(model_, data_, mjOBJ_BODY, obstacle_i_id, obstacle_i_full_acc,
                             /*flg_local=*/0);
       mjtNum obstacle_i_lin_acc[StateX::dim];
@@ -203,7 +220,7 @@ public:
           .vel_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_lin_vel),
           .acc_ = rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_lin_acc),
           .size_ =
-              rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_size ? obstacle_i_size : (mjtNum[]){})});
+          rmp::vectorFromScalarArray<StateX::dim>(obstacle_i_size ? obstacle_i_size : (mjtNum[]){})});
     };
 
     // Env obstacles
@@ -213,7 +230,7 @@ public:
 
     // Body arm links as obstacles
     // NOTE: As observed, unclear why yet involving body links (as obstacles) disrupt the arm ik planning
-    if (planner_ && planner_->tuning_on_) {
+    if (planner_ && planner_->is_tuning_on()) {
       static const auto prefix_len = std::string("panda_").size();
       static constexpr bool is_urdf = MJPC_MANIPULATION_X_URDF;
       for (const auto& link_name : GetCollisionLinkNames()) {
@@ -235,7 +252,8 @@ public:
   class ResidualFn : public mjpc::BaseResidualFn {
   public:
     explicit ResidualFn(const Bring* task, ModelValues values)
-        : mjpc::BaseResidualFn(task), model_vals_(std::move(values)) {}
+      : mjpc::BaseResidualFn(task), model_vals_(std::move(values)) {
+    }
 
     void Residual(const mjModel* model, const mjData* data, double* residual) const override;
 
@@ -263,6 +281,7 @@ protected:
   std::unique_ptr<mjpc::AbstractResidualFn> ResidualLocked() const override {
     return std::make_unique<ResidualFn>(this, residual_.model_vals_);
   }
+
   ResidualFn* InternalResidual() override { return &residual_; }
   bool IsFabricsSupported() const override { return true; }
   FabPlannerConfigPtr GetFabricsConfig() const override;
@@ -270,4 +289,4 @@ protected:
 private:
   ResidualFn residual_;
 };
-}  // namespace mjpc::manipulation_x
+} // namespace mjpc::manipulation_x

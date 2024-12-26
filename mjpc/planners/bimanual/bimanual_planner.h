@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Eigen/Core>
+#include <mujoco/mujoco.h>
 
 // mjpc
 #include "mjpc/core/mjpc_common.h"
@@ -10,6 +11,7 @@
 #include "mjpc/planners/bimanual/goal_type.h"
 #include "mjpc/planners/planner.h"
 #include "mjpc/utils/mjpc_core_util.h"
+#include "mjpc/utils/mjpc_ctrl_util.h"
 #include "mjpc/planners/bimanual/dual_panda_costp_controller.h"
 
 using Eigen::Vector3d;
@@ -17,6 +19,7 @@ using Vector6d = Eigen::Matrix<double, 6, 1>;
 using Vector7d = Eigen::Matrix<double, 7, 1>;
 using Vector8d = Eigen::Matrix<double, 8, 1>;
 using Vector14d = Eigen::Matrix<double, 14, 1>;
+using Matrix6d = Eigen::Matrix<double, 6, 6>;
 
 using ghostplanner::cfplanner::Obstacle;
 
@@ -187,11 +190,29 @@ public:
 
   // optimize nominal policy
   void OptimizePolicy(int horizon, mjpc::ThreadPool& pool) override {
-    if (task_->IsBimanualSupported()) {
+    if (true) {
       const MjpcSharedMutexLock lock(policy_mutex_);
+#if 1
+      static constexpr int NV = 14;
+      if (action_.empty()) {
+        action_ = std::vector<double>(NV, 0);
+      }
+      static Vector14d vel = Vector14d::Zero();
+      const double integration_dt = model_->opt.timestep;
+      vel.head<7>() = mjpc::ControlDiff(model_, data_, "torso", "panda0_end_effector", "target",
+                                        data_->qpos,
+                                        integration_dt, true);
+      vel.tail<7>() = mjpc::ControlDiff(model_, data_, "torso", "panda1_end_effector", "target",
+                                        data_->qpos + 7,
+                                        integration_dt, true);
+      mju_copy(action_.data(), data_->qpos, NV);
+      mju_addToScl(action_.data(), vel.data(), 1, NV);
+      //print(action_);
+#else
       TaskCallback(GoalType::PLAN);
       const auto tau_d = controller_->update();
       action_ = std::vector<double>(tau_d.data(), tau_d.data() + tau_d.size());
+#endif
     }
   }
 

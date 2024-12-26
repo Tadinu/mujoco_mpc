@@ -21,10 +21,16 @@ cmake .. -G Ninja \
 		 -Ddrake_DIR=$MEDIA_EXT_DRIVE/11_MPC/DRAKE_MPC/drake/release/lib/cmake/drake \
                  -DCMAKE_ISPC_COMPILER=$MEDIA_EXT_DRIVE/ISPC/bin/ispc \
 		 -Dautodiff_DIR:PATH=/home/tad/11_AUTODIFF/autodiff/release/lib/cmake/autodiff \
-                 -DMCMC_DIR:PATH=/home/tad/10_MCMC/mcmc/release \
-                 -DDQ_DIR:PATH=/home/tad/6_DYNAMICS/dq_cpp/release_gcc
-                 #-DCMAKE_CXX_FLAGS:STRING="-stdlib=libc++ -D_GLIBCXX_USE_CXX11_ABI=1" \
-                 #-DCMAKE_EXE_LINKER_FLAGS:STRING="-Wl,--no-as-needed -stdlib=libc++"
+     -DMCMC_DIR:PATH=/home/tad/10_MCMC/mcmc/release \
+     -DDQ_DIR:PATH=/home/tad/6_DYNAMICS/dq_cpp/release_gcc/ \
+     -DDM_ROBOTICS_DIR=/home/tad/1_MUJOCO/dm_robotics/cpp/ \
+     -Dqp_solver_collection_DIR=/home/tad/1_MUJOCO/QpSolverCollection/release/lib/cmake/qp_solver_collection/ \
+     -Dosqp_DIR=$MEDIA_EXT_DRIVE/MUJOCO/QpSolverCollection/osqp/release/lib/cmake/osqp/ \
+     -DOsqpEigen_DIR=$MEDIA_EXT_DRIVE/MUJOCO/QpSolverCollection/osqp-eigen/release/lib/cmake/OsqpEigen/ \
+     -Deigen-quadprog_DIR=/media/ducthan/376b23a1-5a02-4960-b3ca-24b2fcef8f891/MUJOCO/QpSolverCollection/eigen-quadprog/release/lib/cmake/eigen-quadprog/
+     #-DosqpDIR=$MEDIA_EXT_DRIVE/MUJOCO/QpSolverCollection/osqp-cpp/release/lib/cmake/osqp/ \
+     #-DCMAKE_CXX_FLAGS:STRING="-stdlib=libc++ -D_GLIBCXX_USE_CXX11_ABI=1" \
+     #-DCMAKE_EXE_LINKER_FLAGS:STRING="-Wl,--no-as-needed -stdlib=libc++"
 
 cmake --build . -j8 --config=Release
 cmake --install .

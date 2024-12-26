@@ -8,11 +8,13 @@
 // mjpc
 #include "mjpc/task.h"
 #include "mjpc/tasks/mpl/mpl_grasp_cost.h"
+#include "mjpc/utilities.h"
 
+#if MJPC_PLANNER_IDTO_ENABLED
 // idto
 #include "mjpc/planners/idto/idto_planner.h"
 #include "mjpc/planners/idto/idto_yaml_config.h"
-#include "mjpc/utilities.h"
+#endif
 
 namespace mjpc {
 class AllegroX : public Task {
@@ -22,20 +24,27 @@ public:
 
   class ResidualFn : public BaseResidualFn {
   public:
-    explicit ResidualFn(const AllegroX* task) : BaseResidualFn(task) {}
+    explicit ResidualFn(const AllegroX* task) : BaseResidualFn(task) {
+    }
 
     void Residual(const mjModel* model, const mjData* data, double* residual) const override;
     MPLGraspCostCalculator cost_calc_;
   };
 
-  AllegroX() : residual_(this) { idto_configs_path_ = GetModelPath("allegro_x/allegro_hand.yaml"); }
+  AllegroX() : residual_(this) {
+#if MJPC_PLANNER_IDTO_ENABLED
+    idto_configs_path_ = GetModelPath("allegro_x/allegro_hand.yaml");
+#endif
+  }
 
   void ResetLocked(const mjModel* model) override {
+#if MJPC_PLANNER_IDTO_ENABLED
     // NOTE: THIS MUST RUN ON MAIN THREAD, TEMPORARILY PUT HERE
     auto* idto_planner = dynamic_cast<IdtoPlanner*>(planner_);
     if (idto_planner) {
       idto_planner->StartControl();
     }
+#endif
   }
 
   // Reset the cube into the hand if it's on the floor
@@ -60,8 +69,10 @@ private:
   // DRAKE IMPL --
   //
 private:
+#if MJPC_PLANNER_IDTO_ENABLED
   void InitMeshcat() override;
   void UpdateMeshcatFromIdtoConfigs() override;
   void CreateDrakePlantModel(drake::multibody::MultibodyPlant<double>* plant) const override;
+#endif
 };
-}  // namespace mjpc
+} // namespace mjpc

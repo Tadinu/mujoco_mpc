@@ -52,10 +52,10 @@ public:
     const auto obj_radius = Eigen::Vector3d(obj_size.data());
     if (manip_obj_) {
       std::dynamic_pointer_cast<CIOCuboid>(manip_obj_)
-          ->set_points(obj_center, obj_radius, Eigen::Quaterniond(obj_rot));
+          ->set_points(obj_center, obj_radius, mjpc::QuatToEigen(obj_rot));
     } else {
       manip_obj_ = std::make_shared<CIOCuboid>(manip_obj_body_id, manip_obj_geom_id, obj_center, obj_radius,
-                                               Eigen::Quaterniond(obj_rot));
+                                               mjpc::QuatToEigen(obj_rot));
     }
     manip_obj_->set_mj_info(model, data, task);
 

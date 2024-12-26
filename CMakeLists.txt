@@ -243,8 +243,40 @@ findorfetch(
   EXCLUDE_FROM_ALL
 )
 
+# Eigen3
+find_package(Eigen3 REQUIRED)
+include_directories(SYSTEM ${EIGEN3_INCLUDE_DIR})
+if(${CMAKE_CXX_STANDARD} EQUAL "20")
+  add_compile_definitions(EIGEN_HAS_STD_RESULT_OF=0)
+endif()
+
+# CasADI
+find_package(casadi REQUIRED)
+if (${casadi_FOUND})
+  message("Found CasADi [x]")
+else ()
+  message(WARNING "CasADi is not found!")
+endif ()
+
+# dm-robotics
+set(DM_ROBOTICS_BUILD_DIR "${DM_ROBOTICS_DIR}/build_gcc")
+
+# qp_solver_collection
+find_package(qp_solver_collection REQUIRED)
+# -> required 3rd solvers
+set(QP_SOLVER_3RD_LIBS eigen-quadprog::eigen-quadprog)
+find_package(eigen-quadprog REQUIRED)
+
+# [osqp]: Only required if using either [Google's osqp-cpp]
+#set(QP_SOLVER_3RD_LIBS "${QP_SOLVER_3RD_LIBS}" osqp::osqpstatic osqp::osqp)
+#find_package(osqp REQUIRED)
+# Robotology's cpp wrapper over osqp
+#set(QP_SOLVER_3RD_LIBS "${QP_SOLVER_3RD_LIBS}" OsqpEigen::OsqpEigen)
+#find_package(OsqpEigen REQUIRED)
+
 set(MJPC_COMPILE_OPTIONS "${AVX_COMPILE_OPTIONS}" "${EXTRA_COMPILE_OPTIONS}")
 set(MJPC_LINK_OPTIONS "${EXTRA_LINK_OPTIONS}")
 
 add_subdirectory(mjpc)
+add_subdirectory(mjapp)
 

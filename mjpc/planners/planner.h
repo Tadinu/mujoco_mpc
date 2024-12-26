@@ -24,6 +24,7 @@
 #include "mjpc/trajectory.h"
 #include "mjpc/urdf_parser/include/model.h"
 #include "mjpc/utilities.h"
+#include "mjpc/core/mjpc_common.h"
 
 namespace mjpc {
 inline constexpr int kMaxTrajectory = 128;
@@ -32,13 +33,19 @@ inline constexpr int kMaxTrajectoryLarge = 1028;
 // virtual planner
 class Planner {
 public:
+  Planner() = default;
+
+  explicit Planner(const MjOwnerAppType type) : owner_type_(type) {
+  }
+
   // destructor
   virtual ~Planner() = default;
 
   // initialize data and settings
   virtual void Initialize(mjModel* model, const Task& task) = 0;
 
-  virtual void InitTaskFabrics() {}
+  virtual void InitTaskFabrics() {
+  }
 
   // init trajectories
   virtual void InitTrajectory() {
@@ -75,7 +82,8 @@ public:
   // visualize planner-specific traces
   virtual void Traces(mjvScene* scn) = 0;
 
-  virtual void ClearTrace() {}
+  virtual void ClearTrace() {
+  }
 
   // planner-specific GUI elements
   virtual void GUI(mjUI& ui) = 0;
@@ -92,8 +100,14 @@ public:
 
   TrajectoryPtr trajectory[kMaxTrajectory];
 
+  MjOwnerAppType OwnerType() const { return owner_type_; }
   virtual urdf::UrdfModel RobotURDFModel() const { return {}; }
   virtual MjcfModel RobotMJCFModel() const { return {}; }
+  bool is_tuning_on() const { return tuning_on_; }
+  void set_tuning_on(bool on) { tuning_on_ = on; }
+
+protected:
+  MjOwnerAppType owner_type_ = MjOwnerAppType::MJPC;
   bool tuning_on_ = false;
 };
 
@@ -116,6 +130,6 @@ public:
   // sets the nth candidate to the active policy.
   virtual void CopyCandidateToPolicy(int candidate) = 0;
 };
-}  // namespace mjpc
+} // namespace mjpc
 
 #endif  // MJPC_PLANNERS_PLANNER_H_

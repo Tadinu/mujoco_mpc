@@ -5,9 +5,11 @@
 // mujoco
 #include <mujoco/mujoco.h>
 
+#if MJPC_PLANNER_IDTO_ENABLED
 // drake
 #include <drake/geometry/proximity_properties.h>
 #include <drake/multibody/parsing/parser.h>
+#endif
 
 // mjpc
 #include "mjpc/utilities.h"
@@ -178,6 +180,7 @@ void AllegroX::TransitionLocked(mjModel* model, mjData* data) {
   }
 }
 
+#if MJPC_PLANNER_IDTO_ENABLED
 // ===========================================================================================================
 // DRAKE IMPL --
 //
@@ -302,4 +305,5 @@ void AllegroX::CreateDrakePlantModel(drake::multibody::MultibodyPlant<double>* p
   plant->RegisterCollisionGeometry(plant->world_body(), ground_pose, Box(25, 25, 10), "ground",
                                    CoulombFriction<double>(1.0, 1.0));
 }
-}  // namespace mjpc
+#endif
+} // namespace mjpc

@@ -1,30 +1,103 @@
 
 #include "mjpc/mjcf/mjcf_model.h"
 
+#include <fmt/format.h>
+
 #include "mjpc/core/mjpc_common.h"
+#include "mjpc/utils/mjpc_core_util.h"
 
 namespace mjpc {
 static constexpr bool MJCF_MODEL_DEBUG = true;
 static constexpr bool MJCF_MODEL_WORLD_BODY_COVERED = false;
 
-bool MjcfModel::fromMjcfFile(const string& mjcf_path) {
+bool MjcfModel::FromMjcfFile(const string& mjcf_path) {
   std::array<char, 1024> error{};
+  mj_deleteModel(model);
   model = mj_loadXML(mjcf_path.data(), nullptr, error.data(), error.size());
-  fill_data_structure();
+  mj_deleteData(data);
+  data = mj_makeData(model);
+  FillDataStructure();
   return bool(model);
 }
 
-bool MjcfModel::fromMjcfStr(const string& xml_string) {
+bool MjcfModel::FromMjcfStr(const string& xml_string) {
   std::array<char, 1024> error{};
-  mjSpec* spec = mj_parseXMLString(xml_string.data(), nullptr, error.data(), error.size());
-  if (spec) {
-    model = mj_compile(spec, nullptr);
+  mj_deleteSpec(spec);
+  spec = mj_parseXMLString(xml_string.data(), nullptr, error.data(), error.size());
+  if (!spec) {
+    return false;
   }
-  fill_data_structure();
+  if (model) {
+    mj_recompile(spec, nullptr, model, data);
+  } else {
+    // compile new model
+    model = mj_compile(spec, nullptr);
+    if (!model) {
+      return false;
+    }
+  }
+  FillDataStructure();
   return bool(model);
 }
 
-void MjcfModel::fill_data_structure() {
+bool MjcfModel::ExportToMjcfFile(const std::string& export_path) const {
+  // NOTE: This can work only if [mj_freeLastXML()] must have not been invoked before
+  if (!mj_saveLastXML(export_path.c_str(), model, nullptr, 0)) {
+    mjpc::print("MjcfModel [", name, "]:Failed being exported to", export_path);
+    return false;
+  }
+  return true;
+}
+
+std::string MjcfModel::ExportToMjcfStr() const {
+  // 1- Save to a temp XML file
+  constexpr int kMaxPathLen = 1024;
+  const std::string path_template =
+      std::filesystem::temp_directory_path().append("tmp.XXXXXX").string();
+
+  char export_path[kMaxPathLen];
+  mju_strncpy(export_path, path_template.c_str(), path_template.size() + 1);
+
+  const int fd = mkstemp(export_path);
+  if (!ExportToMjcfFile(export_path)) {
+    return {};
+  }
+
+  // 2- Reload the saved XML file into string
+  std::string mjcf_str = ReadFile(export_path);
+  close(fd);
+  std::remove(export_path);
+  return mjcf_str;
+}
+
+mjSpec* MjcfModel::ExportToSpec(mjVFS* vfs) const {
+  std::array<char, 1024> error{};
+  mjSpec* exported_spec = mj_parseXMLString(ExportToMjcfStr().data(), vfs, error.data(), error.size());
+  if (error[0] != '\0') {
+    std::cout << "[MjcfModel::ExportToSpec()]" << error.data() << std::endl;
+  }
+  return exported_spec;
+}
+
+mjSpec* MjcfModel::LoadToSpec(const std::string& mjcf, mjVFS* vfs) {
+  std::array<char, 1024> error{};
+  mjSpec* exported_spec = (absl::EndsWithIgnoreCase(mjcf, ".xml") || absl::EndsWithIgnoreCase(mjcf, ".mjcf"))
+                            ? mj_parseXML(mjcf.c_str(), vfs, error.data(), error.size())
+                            : mj_parseXMLString(mjcf.data(), vfs, error.data(), error.size());
+  if (error[0] != '\0') {
+    std::cout << "[MjcfModel::LoadToSpec()]" << error.data() << std::endl;
+  }
+  return exported_spec;
+}
+
+void MjcfModel::AddMjcfToVFS(const std::string& mjcf_path, const std::string& mjcf_registered_filename,
+                             mjVFS* vfs) {
+  const std::string xml = ReadFile(mjcf_path.c_str());
+  const auto* xml_str = xml.c_str();
+  mj_addBufferVFS(vfs, mjcf_registered_filename.c_str(), xml_str, sizeof(xml_str));
+}
+
+void MjcfModel::FillDataStructure() {
   if (!model) {
     return;
   }
@@ -72,7 +145,8 @@ void MjcfModel::fill_data_structure() {
           auto b = std::make_shared<urdf::Box>();
           b->dim = urdf::Vector3(&model->geom_size[3 * g]);
           geom = std::move(b);
-        } break;
+        }
+        break;
 
         case mjGEOM_CYLINDER:
         case mjGEOM_CAPSULE: {
@@ -104,7 +178,7 @@ void MjcfModel::fill_data_structure() {
       // Add both to [link]
       link->visuals.emplace_back(std::move(vis));
       link->collisions.emplace_back(std::move(col));
-    }  // End link's geoms
+    } // End link's geoms
     link_map[link->name] = link;
     // End links
 
@@ -129,7 +203,7 @@ void MjcfModel::fill_data_structure() {
       joint->parent_to_joint_transform = link->origin;
 
       // Link-joint name map: [parent_name_map], [child_name_map]
-      init_link_joint_name_map(joint);
+      InitLinkJointNameMap(joint);
 
       // [joint_map, joint_list]
       joint_map[joint->name] = joint;
@@ -141,11 +215,15 @@ void MjcfModel::fill_data_structure() {
           joint->name = jnt_name;
         }
         const auto jnt_type = model->jnt_type[jnt_id];
-        joint->type = (jnt_type == mjJNT_FREE)    ? urdf::JointType::FLOATING
-                      : (jnt_type == mjJNT_BALL)  ? urdf::JointType::BALL
-                      : (jnt_type == mjJNT_SLIDE) ? urdf::JointType::PRISMATIC
-                      : (jnt_type == mjJNT_HINGE) ? urdf::JointType::REVOLUTE
-                                                  : urdf::JointType::UNKNOWN;
+        joint->type = (jnt_type == mjJNT_FREE)
+                        ? urdf::JointType::FLOATING
+                        : (jnt_type == mjJNT_BALL)
+                        ? urdf::JointType::BALL
+                        : (jnt_type == mjJNT_SLIDE)
+                        ? urdf::JointType::PRISMATIC
+                        : (jnt_type == mjJNT_HINGE)
+                        ? urdf::JointType::REVOLUTE
+                        : urdf::JointType::UNKNOWN;
         joint->parent_link_name = parent_link_name;
         joint->child_link_name = link->name;
 
@@ -157,26 +235,26 @@ void MjcfModel::fill_data_structure() {
         joint->parent_to_joint_transform = link->origin * urdf::Transform{.position = jnt_local_pos};
 
         // Link-joint name map: [parent_name_map], [child_name_map]
-        init_link_joint_name_map(joint);
+        InitLinkJointNameMap(joint);
 
         // [joint_map, joint_list]
         joint_map[joint->name] = joint;
         joint_list.emplace_back(std::move(joint));
       }
-    }  // End joints
+    } // End joints
   }
 
   // Parent link tree
-  init_parent_link_tree();
+  InitParentLinkTree();
 
   // Debug
   if constexpr (MJCF_MODEL_DEBUG) {
-    print_self();
+    PrintSelf();
   }
 }
 
-void MjcfModel::init_link_tree(map<string, string>& parent_link_tree) {
-  UrdfModel::init_link_tree(parent_link_tree);
+void MjcfModel::InitLinkTree(map<string, string>& parent_link_tree) {
+  UrdfModel::InitLinkTree(parent_link_tree);
   // NOTE: Since MuJoCo assumes fixed joint between parent-child bodies in case of no joint being defined
   // => Loop over body names again to fill in [parent_link_tree] to account for fixed joints also
   for (auto i = MJCF_MODEL_WORLD_BODY_COVERED ? 0 : 1; i < model->nbody; ++i) {
@@ -187,13 +265,12 @@ void MjcfModel::init_link_tree(map<string, string>& parent_link_tree) {
   }
 }
 
-void MjcfModel::findRoot(const map<string, string>& parent_link_tree) {
-  // NOTE: NO CALLIG [UrdfModel::] here!
+void MjcfModel::FindRoot(const map<string, string>& parent_link_tree) {
+  // NOTE: DO NOT CALL [UrdfModel::] here!
   const auto root_link_name = mj_id2name(model, mjOBJ_BODY, 1);
-  root_link = link_map.contains(root_link_name) ? link_map[root_link_name] : nullptr;
+  root_link = (root_link_name && link_map.contains(root_link_name)) ? link_map[root_link_name] : nullptr;
   if (root_link == nullptr) {
     throw MjpcError("Error! No root link found. The model does not contain a valid link tree.");
   }
 }
-
-}  // namespace mjpc
+} // namespace mjpc

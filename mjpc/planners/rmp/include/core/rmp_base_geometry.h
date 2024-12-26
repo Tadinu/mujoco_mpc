@@ -20,11 +20,12 @@
 #ifndef RMP_BASE_GEOMETRY_BASE_H_
 #define RMP_BASE_GEOMETRY_BASE_H_
 
+#include <Eigen/Dense>
+
 #include "mjpc/planners/rmp/include/core/rmp_state.h"
 #include "mjpc/planners/rmp/include/policies/rmp_base_policy.h"
 #include "mjpc/planners/rmp/include/policies/rmp_policy_value.h"
-
-#include <Eigen/Dense>
+#include "mjpc/utils/mjpc_core_util.h"
 
 namespace rmp {
 /** Abstract Base class that fully defines a geometry mapping between two spaces
@@ -93,7 +94,7 @@ public:
       // RMP: f: instantaneous acceleration, A: Riemannian metric as the weight of the policy
       // https://arxiv.org/pdf/1801.02854 - Eq 10, 11
       MatrixQ A = J_.transpose() * policy.A_ * J_; // Pullback metric
-      VectorQ f = PolicyX::pinv(A) * J_.transpose() * policy.A_ * policy.f_;
+      VectorQ f = mjpc::pinv(A) * J_.transpose() * policy.A_ * policy.f_;
       return {f, A};
     }
 
@@ -123,7 +124,8 @@ public:
    * @param state Agent state to parametrize
    * @param obstacle_states States of obstacles to parametrize
    */
-  ParametrizedGeometry createParametrized(const StateX& agent_state, const std::vector<StateX>& obstacle_states) {
+  ParametrizedGeometry createParametrized(const StateX& agent_state,
+                                          const std::vector<StateX>& obstacle_states) {
     return ParametrizedGeometry(J(agent_state), agent_state, obstacle_states);
   }
 

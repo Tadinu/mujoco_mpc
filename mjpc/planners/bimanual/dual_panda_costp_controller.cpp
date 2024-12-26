@@ -42,7 +42,7 @@ Quaterniond DualPandaCoSTPController::O_T_B_r(Quaterniond q_B) {
 }
 
 std::pair<Vector3d, Quaterniond> DualPandaCoSTPController::GetLinkTransform(const std::string& link_name) {
-  return mjpc::QueryBodyPose(mj_model_, mj_data_, link_name, mj_task_->GetBaseBodyName());
+  return mjpc::QueryBodyPoseEigen(mj_model_, mj_data_, link_name, mj_task_->GetBaseBodyName());
 }
 
 void DualPandaCoSTPController::init() {
@@ -63,8 +63,8 @@ void DualPandaCoSTPController::init() {
   O_R_B_l_ = B_R_O_l_.transpose();
 
   // Init dual controllers
-  left_controller_.init("panda0_joint1", "panda0_gripper");
-  right_controller_.init("panda1_joint1", "panda1_gripper");
+  left_controller_.init("panda0_joint1", "panda0_end_effector");
+  right_controller_.init("panda1_joint1", "panda1_end_effector");
 
   // Start
   start();
@@ -124,8 +124,8 @@ Vector14d DualPandaCoSTPController::update() {
   }
 
   Vector14d tau_d = Vector14d::Zero();
-  tau_d.head<7>() = left_controller_.control(q_d_.head<7>());
-  tau_d.tail<7>() = right_controller_.control(q_d_.tail<7>());
+  //tau_d.head<7>() = left_controller_.control(q_d_.head<7>());
+  //tau_d.tail<7>() = right_controller_.control(q_d_.tail<7>());
 
   // Next point ready -> start bimanual planning
   auto* bimanual_planner = dynamic_cast<PandaBimanualPlanner*>(planner());
@@ -133,7 +133,7 @@ Vector14d DualPandaCoSTPController::update() {
     bimanual_planner->PlanCallback(abs_pos());
     new_goal_handled_ = true;
   }
-  return tau_d;
+  return q_d_;
 }
 
 void DualPandaCoSTPController::targetPoseCallback(const Vector3d& position) {

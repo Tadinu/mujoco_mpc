@@ -14,21 +14,6 @@
 
 set(MJPC_INSTALL_PUBLIC 0)
 
-# Eigen3
-find_package(Eigen3 REQUIRED)
-include_directories(SYSTEM ${EIGEN3_INCLUDE_DIR})
-if(${CMAKE_CXX_STANDARD} EQUAL "20")
-    add_compile_definitions(EIGEN_HAS_STD_RESULT_OF=0)
-endif()
-
-# CasADI
-find_package(casadi REQUIRED)
-if (${casadi_FOUND})
-    message("Found CasADi [x]")
-else ()
-    message(WARNING "CasADi is not found!")
-endif ()
-
 # Autodiff
 find_package(autodiff REQUIRED)
 
@@ -51,6 +36,7 @@ set(LIB_MJPC_HEADERS
         utilities.h
         core/mjpc_common.h
         utils/mjpc_core_util.h
+        utils/mjpc_ctrl_util.h
         mjcf/mjcf_model.h
         optimizers/base_optimizer.h
         optimizers/second_order_optimizer.h
@@ -68,9 +54,6 @@ set(LIB_MJPC_HEADERS
         tasks/cartpole/cartpole.h
         tasks/fingers/fingers.h
         tasks/grippers/grippers.h
-        tasks/mpl/mpl.h
-        tasks/mpl/mpl_cost.h
-        tasks/mpl/mpl_grasp_cost.h
         tasks/humanoid/stand/stand.h
         tasks/humanoid/tracking/tracking.h
         tasks/humanoid/walk/walk.h
@@ -78,6 +61,10 @@ set(LIB_MJPC_HEADERS
         tasks/manipulation/manipulation.h
         tasks/manipulation_x/common.h
         tasks/manipulation_x/manipulation_x.h
+        tasks/mpl/mpl.h
+        tasks/mpl/mpl_cost.h
+        tasks/mpl/mpl_grasp_cost.h
+        tasks/lsqp/lsqp.h
         tasks/op3/stand.h
         tasks/panda/panda.h
         tasks/particle/particle.h
@@ -161,6 +148,20 @@ set(LIB_MJPC_HEADERS
         planners/cio/cio_common.h
         planners/cio/cio_planner.h
         planners/cio/cio_util.h
+        planners/lsqp/lsqp_planner.h
+        planners/lsqp/lsqp_config.h
+        planners/lsqp/lsqp_limit.h
+        planners/lsqp/lsqp_util.h
+        planners/lsqp/lsqp_common.h
+        planners/lsqp/lsqp_so3.h
+        planners/lsqp/lsqp_se3.h
+        planners/lsqp/lsqp_core_task.h
+        planners/lsqp/lsqp_base_task.h
+        planners/lsqp/lsqp_frame_task.h
+        planners/lsqp/lsqp_relative_frame_task.h
+        planners/lsqp/lsqp_posture_task.h
+        planners/lsqp/lsqp_com_task.h
+        planners/lsqp/lsqp_damping_task.h
         urdf_parser/include/common.h
         urdf_parser/include/geometry.h
         urdf_parser/include/joint.h
@@ -188,6 +189,7 @@ add_library(
         trajectory.cc
         utilities.cc
         utils/mjpc_core_util.cc
+        utils/mjpc_ctrl_util.cc
         mjcf/mjcf_model.cc
         optimizers/second_order_optimizer.cc
         optimizers/stochastic_optimizer.cc
@@ -204,7 +206,6 @@ add_library(
         tasks/cartpole/cartpole.cc
         tasks/fingers/fingers.cc
         tasks/grippers/grippers.cc
-        tasks/mpl/mpl.cc
   tasks/humanoid/interact/interact.cc
   tasks/humanoid/interact/interact.h
   tasks/humanoid/interact/contact_keyframe.cc
@@ -216,6 +217,8 @@ add_library(
         tasks/manipulation/manipulation.cc
         tasks/manipulation_x/common.cc
         tasks/manipulation_x/manipulation_x.cc
+        tasks/mpl/mpl.cc
+        tasks/lsqp/lsqp.cc
         tasks/op3/stand.cc
         tasks/panda/panda.cc
         tasks/particle/particle.cc
@@ -255,6 +258,7 @@ add_library(
         planners/fabrics/src/fab_casadi_function.cpp
         planners/cio/cio_common.cc
         planners/cio/cio_planner.cc
+        planners/lsqp/lsqp_planner.cc
         urdf_parser/common.cpp
         urdf_parser/geometry.cpp
         urdf_parser/joint.cpp
@@ -287,6 +291,9 @@ target_link_libraries(
         absl::log
         absl::random_random
         absl::span
+        absl::strings
+        absl::status
+        absl::statusor
         glfw
         lodepng
         Eigen3::Eigen
@@ -299,6 +306,12 @@ target_link_libraries(
         lbfgspp
         autodiff::autodiff
         ${MCMC_DIR}/lib/libmcmc.so
+        ${DM_ROBOTICS_BUILD_DIR}/controllers/lsqp/libdmr_controllers_lsqp.so
+        ${DM_ROBOTICS_BUILD_DIR}/mujoco/libdmr_mujoco.so
+        ${DM_ROBOTICS_BUILD_DIR}/least_squares_qp/core/libdmr_lsqp_core.so
+        ${DM_ROBOTICS_BUILD_DIR}/least_squares_qp/common/libdmr_lsqp_common.so
+        qp_solver_collection::QpSolverCollection
+        ${QP_SOLVER_3RD_LIBS}
 )
 message("MCMC_DIR  ${MCMC_DIR}")
 target_include_directories(libmjpc
@@ -309,6 +322,12 @@ target_include_directories(libmjpc
         ${Ipopt_INCLUDE_DIR}
         #${autodiff_INCLUDE_DIR}
         ${MCMC_DIR}/include/mcmc
+        ${DM_ROBOTICS_DIR}/controllers/lsqp/include
+        ${DM_ROBOTICS_DIR}/least_squares_qp/core/include
+        ${DM_ROBOTICS_DIR}/least_squares_qp/common/include
+        ${DM_ROBOTICS_DIR}/mujoco/include
+        ${DM_ROBOTICS_DIR}/support/include
+        ${manif_INCLUDE_DIRS}
 )
 
 add_executable(
@@ -375,7 +394,7 @@ target_compile_definitions(testspeed PRIVATE MJSIMULATE_STATIC)
 
 add_subdirectory(tasks)
 add_subdirectory(ispc)
-add_subdirectory(planners/idto)
+#add_subdirectory(planners/idto)
 add_subdirectory(planners/bimanual)
 add_subdirectory(contacts)
 add_subdirectory(optimizers/riemannian_opt)

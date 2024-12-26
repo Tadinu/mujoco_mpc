@@ -22,7 +22,10 @@
 #include "mjpc/planners/cross_entropy/planner.h"
 #include "mjpc/planners/fabrics/include/fab_planner.h"
 #include "mjpc/planners/gradient/planner.h"
+#include "mjpc/planners/lsqp/lsqp_planner.h"
+#if MJPC_PLANNER_IDTO_ENABLED
 #include "mjpc/planners/idto/idto_planner.h"
+#endif
 #include "mjpc/planners/ilqg/planner.h"
 #include "mjpc/planners/ilqs/planner.h"
 #include "mjpc/planners/planner.h"
@@ -34,9 +37,12 @@
 
 namespace mjpc {
 const char kPlannerNames[] =
+    "LSQP\n"
     "Bimanual\n"
     "CIO\n"
+#if MJPC_PLANNER_IDTO_ENABLED
     "IDTO\n"
+#endif
     "Fabrics\n"
     "RMP\n"
     "Sampling\n"
@@ -53,9 +59,12 @@ std::vector<std::unique_ptr<mjpc::Planner>> LoadPlanners() {
   std::vector<std::unique_ptr<mjpc::Planner>> planners;
 
   // NOTE: The adding order below must match [kPlannerNames]
+  planners.emplace_back(new LsqpPlanner);
   planners.emplace_back(new PandaBimanualPlanner);
   planners.emplace_back(new CIOPlanner);
+#if MJPC_PLANNER_IDTO_ENABLED
   planners.emplace_back(new IdtoPlanner);
+#endif
   planners.emplace_back(new FabPlanner);
   planners.emplace_back(new rmp::RMPPlanner<rmp::CylindricalSpace>);
   // planners.emplace_back(new rmp::RMPPlanner<rmp::Space<2>>);
@@ -66,6 +75,8 @@ std::vector<std::unique_ptr<mjpc::Planner>> LoadPlanners() {
   planners.emplace_back(new RobustPlanner(std::make_unique<mjpc::SamplingPlanner>()));
   planners.emplace_back(new mjpc::CrossEntropyPlanner);
   planners.emplace_back(new mjpc::SampleGradientPlanner);
+
+  assert(planners.size() == mjpc::tokenize<std::string>(kPlannerNames, "\n", true).size());
   return planners;
 }
 } // namespace mjpc

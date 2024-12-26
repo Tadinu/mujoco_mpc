@@ -16,14 +16,14 @@
 #include "mjpc/utils/mjpc_core_util.h"
 
 using FabLagrangianArgs =
-    FabNamedMap<CaSX, FabVariablesPtr, FabTrajectories, FabSpectralSemiSpraysPtr, std::vector<std::string>>;
+FabNamedMap<CaSX, FabVariablesPtr, FabTrajectories, FabSpectralSemiSpraysPtr, std::vector<std::string>>;
 
 class FabLagrangian : public FabGeometry {
 public:
   FabLagrangian() = default;
 
   FabLagrangian(std::string name, const CaSX& lag, const FabLagrangianArgs& kwargs)
-      : FabGeometry(std::move(name)), l_(lag) {
+    : FabGeometry(std::move(name)), l_(lag) {
     // [x_ref_name_, xdot_ref_name_, xddot_ref_name_]
     if (kwargs.contains("ref_names")) {
       const auto ref_names = *mjpc::get_arg_value<std::vector<std::string>>(kwargs, "ref_names");
@@ -51,7 +51,7 @@ public:
     // [J_ref_, J_ref_inv_]
     if (kwargs.contains("J_ref")) {
       J_ref_ = *mjpc::get_arg_value<decltype(J_ref_)>(kwargs, "J_ref");
-      MJPC_PRINT("Casadi pseudo inverse is used in Lagrangian");
+      MJPC_PRINTDB("Casadi pseudo inverse is used in Lagrangian");
       const auto J_ref_transpose = J_ref_.T();
       J_ref_inv_ =
           CaSX::mtimes(J_ref_transpose, CaSX::inv(CaSX::mtimes(J_ref_, J_ref_transpose) +
@@ -233,7 +233,8 @@ class FabFinslerStructure : public FabLagrangian {
   FabFinslerStructure(std::string name, const CaSX& lg,
                       const FabNamedMap<CaSX, FabVariablesPtr, FabTrajectories, FabSpectralSemiSpraysPtr,
                                         std::vector<std::string>>& kwargs)
-      : FabLagrangian(std::move(name), 0.5 * CaSX::pow(lg, 2), kwargs), lg_(lg) {}
+    : FabLagrangian(std::move(name), 0.5 * CaSX::pow(lg, 2), kwargs), lg_(lg) {
+  }
 
   void concretize() {
     FabLagrangian::concretize();
@@ -264,8 +265,9 @@ using FabFinslerStructurePtr = std::shared_ptr<FabFinslerStructure>;
 class FabExecutionLagrangian : public FabLagrangian {
 public:
   explicit FabExecutionLagrangian(std::string name, const FabVariablesPtr& vars)
-      : FabLagrangian(std::move(name), CaSX::dot(vars->velocity_var(), vars->velocity_var()),
-                      {{"var", vars}}) {}
+    : FabLagrangian(std::move(name), CaSX::dot(vars->velocity_var(), vars->velocity_var()),
+                    {{"var", vars}}) {
+  }
 };
 
 using FabExecutionLagrangianPtr = std::shared_ptr<FabExecutionLagrangian>;

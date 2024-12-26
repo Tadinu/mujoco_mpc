@@ -9,7 +9,7 @@
 
     <compiler angle="radian"/>
     <!-- <option timestep="0.002" noslip_iterations="20"/> -->
-    <option timestep="0.002"/>
+    <option timestep="0.001"/>
     <size nuser_actuator="5"/>
 
     <asset>
@@ -43,6 +43,12 @@
             <joint armature="0.1" damping="1" axis="0 0 1" range="-2.8973 2.8973"/>
             <!--<position forcelimited="true" ctrllimited="true" user="1002 40 2001 -0.005 0.005"/>-->
             <general dyntype="none" biastype="affine" ctrlrange="-2.8973 2.8973" forcerange="-87 87"/>
+            <default class="big_joint">
+                <position kp="2000" kv="200"/>
+            </default>
+            <default class="small_joint">
+                <position kp="500" kv="50"/>
+            </default>
             <default class="panda_viz">
                 <geom contype="0" conaffinity="0" group="0" type="mesh" rgba=".92 .92 .95 1"/>
             </default>

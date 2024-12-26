@@ -128,7 +128,7 @@ public:
 
     *forced_geometry_ += *FabWeightedSpec(geometry->name() + "_" + lagrangian->name(),
                                           {{"g", geometry}, {"le", std::move(lagrangian)}})
-                              .pull_back<FabWeightedSpec>(*forward_map);
+        .pull_back<FabWeightedSpec>(*forward_map);
     if (is_prime_forcing_leaf) {
       forced_vars_ = geometry->vars();
       forced_forward_map_ = std::move(forward_map);
@@ -149,7 +149,7 @@ public:
     // 1- Pullback from a weighted spec by [dynamic_map]
     const auto pwg = FabWeightedSpec(geometry->name() + "_" + lagrangian->name(),
                                      {{"g", geometry}, {"le", std::move(lagrangian)}})
-                         .dynamic_pull_back<FabWeightedSpec>(dynamic_map);
+        .dynamic_pull_back<FabWeightedSpec>(dynamic_map);
     // 2- Pullback 2nd time by [forward_map]
     const auto ppwg = pwg->pull_back<FabWeightedSpec>(*forward_map);
     *forced_geometry_ += *ppwg;
@@ -203,9 +203,10 @@ public:
                               bool position_only = true) const {
     const auto fk = robot_->fk();
     assert(fk);
-    return fk ? fk->casadi(vars_->position_var(), link_name, {}, fab_math::CASX_TRANSF_IDENTITY, offset,
-                           position_only)
-              : fab_math::CASX_TRANSF_IDENTITY;
+    return fk
+             ? fk->casadi(vars_->position_var(), link_name, {}, fab_math::CASX_TRANSF_IDENTITY, offset,
+                          position_only)
+             : fab_math::CASX_TRANSF_IDENTITY;
   }
 
   void add_capsule_sphere_geometry(const std::string& obstacle_name, const std::string& capsule_name,
@@ -296,8 +297,8 @@ public:
     const auto fk_2 = get_forward_kinematics(collision_link_2_name);
     const auto fk = fk_2 - fk_1;
     if (mjpc::is_casx_sparse(fk)) {
-      MJPC_PRINT("Expression [" + fk.get_str() + "] for links " + collision_link_1_name + "and " +
-                 collision_link_2_name + " is sparse and so skipped");
+      MJPC_PRINT("[Warning] Expression [" + fk.get_str() + "] for links " + collision_link_1_name + "and " +
+          collision_link_2_name + " is sparse and so skipped");
     }
     auto geometry = FabSelfCollisionLeaf(vars_, fk, collision_link_1_name, collision_link_2_name);
     geometry.set_geometry(config_->self_collision_geometry);
@@ -328,16 +329,16 @@ public:
 
     // [Goal composition]
     if (mjpc::has_collection_element(
-            std::array{FORCING_TYPE::SPEED_CONTROLLED, FORCING_TYPE::FORCED, FORCING_TYPE::FORCED_ENERGIZED},
-            config_->forcing_type)) {
+        std::array{FORCING_TYPE::SPEED_CONTROLLED, FORCING_TYPE::FORCED, FORCING_TYPE::FORCED_ENERGIZED},
+        config_->forcing_type)) {
       set_goal_component(problem_config_.goal_composition());
     }
 
     // [Execution Energy]
     if (mjpc::has_collection_element(
-            std::array<FORCING_TYPE, 3>{FORCING_TYPE::SPEED_CONTROLLED, FORCING_TYPE::EXECUTION_ENERGY,
-                                        FORCING_TYPE::FORCED_ENERGIZED},
-            config_->forcing_type)) {
+        std::array<FORCING_TYPE, 3>{FORCING_TYPE::SPEED_CONTROLLED, FORCING_TYPE::EXECUTION_ENERGY,
+                                    FORCING_TYPE::FORCED_ENERGIZED},
+        config_->forcing_type)) {
       set_execution_energy(
           std::make_shared<FabExecutionLagrangian>(problem_config_.environment()->name(), vars_));
     }
@@ -389,7 +390,7 @@ public:
         const auto fk_0_3_3 = mjpc::get_casx2(fk, {0, 3}, 3);
         if (mjpc::is_casx_sparse(fk_0_3_3)) {
           MJPC_PRINT("Expression " + fk_0_3_3.get_str() + " for link " + link_name +
-                     " is sparse and so skipped");
+              " is sparse and so skipped");
           continue;
         }
       } else if (mjpc::is_casx_sparse(fk)) {
@@ -586,11 +587,12 @@ public:
 #if 1
         xddot = forced_geometry_->xddot() -
                 (a_ex + beta_subst) *
-                    (geometry_->xdot() - CaSX::mtimes(forced_geometry_->Minv(), target_velocity_));
+                (geometry_->xdot() - CaSX::mtimes(forced_geometry_->Minv(), target_velocity_));
 #else
         xddot = forced_geometry_->xddot();
 #endif
-      } break;
+      }
+      break;
 
       case FORCING_TYPE::EXECUTION_ENERGY: {
         MJPC_PRINT("No forcing term, using pure geometry with energization");
@@ -600,26 +602,30 @@ public:
 #else
         xddot = geometry_->xddot() - geometry_->alpha() * geometry_->vars()->velocity_var();
 #endif
-      } break;
+      }
+      break;
 
       case FORCING_TYPE::FORCED_ENERGIZED: {
         MJPC_PRINT("Using forced geometry with constant execution energy");
         xddot = forced_speed_controlled_geometry_->xddot() -
                 forced_speed_controlled_geometry_->alpha() * geometry_->vars()->velocity_var();
-      } break;
+      }
+      break;
 
       case FORCING_TYPE::FORCED: {
         MJPC_PRINT("No execution energy, using forced geometry without speed regulation");
         xddot = forced_geometry_->xddot() - geometry_->alpha() * geometry_->vars()->velocity_var();
-      } break;
+      }
+      break;
 
       case FORCING_TYPE::PURE_GEOMETRY: {
         xddot = geometry_->xddot();
-      } break;
+      }
+      break;
 
       default:
         throw FabError(std::to_string(int(config_->forcing_type)) + " :Unknown forcing type");
-    }  // end switch(config_->forcing_type)
+    } // end switch(config_->forcing_type)
 
     // CasadiFunction
     auto&& func_name =
@@ -627,13 +633,15 @@ public:
     switch (control_mode) {
       case FabControlMode::ACC: {
         cafunc_ = std::make_shared<FabCasadiFunction>(func_name, *vars_, CaSXDict{{"action", xddot}}, true);
-      } break;
+      }
+      break;
 
       case FabControlMode::VEL: {
         assert(time_step > 0);
         cafunc_ = std::make_shared<FabCasadiFunction>(
             func_name, *vars_, CaSXDict{{"action", geometry_->xdot() + time_step * xddot}}, true);
-      } break;
+      }
+      break;
     }
   }
 
@@ -677,14 +685,16 @@ public:
 
   urdf::UrdfModel RobotURDFModel() const override {
     const auto urdf_fk = robot_ ? robot_->fk() : nullptr;
-    return urdf_fk ? dynamic_pointer_cast<FabURDFForwardKinematics>(urdf_fk)->urdf_model()
-                   : urdf::UrdfModel();
+    return urdf_fk
+             ? dynamic_pointer_cast<FabURDFForwardKinematics>(urdf_fk)->urdf_model()
+             : urdf::UrdfModel();
   }
 
   mjpc::MjcfModel RobotMJCFModel() const override {
     const auto mjcf_fk = robot_ ? robot_->fk() : nullptr;
-    return mjcf_fk ? dynamic_pointer_cast<FabMJCFForwardKinematics>(mjcf_fk)->mjcf_model()
-                   : mjpc::MjcfModel();
+    return mjcf_fk
+             ? dynamic_pointer_cast<FabMJCFForwardKinematics>(mjcf_fk)->mjcf_model()
+             : mjpc::MjcfModel();
   }
 
   // initialize data and settings
@@ -697,9 +707,11 @@ public:
   }
 
   // reset memory to zeros
-  void Reset(int horizon, const double* initial_repeated_action = nullptr) override {}
+  void Reset(int horizon, const double* initial_repeated_action = nullptr) override {
+  }
 
-  void SetState(const mjpc::State& state) override {}
+  void SetState(const mjpc::State& state) override {
+  }
 
   const mjpc::Trajectory* BestTrajectory() override { return trajectory_.get(); }
 
@@ -730,11 +742,13 @@ public:
   }
 
   // planner-specific GUI elements
-  void GUI(mjUI& ui) override {}
+  void GUI(mjUI& ui) override {
+  }
 
   // planner-specific plots
   void Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, int planner_shift, int timer_shift, int planning,
-             int* shift) override {}
+             int* shift) override {
+  }
 
   // return number of parameters optimized by planner
   int NumParameters() override { return 0; }
@@ -758,7 +772,7 @@ public:
   }
 
   double GetCurrentDistanceToGoal(int subgoal_idx = 0) const {
-    return GetDistanceToGoal(task_->QueryJointPos(robot_->dof()), subgoal_idx);
+    return GetDistanceToGoal(task_->QueryJointPositions(robot_->dof()), subgoal_idx);
   }
 
   std::string GetObstaclePropName(const char* prefix, int idx) const;
@@ -784,7 +798,8 @@ public:
   }
 
   // compute trajectory using nominal policy
-  void NominalTrajectory(int horizon, mjpc::ThreadPool& pool) override {}
+  void NominalTrajectory(int horizon, mjpc::ThreadPool& pool) override {
+  }
 
   // set action from policy
   void ActionFromPolicy(double* action, const double* state, double time, bool use_previous) override {
@@ -844,11 +859,11 @@ protected:
 
   // mjpc
   std::shared_ptr<mjpc::Trajectory> trajectory_ = nullptr;
-  int dim_state_ = 0;             // state
-  int dim_state_derivative_ = 0;  // state derivative
-  int dim_action_ = 0;            // action
-  int dim_sensor_ = 0;            // output (i.e., all sensors)
-  int dim_max_ = 0;               // maximum dimension
+  int dim_state_ = 0; // state
+  int dim_state_derivative_ = 0; // state derivative
+  int dim_action_ = 0; // action
+  int dim_sensor_ = 0; // output (i.e., all sensors)
+  int dim_max_ = 0; // maximum dimension
   mutable std::shared_mutex policy_mutex_;
   // [action_] is shared among policy motion planning threads.
   // NOTE: Using type as vector of primitive, CaSX is unclear why not well synch-protected yet.

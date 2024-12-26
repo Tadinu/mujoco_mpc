@@ -34,8 +34,8 @@ public:
 #endif
     create_collision_metric();
     const auto robot_dof = robot_->dof();
-    q0_ = task_->QueryJointPos(robot_dof);
-    qdot_ = task_->QueryJointVel(robot_dof);
+    q0_ = task_->QueryJointPositions(robot_dof);
+    qdot_ = task_->QueryJointVels(robot_dof);
     initial_distance_to_goal_0_ = planner_->GetDistanceToGoal(q0_);
     initial_distance_to_obstacles_ = evaluate_distance_to_closest_obstacle();
   }
@@ -283,9 +283,9 @@ protected:
 
     // Compute [path_length_, distances_to_goal_0_, distances_to_closest_obstacle_]
     const auto robot_dof = robot_->dof();
-    q0_ = task_->QueryJointPos(robot_dof);
+    q0_ = task_->QueryJointPositions(robot_dof);
     static auto q_last = q0_;
-    qdot_ = task_->QueryJointVel(robot_dof);
+    qdot_ = task_->QueryJointVels(robot_dof);
     MJPC_PRINTDB("QPOS", q0_);
     MJPC_PRINTDB("QVEL", qdot_);
     path_length_ += double(CaSX::norm_2(CaSX(q0_) - CaSX(q_last)).scalar());

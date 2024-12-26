@@ -213,7 +213,7 @@ public:
     mjtNum jointAngles[4] = {0.1, 0.2, -0.1, 0.0}; // 4-DOF finger
 
     const_cast<mjpc::Task*>(mj_task_)->first_joint_name_ = fingerFirstJointName;
-    auto joint_pos = mj_task_->QueryJointPos(4);
+    auto joint_pos = mj_task_->QueryJointPositions(4);
     mju_copy(jointAngles, joint_pos.data(), 4);
 
     mjtNum tendonForces[8]; // 8 tendons driving one finger

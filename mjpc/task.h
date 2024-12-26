@@ -24,19 +24,26 @@
 #include <string>
 #include <vector>
 
+#define MJPC_PLANNER_IDTO_ENABLED (0)
+
+#if MJPC_PLANNER_IDTO_ENABLED
 // drake
 #include <drake/geometry/meshcat.h>
 #include <drake/multibody/plant/multibody_plant.h>
+#endif
 
 // mjpc
 #include "mjpc/norm.h"
 #include "mjpc/planners/fabrics/include/fab_common.h"
 #include "mjpc/planners/fabrics/include/fab_config.h"
 #include "mjpc/planners/fabrics/include/fab_goal.h"
+#if MJPC_PLANNER_IDTO_ENABLED
 #include "mjpc/planners/idto/idto_common.h"
 #include "mjpc/planners/idto/idto_yaml_config.h"
+#endif
 #include "mjpc/planners/rmp/include/core/rmp_state.h"
 #include "mjpc/planners/rmp/include/util/rmp_util.h"
+#include "mjpc/utilities.h"
 
 namespace mjpc {
 // tolerance for risk-neutral cost
@@ -101,7 +108,9 @@ public:
     // Init planners initial specifics (that must be done main-thread, eg: UI)
     InitFabrics();
     InitCIO();
+#if MJPC_PLANNER_IDTO_ENABLED
     InitIdto();
+#endif
   }
 
   // Fabrics
@@ -118,6 +127,7 @@ public:
   virtual bool IsCIOSupported() const { return true; }
   virtual std::vector<double> GetObservationsData(bool with_noise = true) const { return {}; }
 
+#if MJPC_PLANNER_IDTO_ENABLED
   // Idto
   virtual void CreateDrakePlantModel(drake::multibody::MultibodyPlant<double>* plant) const {
   }
@@ -134,9 +144,35 @@ public:
   std::string idto_configs_path_;
   static DrakeMeshcatPtr Meshcat() { return meshcat_; }
   static DrakeMeshcatPtr meshcat_;
+#endif
 
   // Bimanual
   virtual bool IsBimanualSupported() const { return false; }
+
+  // Lsqp
+  virtual bool IsLSQPSupported() const { return false; }
+
+  // Override model
+  UniqueMjModel ComposeOverrideModel() {
+    mjModel* model = ConstructModel();
+    model_programmingly_built_ = static_cast<bool>(model);
+    if (model) {
+      // NOTE: Since as in [Agent::Initialize()], this override custom-constructed model is used for the planner first then copied to all tasks later,
+      // -> [Configure(model)] cannot be put inside [::Initialize(model)]
+      ConfigureModel(model);
+      return {model, mj_deleteModel};
+    }
+    return {nullptr, nullptr};
+  }
+
+  // Programmingly construct model
+  virtual mjModel* ConstructModel() {
+    return nullptr;
+  }
+
+  // Customizingly configure model (timestep, gravity, etc.)
+  virtual void ConfigureModel(mjModel* model) {
+  }
 
   // delegates to ResidualLocked, while holding a lock
   std::unique_ptr<AbstractResidualFn> Residual() const;
@@ -204,9 +240,17 @@ public:
   virtual int GetActionDim() const { return 0; }
   virtual int GetTargetObjectId() const { return -1; }
   virtual int GetTargetObjectGeomId() const { return -1; }
-  const mjtNum* QueryTargetPos() const { return QueryBodyPos(GetTargetObjectId()); }
-  const mjtNum* QueryTargetVel() const { return QueryBodyVel(GetTargetObjectId()); }
-  const mjtNum* QueryTargetAcc() const { return QueryBodyAcc(GetTargetObjectId()); }
+
+  const mjtNum* QueryTargetPos(bool inertia_com = true) const {
+    return QueryBodyPos(GetTargetObjectId(), inertia_com);
+  }
+
+  const mjtNum* QueryTargetQuat(bool inertia_com = true) const {
+    return QueryBodyQuat(GetTargetObjectId(), inertia_com);
+  }
+
+  const mjtNum* QueryTargetVel(bool linear = true) const { return QueryBodyVel(GetTargetObjectId(), linear); }
+  const mjtNum* QueryTargetAcc(bool linear = true) const { return QueryBodyAcc(GetTargetObjectId(), linear); }
 
   virtual bool CheckBlocking(const double start[], const double end[]) { return false; }
 
@@ -215,7 +259,9 @@ public:
   mjData* data_ = nullptr;
   Planner* planner_ = nullptr;
   mjvScene* scene_ = nullptr;
+  bool model_programmingly_built_ = false;
 
+  bool IsModelProgramminglyBuilt() const { return model_programmingly_built_; }
   virtual const mjtNum* GetRobotPos() const { return QueryTargetPos(); }
   virtual const mjtNum* GetRobotVel() const { return QueryTargetVel(); }
   virtual const mjtNum* GetRobotAcc() const { return QueryTargetAcc(); }
@@ -241,7 +287,7 @@ public:
 
   // NOTE: model_->nq,nv are actuated joints/controls configured in MJ model
   // dof: full dof of the robot
-  std::vector<double> QueryJointPos(int dof, const std::string& first_joint_name = {}) const {
+  std::vector<double> QueryJointPositions(int dof, const std::string& first_joint_name = {}) const {
     if (model_ && data_) {
       std::vector<double> qpos(dof, 0);
       const auto& joint_name = first_joint_name.empty() ? first_joint_name_ : first_joint_name;
@@ -252,7 +298,7 @@ public:
     return {};
   }
 
-  std::vector<double> QueryJointVel(int dof, const std::string& first_joint_name = {}) const {
+  std::vector<double> QueryJointVels(int dof, const std::string& first_joint_name = {}) const {
     if (model_ && data_) {
       std::vector<double> qvel(dof, 0);
       const auto& joint_name = first_joint_name.empty() ? first_joint_name_ : first_joint_name;
@@ -263,25 +309,16 @@ public:
     return {};
   }
 
-  void SetPlanner(Planner* planner) { planner_ = planner; }
-  Planner* Planner() const { return planner_; }
+  virtual void SetPlanner(Planner* planner) { planner_ = planner; }
+  Planner* GetPlanner() const { return planner_; }
 
   // Body
   int QueryBodyId(const char* body_name) const {
-    return model_ ? mj_name2id(model_, mjOBJ_BODY, body_name) : -1;
+    return mjpc::QueryBodyId(model_, body_name);
   }
 
   mjtNum* QueryBodyQuat(int body_id, bool inertia_com = true) const {
-    if (data_) {
-      if (inertia_com) {
-        static mjtNum quat[4];
-        mju_mat2Quat(quat, &data_->ximat[9 * body_id]);
-        return &quat[0];
-      } else {
-        return &data_->xquat[4 * body_id];
-      }
-    }
-    return nullptr;
+    return mjpc::QueryBodyQuat(data_, body_id, inertia_com);
   }
 
   mjtNum* QueryBodyQuat(const char* body_name, bool inertia_com = true) const {
@@ -289,16 +326,7 @@ public:
   }
 
   mjtNum* QueryBodyRotMat(int body_id, bool inertia_com = true) const {
-    if (data_) {
-      if (inertia_com) {
-        return &data_->ximat[9 * body_id];
-      } else {
-        static mjtNum mat[9];
-        mju_quat2Mat(mat, &data_->xquat[4 * body_id]);
-        return &mat[0];
-      }
-    }
-    return nullptr;
+    return mjpc::QueryBodyRotMat(data_, body_id, inertia_com);
   }
 
   mjtNum* QueryBodyRotMat(const char* body_name, bool inertia_com = true) const {
@@ -306,10 +334,7 @@ public:
   }
 
   mjtNum* QueryBodyPos(int body_id, bool inertia_com = true) const {
-    if (data_) {
-      return inertia_com ? &data_->xipos[3 * body_id] : &data_->xpos[3 * body_id];
-    }
-    return nullptr;
+    return mjpc::QueryBodyPos(data_, body_id, inertia_com);
   }
 
   mjtNum* QueryBodyPos(const char* body_name, bool inertia_com = true) const {
@@ -317,18 +342,7 @@ public:
   }
 
   mjtNum* QueryBodyVel(int body_id, bool linear = true) const {
-    if (data_) {
-      static double lvel[3] = {0};
-#if 1
-      mju_copy3(lvel, linear ? &data_->cvel[6 * body_id + 3] : &data_->cvel[6 * body_id]);
-#else
-      mjtNum vel[6];
-      mj_objectVelocity(model_, data_, mjOBJ_BODY, body_id, vel, 0);
-      mju_copy3(lvel, linear ? &vel[3] : &vel[0]);
-#endif
-      return &lvel[0];
-    }
-    return nullptr;
+    return mjpc::QueryBodyVel(data_, body_id, linear);
   }
 
   mjtNum* QueryBodyVel(const char* body_name, bool inertia_com = true) const {
@@ -336,18 +350,7 @@ public:
   }
 
   mjtNum* QueryBodyAcc(int body_id, bool linear = true) const {
-    if (data_) {
-      static double lacc[3] = {0};
-#if 1
-      mju_copy3(lacc, linear ? &data_->cacc[6 * body_id + 3] : &data_->cacc[6 * body_id]);
-#else
-      mjtNum acc[6];
-      mj_objectAcceleration(model_, data_, mjOBJ_BODY, body_id, acc, 0);
-      mju_copy3(lacc, linear ? &acc[3] : &acc[0]);
-#endif
-      return &lacc[0];
-    }
-    return nullptr;
+    return mjpc::QueryBodyAcc(data_, body_id, linear);
   }
 
   mjtNum* QueryBodyAcc(const char* body_name, bool inertia_com = true) const {
@@ -356,90 +359,56 @@ public:
 
   // Body mocap
   int QueryBodyMocapId(const char* body_name) const {
-    if (model_) {
-      int body_id = QueryBodyId(body_name);
-      return (body_id > -1) ? model_->body_mocapid[body_id] : -1;
-    }
-    return -1;
+    return mjpc::QueryBodyMocapId(model_, body_name);
   }
 
   void SetBodyMocapPos(const char* body_name, const double* pos) const {
-    if (data_) {
-      int bodyMocapId = QueryBodyMocapId(body_name);
-      mju_copy3(&data_->mocap_pos[3 * bodyMocapId], pos);
-      //  std::cout << body_name << ":" << bodyMocapId << " " << pos[0] << " " << pos[1] << std::endl;
-    }
+    mjpc::SetBodyMocapPos(model_, data_, body_name, pos);
+  }
+
+  void MoveBodyMocapToSite(const char* body_name, const char* site_name) const {
+    mjpc::MoveBodyMocapToSite(model_, data_, body_name, site_name);
+  }
+
+  void MoveBodyMocapToSite(const char* body_name, int site_id) const {
+    mjpc::MoveBodyMocapToSite(model_, data_, body_name, site_id);
   }
 
   mjtNum* QueryBodyMocapPos(const char* body_name) const {
-    if (data_) {
-      int bodyMocapId = QueryBodyMocapId(body_name);
-      return &data_->mocap_pos[3 * bodyMocapId];
-    }
-    return nullptr;
+    return mjpc::QueryBodyMocapPos(model_, data_, body_name);
   }
 
   void SetBodyMocapQuat(const char* body_name, const double* quat) const {
-    if (data_) {
-      int bodyMocapId = QueryBodyMocapId(body_name);
-      mju_copy3(&data_->mocap_quat[4 * bodyMocapId], quat);
-    }
+    mjpc::SetBodyMocapQuat(model_, data_, body_name, quat);
   }
 
   mjtNum* QueryBodyMocapQuat(const char* body_name) const {
-    if (data_) {
-      int bodyMocapId = QueryBodyMocapId(body_name);
-      return &data_->mocap_quat[4 * bodyMocapId];
-    }
-    return nullptr;
+    return mjpc::QueryBodyMocapQuat(model_, data_, body_name);
   }
 
   mjtNum QueryBodyMass(int body_id) const {
-    if (model_) {
-      return (body_id > -1) ? model_->body_mass[body_id] : 0;
-    }
-    return 0;
+    return mjpc::QueryBodyMass(model_, body_id);
   }
 
   mjtNum QueryBodyMass(const char* body_name) const {
-    if (model_) {
-      int bodyId = QueryBodyId(body_name);
-      return (bodyId > -1) ? model_->body_mass[bodyId] : 0;
-    }
-    return 0;
+    return mjpc::QueryBodyMass(model_, body_name);
   }
 
   // Geom
   int QueryGeomId(const char* geom_name) const {
-    return model_ ? mj_name2id(model_, mjOBJ_GEOM, geom_name) : -1;
+    return mjpc::QueryGeomId(model_, geom_name);
   }
 
   mjtNum* QueryGeomPos(const char* geom_name) const {
-    if (data_) {
-      const int geom_id = QueryGeomId(geom_name);
-      return (geom_id > -1) ? &data_->geom_xpos[3 * geom_id] : nullptr;
-    }
-    return nullptr;
+    return mjpc::QueryGeomPos(model_, data_, geom_name);
   }
 
   mjtNum* QueryGeomQuat(const char* geom_name) const {
-    if (data_) {
-      const int geom_id = QueryGeomId(geom_name);
-      if (geom_id > -1) {
-        static mjtNum quat[4];
-        mju_mat2Quat(quat, &data_->geom_xmat[9 * geom_id]);
-        return &quat[0];
-      }
-    }
-    return nullptr;
+    return mjpc::QueryGeomQuat(model_, data_, geom_name);
   }
 
   std::vector<double> QueryGeomSize(int geom_id) const {
-    std::vector<double> size(3, 0.0);
-    if (geom_id > -1) {
-      mju_copy3(size.data(), &model_->geom_size[3 * geom_id]);
-    }
-    return size;
+    return mjpc::QueryGeomSize(model_, geom_id);
   }
 
   std::vector<double> QueryGeomSize(const char* site_name) const {
@@ -447,17 +416,11 @@ public:
   }
 
   double QueryGeomSizeMax(const char* geom_name) const {
-    const auto size = QueryGeomSize(geom_name);
-    return std::max({size[0], size[1], size[2]});
+    return mjpc::QueryGeomSizeMax(model_, geom_name);
   }
 
   double QueryGeomSizeMax(const std::vector<const char*>& geom_name_list) const {
-    double max = 0.;
-    for (const auto& geom_name : geom_name_list) {
-      const auto size = QueryGeomSize(geom_name);
-      max = std::max(max, std::max({size[0], size[1], size[2]}));
-    }
-    return max;
+    return mjpc::QueryGeomSizeMax(model_, geom_name_list);
   }
 
   void SetGeomColor(uint geom_id, const float* rgba) const {
@@ -468,44 +431,35 @@ public:
 
   // Site
   int QuerySiteId(const char* site_name) const {
-    return model_ ? mj_name2id(model_, mjOBJ_SITE, site_name) : -1;
+    return mjpc::QuerySiteId(model_, site_name);
+  }
+
+  mjtNum* QuerySitePos(int site_id) const {
+    return mjpc::QuerySitePos(data_, site_id);
   }
 
   mjtNum* QuerySitePos(const char* site_name) const {
-    if (data_) {
-      const int site_id = QuerySiteId(site_name);
-      return (site_id > -1) ? &data_->site_xpos[3 * site_id] : nullptr;
-    }
-    return nullptr;
+    return mjpc::QuerySitePos(model_, data_, site_name);
+  }
+
+  mjtNum* QuerySiteQuat(int site_id) const {
+    return mjpc::QuerySiteQuat(data_, site_id);
   }
 
   mjtNum* QuerySiteQuat(const char* site_name) const {
-    if (data_) {
-      const int site_id = QuerySiteId(site_name);
-      if (site_id > -1) {
-        static mjtNum quat[4];
-        mju_mat2Quat(quat, &data_->site_xmat[9 * site_id]);
-        return &quat[0];
-      }
-    }
-    return nullptr;
+    return mjpc::QuerySiteQuat(model_, data_, site_name);
   }
 
   std::vector<double> QuerySiteSize(int site_id) const {
-    std::vector<double> size(3, 0.0);
-    if (site_id > -1) {
-      mju_copy3(size.data(), &model_->site_size[3 * site_id]);
-    }
-    return size;
+    return mjpc::QuerySiteSize(model_, site_id);
   }
 
   std::vector<double> QuerySiteSize(const char* site_name) const {
     return QuerySiteSize(QuerySiteId(site_name));
   }
 
-  double QuerySiteSizeMax(const char* geom_name) const {
-    const auto size = QuerySiteSize(geom_name);
-    return std::max({size[0], size[1], size[2]});
+  double QuerySiteSizeMax(const char* site_name) const {
+    return mjpc::QuerySiteSizeMax(model_, site_name);
   }
 
   // mode
@@ -636,6 +590,7 @@ protected:
 
   // implementation of Task::Reset() which can assume a lock is held
   virtual void ResetLocked(const mjModel* model) {
+    model_programmingly_built_ = false;
   }
 
   // mutex which should be held on changes to InternalResidual.

@@ -125,6 +125,9 @@ void sensor(const mjModel* model, mjData* data, int stage) {
 //--------------------------------- simulation ---------------------------------
 
 mjModel* LoadModel(const mjpc::Agent* agent, mj::Simulate& sim) {
+  // Set sim.agent's [model_override_] from task if available
+  sim.agent->OverrideModel(sim.agent->GuiTask()->ComposeOverrideModel());
+  // Then load the model
   mjpc::Agent::LoadModelResult load_model = sim.agent->LoadModel();
   mjModel* mnew = load_model.model.release();
   mju::strcpy_arr(sim.load_error, load_model.error.c_str());
@@ -272,7 +275,8 @@ void PhysicsLoop(mj::Simulate& sim) {
       // lock the sim mutex
       const std::lock_guard<std::mutex> lock(sim.mtx);
 
-      if (m) {  // run only if model is present
+      if (m) {
+        // run only if model is present
         sim.agent->ActiveTask()->Transition(m, d);
 
         // running
@@ -315,13 +319,14 @@ void PhysicsLoop(mj::Simulate& sim) {
 
             // clear old perturbations, apply new
             mju_zero(d->xfrc_applied, 6 * m->nbody);
-            sim.ApplyPosePerturbations(0);  // move mocap bodies only
+            sim.ApplyPosePerturbations(0); // move mocap bodies only
             sim.ApplyForcePerturbations();
 
             // run single step, let next iteration deal with timing
             sim.agent->ExecuteAllRunBeforeStepJobs(m, d);
             mj_step(m, d);
-          } else {  // in-sync: step until ahead of cpu
+          } else {
+            // in-sync: step until ahead of cpu
             bool measured = false;
             mjtNum prevSim = d->time;
             double refreshTime = simRefreshFraction / sim.refresh_rate;
@@ -337,7 +342,7 @@ void PhysicsLoop(mj::Simulate& sim) {
 
               // clear old perturbations, apply new
               mju_zero(d->xfrc_applied, 6 * m->nbody);
-              sim.ApplyPosePerturbations(0);  // move mocap bodies only
+              sim.ApplyPosePerturbations(0); // move mocap bodies only
               sim.ApplyForcePerturbations();
 
               // call mj_step
@@ -350,9 +355,10 @@ void PhysicsLoop(mj::Simulate& sim) {
               }
             }
           }
-        } else {  // paused
+        } else {
+          // paused
           // apply pose perturbation
-          sim.ApplyPosePerturbations(1);  // move mocap and dynamic bodies
+          sim.ApplyPosePerturbations(1); // move mocap and dynamic bodies
 
           // still accept jobs when simulation is paused
           sim.agent->ExecuteAllRunBeforeStepJobs(m, d);
@@ -362,7 +368,7 @@ void PhysicsLoop(mj::Simulate& sim) {
           sim.speed_changed = true;
         }
       }
-    }  // release sim.mtx
+    } // release sim.mtx
 
     // state
     if (sim.uiloadrequest.load() == 0) {
@@ -373,12 +379,11 @@ void PhysicsLoop(mj::Simulate& sim) {
     }
   }
 }
-}  // namespace
+} // namespace
 
 // ------------------------------- main ----------------------------------------
 
 namespace mjpc {
-
 MjpcApp::MjpcApp(std::vector<std::shared_ptr<mjpc::Task>> tasks, int task_id) {
   // MJPC
   printf("MuJoCo MPC (MJPC)\n");
@@ -505,5 +510,4 @@ void StartApp(std::vector<std::shared_ptr<mjpc::Task>> tasks, int task_id) {
   MjpcApp app(std::move(tasks), task_id);
   app.Start();
 }
-
-}  // namespace mjpc
+} // namespace mjpc

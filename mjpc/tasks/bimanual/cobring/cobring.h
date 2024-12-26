@@ -13,6 +13,10 @@ public:
   std::string XmlPath() const override;
   bool IsBimanualSupported() const override { return true; }
 
+  std::string GetBaseBodyName() const override {
+    return "torso";
+  }
+
   class ResidualFn : public BaseResidualFn {
   public:
     explicit ResidualFn(const CoBring* task) : BaseResidualFn(task) {

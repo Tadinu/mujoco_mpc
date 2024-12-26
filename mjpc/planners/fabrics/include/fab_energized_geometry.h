@@ -21,7 +21,7 @@ public:
   ~FabWeightedSpec() override = default;
 
   explicit FabWeightedSpec(std::string name, const FabWeightedSpecArgs& kwargs)
-      : FabSpectralSemiSprays(std::move(name)) {
+    : FabSpectralSemiSprays(std::move(name)) {
     // [x_ref_name_, xdot_ref_name_, xddot_ref_name_]
     if (kwargs.contains("ref_names")) {
       auto ref_names = *mjpc::get_arg_value<std::vector<std::string>>(kwargs, "ref_names");
@@ -34,7 +34,7 @@ public:
     // [le_]
     if (kwargs.contains("le")) {
       le_ = *mjpc::get_arg_value<decltype(le_)>(kwargs, "le");
-      le_->vars()->print_self();
+      //le_->vars()->print_self();
     }
 
     // [h_, M_, refTrajs_]
