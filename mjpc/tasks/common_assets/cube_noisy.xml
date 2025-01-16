@@ -1,0 +1,20 @@
+<mujoco>
+  <asset>
+    <texture name="cube_noisy" type="cube"
+             fileup="cube_qwerty/fileup.png" fileback="cube_qwerty/fileback.png"
+             filedown="cube_qwerty/filedown.png" filefront="cube_qwerty/filefront.png"
+             fileleft="cube_qwerty/fileleft.png" fileright="cube_qwerty/fileright.png"/>
+    <material name="cube_noisy" texture="cube_noisy" rgba="1 1 1 0.3"/>
+    <texture name="graycube_noisy" type="cube" fileup="reorientation_cube_textures/grayup.png"
+             fileback="reorientation_cube_textures/grayback.png" filedown="reorientation_cube_textures/graydown.png"
+             filefront="reorientation_cube_textures/grayfront.png" fileleft="reorientation_cube_textures/grayleft.png"
+             fileright="reorientation_cube_textures/grayright.png"/>
+    <material name="graycube_noisy" texture="graycube_noisy" rgba="1 1 1 0.3"/>
+  </asset>
+  <worldbody>
+    <light pos="0 0 1"/>
+    <body name="cube_noisy" mocap="true" pos="0.140696023 0.0 0.075" quat="1 0 0 0">
+      <geom name="cube_noisy" type="box" size=".035 .035 .035" mass=".108" material="cube_noisy" contype="0" conaffinity="0"/>
+    </body>
+  </worldbody>
+</mujoco>
