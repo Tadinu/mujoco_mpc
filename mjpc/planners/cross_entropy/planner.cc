@@ -35,7 +35,6 @@
 #include "mjpc/utilities.h"
 
 namespace mjpc {
-
 namespace mju = ::mujoco::util_mjpc;
 using mjpc::spline::TimeSpline;
 
@@ -59,8 +58,8 @@ void CrossEntropyPlanner::Initialize(mjModel* model, const Task& task) {
 
   // sampling noise
   std_initial_ = GetNumberOrDefault(0.1, model,
-                                    "sampling_exploration");  // initial variance
-  std_min_ = GetNumberOrDefault(0.01, model, "std_min");      // minimum variance
+                                    "sampling_exploration"); // initial variance
+  std_min_ = GetNumberOrDefault(0.01, model, "std_min"); // minimum variance
   // fraction of the trajectories that will use full exploration noise
   explore_fraction_ = GetNumberOrDefault(0.0, model, "explore_fraction");
 
@@ -87,9 +86,9 @@ void CrossEntropyPlanner::Allocate() {
 
   // policy
   int num_max_parameter = action_dim_ * kMaxTrajectoryHorizon;
-  policy(action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
-  nominal_policy(action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
-  previous_policy(action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
+  policy(model, action_dim_, action_limits_).Allocate(model, *task, kMaxTrajectoryHorizon);
+  nominal_policy(model, action_dim_, action_limits_).Allocate(model, *task, kMaxTrajectoryHorizon);
+  previous_policy(model, action_dim_, action_limits_).Allocate(model, *task, kMaxTrajectoryHorizon);
 
   // scratch
   parameters_scratch.resize(num_max_parameter);
@@ -112,7 +111,7 @@ void CrossEntropyPlanner::Allocate() {
     trajectory[i]->Initialize(num_state, action_dim_, task->num_residual, task->num_trace,
                               kMaxTrajectoryHorizon);
     trajectory[i]->Allocate(kMaxTrajectoryHorizon);
-    candidate_policy[i](action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
+    candidate_policy[i](model, action_dim_, action_limits_).Allocate(model, *task, kMaxTrajectoryHorizon);
   }
   nominal_trajectory->Initialize(num_state, action_dim_, task->num_residual, task->num_trace,
                                  kMaxTrajectoryHorizon);
@@ -259,7 +258,7 @@ void CrossEntropyPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
 
   // compute [variance] (for noise added to [candidate_policy[]] during rollouts on the next batch)
   // loop over elites (node values of candidate_policy[trajectory_order[0]])
-  std::fill(variance.begin(), variance.end(), 0.0);  // reset variance to zero
+  std::fill(variance.begin(), variance.end(), 0.0); // reset variance to zero
   for (int i = 0; i < n_elite; i++) {
     int idx = trajectory_order[i];
     const TimeSpline& elite_plan = candidate_policy[idx].plan;
@@ -307,8 +306,9 @@ void CrossEntropyPlanner::NominalTrajectory(int horizon) {
 
   // rollout nominal policy
   nominal_trajectory->Rollout(frun_nominal_policy, task, model, data_[ThreadPool::WorkerId()].get(),
-                              state.data(), time, mocap.data(), userdata.data(), horizon);
+                              state.data(), time, mocap.data(), userdata.data(), horizon, control_cb_);
 }
+
 void CrossEntropyPlanner::NominalTrajectory(int horizon, ThreadPool& pool) { NominalTrajectory(horizon); }
 
 // set action from policy
@@ -402,29 +402,30 @@ void CrossEntropyPlanner::Rollouts(int num_trajectory, int horizon, ThreadPool& 
       std = std_min;
     }
     pool.Schedule([&s = *this, &model = this->model, &task = this->task, &state = this->state,
-                   &time = this->time, &mocap = this->mocap, &userdata = this->userdata, horizon, std, i]() {
-      // copy [nominal_policy] -> all of [candidate_policy], added with noise
-      {
-        const std::shared_lock<std::shared_mutex> lock(s.mtx_);
-        s.candidate_policy[i].CopyFrom(s.nominal_policy, s.nominal_policy.num_spline_points);
-        s.candidate_policy[i].plan.SetInterpolation(s.nominal_policy.plan.Interpolation());
+          &time = this->time, &mocap = this->mocap, &userdata = this->userdata, horizon, std, i]() {
+          // copy [nominal_policy] -> all of [candidate_policy], added with noise
+          {
+            const std::shared_lock<std::shared_mutex> lock(s.mtx_);
+            s.candidate_policy[i].CopyFrom(s.nominal_policy, s.nominal_policy.num_spline_points);
+            s.candidate_policy[i].plan.SetInterpolation(s.nominal_policy.plan.Interpolation());
 
-        // sample noise
-        s.AddNoiseToPolicy(i, std);
-      }
+            // sample noise
+            s.AddNoiseToPolicy(i, std);
+          }
 
-      // ----- rollout sample policy ----- //
+          // ----- rollout sample policy ----- //
 
-      // run all of sample [candidate_policy]
-      auto sample_policy_i = [&candidate_policy = s.candidate_policy, &i](double* action, const double* state,
-                                                                          double time) {
-        candidate_policy[i].Action(action, state, time);
-      };
+          // run all of sample [candidate_policy]
+          auto sample_policy_i = [&candidate_policy = s.candidate_policy, &i](
+              double* action, const double* state,
+              double time) {
+            candidate_policy[i].Action(action, state, time);
+          };
 
-      // policy rollout
-      s.trajectory[i]->Rollout(sample_policy_i, task, model, s.data_[ThreadPool::WorkerId()].get(),
-                               state.data(), time, mocap.data(), userdata.data(), horizon);
-    });
+          // policy rollout
+          s.trajectory[i]->Rollout(sample_policy_i, task, model, s.data_[ThreadPool::WorkerId()].get(),
+                                   state.data(), time, mocap.data(), userdata.data(), horizon, s.control_cb_);
+        });
   }
   // nominal
   pool.Schedule([&s = *this, horizon]() { s.NominalTrajectory(horizon); });
@@ -545,5 +546,4 @@ void CrossEntropyPlanner::Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, in
   // timer shift
   shift[1] += 3;
 }
-
-}  // namespace mjpc
+} // namespace mjpc

@@ -103,10 +103,10 @@ void GradientPlanner::Allocate() {
 
   // policy
   for (int i = 0; i < kMaxTrajectory; i++) {
-    candidate_policy[i](action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
+    candidate_policy[i](model, action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
   }
-  policy(action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
-  previous_policy(action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
+  policy(model, action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
+  previous_policy(model, action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
 
   // scratch
   parameters_scratch.resize(action_dim_ * kMaxTrajectoryHorizon);

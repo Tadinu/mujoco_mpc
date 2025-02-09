@@ -54,7 +54,7 @@ void SamplingPolicy::Action(double* action, const double* state, double time,
   plan.Sample(time, absl::MakeSpan(action, dim_action), indices);
 
   // Clamp controls
-  Clamp(action, model->actuator_ctrlrange, dim_action);
+  Clamp(action, action_limits.data(), dim_action);
 }
 
 // copy policy

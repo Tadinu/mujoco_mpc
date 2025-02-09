@@ -38,12 +38,18 @@ public:
   virtual void Action(double* action, const double* state, double time,
                       const std::vector<int>& indices = {}) const = 0;
 
-  Policy& operator()(int dim_action) {
+  Policy& operator()(mjModel* model, int dim_action, std::vector<double> action_limits = {}) {
     this->dim_action = dim_action;
+    if (action_limits.empty()) {
+      action_limits.assign(model->actuator_ctrlrange,
+                           model->actuator_ctrlrange + 2 * dim_action);
+    }
+    this->action_limits = std::move(action_limits);
     return *this;
   }
 
   int dim_action = 0;
+  std::vector<double> action_limits;
 };
 } // namespace mjpc
 

@@ -149,8 +149,10 @@ set(LIB_MJPC_HEADERS
         planners/cio/cio_planner.h
         planners/cio/cio_util.h
         planners/lsqp/lsqp_planner.h
+        planners/lsqp/lsqp_solver.h
         planners/lsqp/lsqp_config.h
         planners/lsqp/lsqp_limit.h
+        planners/lsqp/lsqp_collision_limit.h
         planners/lsqp/lsqp_util.h
         planners/lsqp/lsqp_common.h
         planners/lsqp/lsqp_so3.h
@@ -259,6 +261,7 @@ add_library(
         planners/cio/cio_common.cc
         planners/cio/cio_planner.cc
         planners/lsqp/lsqp_planner.cc
+        planners/lsqp/lsqp_solver.cc
         urdf_parser/common.cpp
         urdf_parser/geometry.cpp
         urdf_parser/joint.cpp

@@ -119,12 +119,21 @@ public:
   bool IsTuningOn() const { return tuning_on_; }
   void SetTuningOn(bool on) { tuning_on_ = on; }
 
+  bool IsPlanningOn() const { return planning_on_; }
+  void SetPlanningOn(bool on) { planning_on_ = on; }
+
+  void SetControlCallback(const MjpcPlannerControlCb& cb) {
+    control_cb_ = cb;
+  }
+
 protected:
   MjOwnerAppType owner_type_ = MjOwnerAppType::MJPC;
   std::vector<UniqueMjData> data_;
   bool tuning_on_ = false;
+  bool planning_on_ = false;
   int action_dim_ = 0;
   std::vector<double> action_limits_; // [2 x action_dim_]
+  MjpcPlannerControlCb control_cb_ = nullptr;
 };
 
 // additional optional interface for planners that can produce several policy

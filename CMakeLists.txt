@@ -263,7 +263,8 @@ set(DM_ROBOTICS_BUILD_DIR "${DM_ROBOTICS_DIR}/build_gcc")
 
 # qp_solver_collection
 find_package(qp_solver_collection REQUIRED)
-# -> required 3rd solvers
+# -> required 3rd solvers:
+# NOTE: If any solver is unavailable, make sure [qp_solver_collection] is rebuilt with its disabled ENABLE_<solver> flag
 set(QP_SOLVER_3RD_LIBS eigen-quadprog::eigen-quadprog)
 find_package(eigen-quadprog REQUIRED)
 

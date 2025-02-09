@@ -189,6 +189,11 @@ inline mjtNum* QueryBodyQuat(const mjData* data, int body_id, bool inertia_com =
   return nullptr;
 }
 
+inline mjtNum* QueryBodyQuat(const mjModel* model, const mjData* data, const char* body_name,
+                             bool inertia_com = true) {
+  return QueryBodyQuat(data, QueryBodyId(model, body_name), inertia_com);
+}
+
 inline mjtNum* QueryBodyRotMat(const mjData* data, int body_id, bool inertia_com = true) {
   if (data && (body_id > -1)) {
     if (inertia_com) {
@@ -202,11 +207,21 @@ inline mjtNum* QueryBodyRotMat(const mjData* data, int body_id, bool inertia_com
   return nullptr;
 }
 
+inline mjtNum* QueryBodyRotMat(const mjModel* model, const mjData* data, const char* body_name,
+                               bool inertia_com = true) {
+  return QueryBodyRotMat(data, QueryBodyId(model, body_name), inertia_com);
+}
+
 inline mjtNum* QueryBodyPos(const mjData* data, int body_id, bool inertia_com = true) {
   if (data && (body_id > -1)) {
     return inertia_com ? &data->xipos[3 * body_id] : &data->xpos[3 * body_id];
   }
   return nullptr;
+}
+
+inline mjtNum* QueryBodyPos(const mjModel* model, const mjData* data, const char* body_name,
+                            bool inertia_com = true) {
+  return QueryBodyPos(data, QueryBodyId(model, body_name), inertia_com);
 }
 
 inline Eigen::Vector3d QueryBodyPosEigen(const mjData* data, int body_id, bool inertia_com = true) {

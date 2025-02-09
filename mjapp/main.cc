@@ -52,7 +52,8 @@ const double syncMisalign = 0.1; // maximum mis-alignment before re-sync (simula
 const double simRefreshFraction = 0.7; // fraction of refresh available for simulation
 const int kErrorLength = 1024; // load error string length
 
-// model and data
+// sim & model, data
+std::unique_ptr<mjapp::Simulate> gbSim;
 mjModel* m = nullptr;
 mjData* d = nullptr;
 
@@ -266,13 +267,14 @@ void StepModel(mjapp::Simulate& sim, mjModel* m, mjData* d) {
   for (auto& [_,robot_model] : sim.GetRobotModels()) {
     robot_model->Step();
   }
-  sim.Control(m, d);
+  //sim.Control(m, d);
 }
 
 void PostLoadModel(mjapp::Simulate& sim, mjModel* m, mjData* d) {
   // 1- Forward model once
   mj_forward(m, d);
-  // 2- Then start control init
+
+  // 2- Then init control
   sim.InitControl(m, d);
   //mj_forward(m, d);
 }
@@ -438,6 +440,17 @@ void PhysicsLoop(mjapp::Simulate& sim) {
   }
 }
 
+// --------------------------------- callbacks ---------------------------------
+// controller
+extern "C" {
+void controller(const mjModel* m, mjData* d);
+}
+
+// controller callback
+void controller(const mjModel* m, mjData* d) {
+  gbSim->Control(m, d);
+}
+
 //-------------------------------------- physics_thread --------------------------------------------
 
 void PhysicsThread(mjapp::Simulate* sim, const char* filename) {
@@ -516,8 +529,10 @@ int main(int argc, char** argv) {
   mjv_defaultPerturb(&pert);
 
   // simulate object encapsulates the UI
-  auto sim = std::make_unique<mjapp::Simulate>(std::make_unique<mjapp::GlfwAdapter>(), &cam, &opt, &pert,
-                                               /* is_passive = */ false);
+  mjapp::gbSim = std::make_unique<mjapp::Simulate>(std::make_unique<mjapp::GlfwAdapter>(), &cam, &opt, &pert,
+                                                   /* is_passive = */ false);
+  // set control callback
+  mjcb_control = mjapp::controller;
 
   const char* filename =
 #if MJPC_PLANNER_LSQP_DIFFIK_ENABLED
@@ -530,11 +545,12 @@ int main(int argc, char** argv) {
   }
 
   // start physics thread
-  std::thread physicsthreadhandle(&mjapp::PhysicsThread, sim.get(), filename);
+  std::thread physicsthreadhandle(&mjapp::PhysicsThread, mjapp::gbSim.get(), filename);
 
   // start simulation UI loop (blocking call)
-  sim->RenderLoop();
+  mjapp::gbSim->RenderLoop();
   physicsthreadhandle.join();
 
+  mjapp::gbSim.release();
   return 0;
 }

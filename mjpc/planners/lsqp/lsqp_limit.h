@@ -15,20 +15,25 @@
 #include "mjpc/planners/lsqp/lsqp_config.h"
 
 namespace mjpc {
+// Ref: https://github.com/kevinzakka/mink/blob/main/mink/limits/limit.py
 class LsqpLimit {
 public:
   LsqpLimit() = default;
   virtual ~LsqpLimit() = default;
 
-  LsqpLimit(const mjModel* model): model_(model) {
+  LsqpLimit(const mjModel* model, int ndofs): model_(model), ndofs_(ndofs) {
   }
 
   const mjModel* MjModel() const { return model_; }
-  void RefreshMj(mjModel* model) { model_ = model; }
-  virtual LsqpConstraint ComputeQPInequalities(const LsqpConfig& config, double dt = 1.0) const = 0;
+  int ndofs() const { return ndofs_; }
+  int nv() const { return model_->nv; }
+  int nq() const { return model_->nq; }
+  virtual LsqpConstraint ComputeQPInequalities(mjData* data, const LsqpConfig& config,
+                                               double dt = 1.0) const = 0;
 
 protected:
   const mjModel* model_ = nullptr;
+  int ndofs_ = 0;
 
   constexpr int qpos_width(int jnt_type) const {
     // Example implementation, replace with actual logic as needed
@@ -63,31 +68,31 @@ protected:
 
 using LsqpLimitPtr = std::shared_ptr<LsqpLimit>;
 
+// Ref: https://github.com/kevinzakka/mink/blob/main/mink/limits/configuration_limit.py
 class LsqpPositionLimit : public LsqpLimit {
 public:
   LsqpPositionLimit() = default;
 
-  LsqpPositionLimit(const mjModel* model, double gain = 0.95, double min_distance_from_limits = 0.0)
-    : LsqpLimit(model), gain_(gain) {
+  LsqpPositionLimit(const mjModel* model, int ndofs, double gain = 0.95,
+                    double min_distance_from_limits = 0.0)
+    : LsqpLimit(model, ndofs), gain_(gain) {
     if (gain <= 0.0 || gain > 1.0) {
       throw std::invalid_argument("`gain` must be in the range (0, 1]");
     }
 
-    lower_ = Eigen::VectorXd::Constant(model_->nq, -mjMAXVAL);
-    upper_ = Eigen::VectorXd::Constant(model_->nq, mjMAXVAL);
+    lower_ = Eigen::VectorXd::Constant(nq(), -mjMAXVAL);
+    upper_ = Eigen::VectorXd::Constant(nq(), mjMAXVAL);
 
     std::vector<int> index_list;
-
     for (int j = 0; j < model_->njnt; ++j) {
       const int jnt_type = model_->jnt_type[j];
-      const int qpos_dim = qpos_width(jnt_type);
-      const double* jnt_range = &model_->jnt_range[j * 2];
-      const int padr = model_->jnt_qposadr[j];
-
       if (jnt_type == mjJNT_FREE || !model_->jnt_limited[j]) {
         continue;
       }
 
+      const int qpos_dim = qpos_width(jnt_type);
+      const double* jnt_range = &model_->jnt_range[j * 2];
+      const int padr = model_->jnt_qposadr[j];
       for (int i = padr; i < padr + qpos_dim; ++i) {
         lower_[i] = jnt_range[0] + min_distance_from_limits;
         upper_[i] = jnt_range[1] - min_distance_from_limits;
@@ -101,27 +106,33 @@ public:
       }
     }
 
-    indices_ = Eigen::VectorXi::Map(index_list.data(), index_list.size());
-    if (indices_.size()) {
-      projection_matrix_ = Eigen::MatrixXd::Zero(indices_.size(), model_->nv);
+    if (!index_list.empty()) {
+      assert(ndofs_ <= index_list.size());
+      indices_ = Eigen::VectorXi::Map(index_list.data(), ndofs_);
+      projection_matrix_ = Eigen::MatrixXd::Zero(ndofs_, ndofs_);
       for (int i = 0; i < indices_.size(); ++i) {
         projection_matrix_(i, indices_[i]) = 1.0;
       }
     }
   }
 
-  LsqpConstraint ComputeQPInequalities(const LsqpConfig& config, double dt = 1.0) const {
+  LsqpConstraint ComputeQPInequalities(mjData* data, const LsqpConfig& config, double dt = 1.0) const {
     if (projection_matrix_.size() == 0) {
       return {};
     }
 
-    Eigen::VectorXd delta_q_max = Eigen::VectorXd::Zero(model_->nv);
-    mj_differentiatePos(
-        model_, delta_q_max.data(), dt, config.MjData()->qpos, upper_.data());
+    // NOTE: Ignore timestep!
+    dt = 1.0;
 
-    Eigen::VectorXd delta_q_min = Eigen::VectorXd::Zero(model_->nv);
-    mj_differentiatePos(
-        model_, delta_q_min.data(), dt, lower_.data(), config.MjData()->qpos);
+    // NOTE: Don't use mj_differentiatePos(), which loops over all joints, assuming inputs as c-arrays also hosting all such joints
+    const auto* qpos = data->qpos;
+    Eigen::VectorXd delta_q_min(lower_.size());
+    mju_sub(delta_q_min.data(), qpos, lower_.data(), lower_.size());
+    mju_scl(delta_q_min.data(), delta_q_min.data(), 1 / dt, lower_.size());
+
+    Eigen::VectorXd delta_q_max(upper_.size());
+    mju_sub(delta_q_max.data(), upper_.data(), qpos, upper_.size());
+    mju_scl(delta_q_max.data(), delta_q_max.data(), 1 / dt, upper_.size());
 
     const Eigen::VectorXd p_min = gain_ * delta_q_min(indices_);
     const Eigen::VectorXd p_max = gain_ * delta_q_max(indices_);
@@ -148,13 +159,14 @@ private:
 }; // LsqpPositionLimit
 
 
+// Ref: https://github.com/kevinzakka/mink/blob/main/mink/limits/velocity_limit.py
 class LsqpVelocityLimit : public LsqpLimit {
 public:
   LsqpVelocityLimit() = default;
 
-  LsqpVelocityLimit(const mjModel* model,
+  LsqpVelocityLimit(const mjModel* model, int ndofs,
                     const std::map<std::string, std::vector<double>>& max_joint_velocities)
-    : LsqpLimit(model) {
+    : LsqpLimit(model, ndofs) {
     std::vector<double> limit_list;
     std::vector<int> index_list;
 
@@ -177,18 +189,23 @@ public:
     }
 
     // [limit_list] -> [limits_]
-    limits_ = Eigen::VectorXd::Map(limit_list.data(), limit_list.size());
+    if (!limit_list.empty()) {
+      assert(ndofs_ <= limit_list.size());
+      limits_ = Eigen::VectorXd::Map(limit_list.data(), ndofs_);
+    }
+
     // [index_list] -> [indices_]
-    indices_ = Eigen::VectorXi::Map(index_list.data(), index_list.size());
-    if (indices_.size()) {
-      projection_matrix_ = Eigen::MatrixXd::Zero(indices_.size(), model_->nv);
+    if (!index_list.empty()) {
+      assert(ndofs_ <= index_list.size());
+      indices_ = Eigen::VectorXi::Map(index_list.data(), ndofs_);
+      projection_matrix_ = Eigen::MatrixXd::Zero(ndofs_, ndofs_);
       for (int i = 0; i < indices_.size(); ++i) {
         projection_matrix_(i, indices_[i]) = 1.0;
       }
     }
   }
 
-  LsqpConstraint ComputeQPInequalities(const LsqpConfig& config, double dt = 1.0) const {
+  LsqpConstraint ComputeQPInequalities(mjData* data, const LsqpConfig& config, double dt = 1.0) const {
     if (projection_matrix_.size() == 0) {
       return {};
     }

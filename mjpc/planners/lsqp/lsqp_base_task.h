@@ -50,32 +50,46 @@ public:
 
   std::string Name() const { return name_; }
   virtual bool Empty() const { return false; }
-  virtual Eigen::VectorXd ComputeError(const LsqpConfig& config) const = 0;
-  virtual Eigen::MatrixXd ComputeJac(const LsqpConfig& config) const = 0;
+  virtual Eigen::VectorXd ComputeError(mjData* data, const LsqpConfig& config) const = 0;
+  virtual Eigen::MatrixXd ComputeJac(mjData* data, const LsqpConfig& config) const = 0;
 
-  LsqpObjective ComputeQPObjective(const LsqpConfig& config) const {
-    const int nv = config.nv();
-    const Eigen::MatrixXd jac = ComputeJac(config);
-    const Eigen::VectorXd minus_gain_error = -gain_ * ComputeError(config); // (k,)
-    const Eigen::MatrixXd weight = cost_.asDiagonal();
+  LsqpObjective ComputeQPObjective(mjData* data, const LsqpConfig& config) const {
+    const int ndofs = config.ndofs();
+    Eigen::MatrixXd jac = ComputeJac(data, config);
+    const int jac_rows = jac.rows();
+    const int jac_cols = jac.cols();
+    const bool bTrim_dofs = config.MjModel()->nv > ndofs;
+    if (bTrim_dofs) {
+      jac = jac.block(0, 0, is_frame_task_ ? jac_rows : std::min(jac_rows, ndofs), std::min(jac_cols, ndofs));
+    }
+    Eigen::VectorXd minus_gain_error = -gain_ * ComputeError(data, config); // (k,)
+
+    if (bTrim_dofs && (!is_frame_task_)) {
+      minus_gain_error = minus_gain_error.head(ndofs);
+    }
+    Eigen::MatrixXd weight = cost_.asDiagonal();
+    if (bTrim_dofs && (!is_frame_task_)) {
+      weight = weight.block(0, 0, ndofs, ndofs);
+    }
 
     const Eigen::MatrixXd weighted_jacobian = weight * jac;
     const Eigen::VectorXd weighted_error = weight * minus_gain_error;
 
     const double mu = lm_damping_ * weighted_error.dot(weighted_error);
-    const Eigen::MatrixXd eye_tg = Eigen::MatrixXd::Identity(nv, nv);
+    const Eigen::MatrixXd eye_tg = Eigen::MatrixXd::Identity(ndofs, ndofs);
 
-    Eigen::MatrixXd H = weighted_jacobian.transpose() * weighted_jacobian + mu * eye_tg; //(nv, nv)
-    Eigen::VectorXd c = -weighted_error.transpose() * weighted_jacobian; // (nv,)
+    Eigen::MatrixXd H = weighted_jacobian.transpose() * weighted_jacobian + mu * eye_tg; //(ndofs, ndofs)
+    Eigen::VectorXd c = -weighted_error.transpose() * weighted_jacobian; // (ndofs,)
     return LsqpObjective{.H = std::move(H), .c = std::move(c)};
   }
 
 protected:
   std::string name_;
   int nq_ = 0; // model->nq
-  int k_ = 0; // [1, model->nv]
+  int k_ = 0; // in [1, model->nv]
   Eigen::VectorXd cost_;
   double gain_ = 1.0;
   double lm_damping_ = 1.0;
+  bool is_frame_task_ = false;
 };
 } // end namespace mjpc

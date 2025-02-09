@@ -85,8 +85,9 @@ public:
   // Eq. 136 - Apply group action (rotate a 3D point/vector)
   Eigen::VectorXd Apply(const Eigen::VectorXd& target) const override {
     assert(target.size() == DIM);
-    const auto padded_target = Eigen::Vector4d{0, target[0], target[1], target[2]};
-    return Multiply(LsqpSO3(padded_target)).Multiply(Inverse()).Parameters().tail<3>();
+    const auto padded_target = LsqpSO3(Eigen::Quaterniond(0, target[0], target[1], target[2]));
+    const LsqpSO3 result = (*this) * padded_target * this->Inverse();
+    return mjpc::PosToEigen(result.Wxyz().data() + 1, 3);
   }
 
   // Multiply two SO(3) elements (composition)
@@ -110,7 +111,7 @@ public:
     return LsqpSO3(quaternion_.normalized());
   }
 
-  // Exponential map (tangent space -> SO(3))
+  // Eq 132 - Exponential map (tangent space -> SO(3))
   LsqpSO3 Exp(const Eigen::VectorXd& tangent) const override {
     assert(tangent.size() == TANGENT_DIM); // Ensure tangent is 3D
 
@@ -132,7 +133,7 @@ public:
     return LsqpSO3((double []){re, xyz[0], xyz[1], xyz[2]});
   }
 
-  // Logarithm map (SO(3) -> tangent space) - Eq.133
+  // Eq 133 - Logarithm map (SO(3) -> tangent space) - Eq.133
   Eigen::VectorXd Log() const override {
     // Extract quaternion components
     const double qw = quaternion_.w();
@@ -157,12 +158,12 @@ public:
     return atan_factor * qxyz;
   }
 
-  // Compute adjoint matrix (acts on tangent vectors; in SO(3) it's just the rotation matrix)
+  // Eq 139 - Compute adjoint matrix (acts on tangent vectors; in SO(3) it's just the rotation matrix)
   Eigen::MatrixXd Adjoint() const override {
     return AsMatrix();
   }
 
-  // Left Jacobian of SO(3)
+  // Eq 145, 174 - Left Jacobian of SO(3)
   Eigen::MatrixXd LeftJac(const Eigen::VectorXd& tangent) const override {
     assert(tangent.size() == 3); // SO(3) tangent vectors are 3D
 

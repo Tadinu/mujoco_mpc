@@ -328,6 +328,7 @@ void Agent::PlanIteration(ThreadPool* pool) {
     }
 
     // Plan or Tune
+    planner.SetPlanningOn(plan_enabled);
     if (plan_enabled || tune_enabled) {
       // planner policy
       planner.OptimizePolicy(steps_, *pool);

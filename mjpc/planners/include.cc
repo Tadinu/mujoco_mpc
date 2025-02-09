@@ -59,7 +59,7 @@ std::vector<std::unique_ptr<mjpc::Planner>> LoadPlanners() {
   std::vector<std::unique_ptr<mjpc::Planner>> planners;
 
   // NOTE: The adding order below must match [kPlannerNames]
-  planners.emplace_back(new LsqpPlanner);
+  planners.emplace_back(new LsqpPlanner(MjOwnerAppType::MJPC, std::make_unique<CrossEntropyPlanner>()));
   planners.emplace_back(new PandaBimanualPlanner);
   planners.emplace_back(new CIOPlanner);
 #if MJPC_PLANNER_IDTO_ENABLED

@@ -33,6 +33,10 @@ public:
   LsqpSE3(const Eigen::Vector3d& translation) : LsqpSE3(LsqpSO3(), translation) {
   }
 
+  LsqpSE3(const double data[7] /* rotation[4] + translation[3]*/)
+    : rotation_(LsqpSO3(&data[0])), translation_(&data[4]) {
+  }
+
   LsqpSE3(const double rotation[4], const double translation[3])
     : rotation_(LsqpSO3(rotation)), translation_(translation) {
   }

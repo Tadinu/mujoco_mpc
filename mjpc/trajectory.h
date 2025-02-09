@@ -22,9 +22,9 @@
 
 #include "mjpc/task.h"
 #include "mjpc/tasks/mpl/mpl_cost.h"
+#include "mjpc/core/mjpc_common.h"
 
 namespace mjpc {
-
 // maximum trajectory length
 inline constexpr int kMaxTrajectoryHorizon = 512;
 
@@ -53,37 +53,41 @@ public:
   // simulate model forward in time with continuous-time indexed policy
   void Rollout(std::function<void(double* action, const double* state, double time)> policy, const Task* task,
                const mjModel* model, mjData* data, const double* state, double time, const double* mocap,
-               const double* userdata, int steps);
+               const double* userdata, int steps,
+               const MjpcPlannerControlCb& control_cb = nullptr);
 
   void NoisyRollout(std::function<void(double* action, const double* state, double time)> policy,
                     const Task* task, const mjModel* model, mjData* data, const double* state, double time,
                     const double* mocap, const double* userdata, double xfrc_std, double xfrc_rate,
-                    int steps);
+                    int steps,
+                    const MjpcPlannerControlCb& control_cb = nullptr);
 
   // simulate model forward in time with discrete-time indexed policy
   void RolloutDiscrete(std::function<void(double* action, const double* state, int index)> policy,
                        const Task* task, const mjModel* model, mjData* data, const double* state, double time,
-                       const double* mocap, const double* userdata, int steps);
+                       const double* mocap, const double* userdata, int steps,
+                       const MjpcPlannerControlCb& control_cb = nullptr);
   // ----- members ----- //
-  int horizon;                   // trajectory length
-  int dim_state;                 // states dimension
-  int dim_action;                // actions dimension
-  int dim_residual;              // residual dimension
-  int dim_trace;                 // traces dimension
-  std::vector<double> states;    // (horizon   x nq + nv + na)
-  std::vector<double> actions;   // (horizon-1 x num_action)
-  std::vector<double> times;     // horizon
-  std::vector<double> residual;  // (horizon   x num_residual)
-  std::vector<double> costs;     // horizon
-  std::vector<double> trace;     // (horizon   x 3)
-  double total_return;           // (1)
-  bool failure;                  // true if last rollout had a warning
+  int horizon; // trajectory length
+  int dim_state; // states dimension
+  int dim_action; // actions dimension
+  int dim_residual; // residual dimension
+  int dim_trace; // traces dimension
+  std::vector<double> states; // (horizon   x nq + nv + na)
+  std::vector<double> actions; // (horizon-1 x num_action)
+  std::vector<double> times; // horizon
+  std::vector<double> residual; // (horizon   x num_residual)
+  std::vector<double> costs; // horizon
+  std::vector<double> trace; // (horizon   x 3)
+  double total_return; // (1)
+  bool failure; // true if last rollout had a warning
 
 private:
   // calculates total_return and costs
   void UpdateReturn(const Task* task);
 };
+
 using TrajectoryPtr = std::shared_ptr<Trajectory>;
-}  // namespace mjpc
+} // namespace mjpc
 
 #endif  // MJPC_TRAJECTORY_H_

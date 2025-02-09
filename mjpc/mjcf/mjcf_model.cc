@@ -93,8 +93,7 @@ mjSpec* MjcfModel::LoadToSpec(const std::string& mjcf, mjVFS* vfs) {
 void MjcfModel::AddMjcfToVFS(const std::string& mjcf_path, const std::string& mjcf_registered_filename,
                              mjVFS* vfs) {
   const std::string xml = ReadFile(mjcf_path.c_str());
-  const auto* xml_str = xml.c_str();
-  mj_addBufferVFS(vfs, mjcf_registered_filename.c_str(), xml_str, sizeof(xml_str));
+  mj_addBufferVFS(vfs, mjcf_registered_filename.c_str(), xml.c_str(), xml.size());
 }
 
 void MjcfModel::FillDataStructure() {

@@ -88,10 +88,10 @@ void iLQGPlanner::Allocate() {
   backward_pass.Allocate(dim_state_derivative, action_dim_, kMaxTrajectoryHorizon);
 
   // policy
-  policy(action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
-  previous_policy(action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
+  policy(model, action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
+  previous_policy(model, action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
   for (int i = 0; i < kMaxTrajectory; i++) {
-    candidate_policy[i](action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
+    candidate_policy[i](model, action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
   }
 
   // ----- boxQP ----- //

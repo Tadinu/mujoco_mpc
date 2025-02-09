@@ -5,6 +5,14 @@
 #include <shared_mutex>
 #include <variant>
 #include <vector>
+#include <functional>
+
+// MuJoCo
+#include <mujoco/mujoco.h>
+#define MJPC_DEBUG (0)
+
+namespace mjpc {
+using MjpcPlannerControlCb = std::function<std::vector<double>(double* policy_action, mjData* data)>;
 
 template <typename... TVariant>
 using MjpcVariant = std::variant<std::monostate, TVariant...>;
@@ -18,9 +26,6 @@ using MjpcNamedMap = std::map<std::string, MjpcVariant<TVariant...>>;
 using MjpcDoubleScalarMap = MjpcNamedMap<double, std::vector<double>>;
 using MjpcNamedAnyMap = std::map<std::string, std::any>;
 
-#define MJPC_DEBUG (0)
-
-namespace mjpc {
 using MjpcSharedMutexLock = std::shared_lock<std::shared_mutex>;
 using MjpcMutexLock = std::lock_guard<std::mutex>;
 

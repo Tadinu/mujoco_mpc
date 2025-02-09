@@ -85,9 +85,9 @@ void SampleGradientPlanner::Allocate() {
 
   // policy
   int num_max_parameter = action_dim_ * kMaxTrajectoryHorizon;
-  policy(action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
-  nominal_policy(action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
-  previous_policy(action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
+  policy(model, action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
+  nominal_policy(model, action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
+  previous_policy(model, action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
 
   // noise
   noise.resize(kMaxTrajectory * (action_dim_ * kMaxTrajectoryHorizon));
@@ -104,7 +104,7 @@ void SampleGradientPlanner::Allocate() {
     trajectory[i]->Initialize(state.size(), action_dim_, task->num_residual, task->num_trace,
                               kMaxTrajectoryHorizon);
     trajectory[i]->Allocate(kMaxTrajectoryHorizon);
-    candidate_policy[i](action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
+    candidate_policy[i](model, action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
   }
 
   // gradient

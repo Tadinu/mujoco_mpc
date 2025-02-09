@@ -85,8 +85,8 @@ void SamplingPlanner::Allocate() {
   userdata.resize(model->nuserdata);
 
   // policy
-  policy(action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
-  previous_policy(action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
+  policy(model, action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
+  previous_policy(model, action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
   plan_scratch = TimeSpline(/*dim=*/action_dim_);
 
   // noise
@@ -98,7 +98,7 @@ void SamplingPlanner::Allocate() {
     trajectory[i]->Initialize(num_state, action_dim_, task->num_residual, task->num_trace,
                               kMaxTrajectoryHorizon);
     trajectory[i]->Allocate(kMaxTrajectoryHorizon);
-    candidate_policy[i](action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
+    candidate_policy[i](model, action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
   }
 }
 

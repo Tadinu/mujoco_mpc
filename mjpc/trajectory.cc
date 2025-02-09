@@ -28,7 +28,7 @@ namespace mjpc {
 namespace {
 // maximum return value
 inline constexpr double kMaxReturnValue = 1.0e6;
-}  // namespace
+} // namespace
 
 // initialize dimensions
 void Trajectory::Initialize(int dim_state, int dim_action, int dim_residual, int num_trace, int horizon) {
@@ -90,14 +90,17 @@ void Trajectory::Reset(int T, const double* initial_repeated_action) {
 // simulate model forward in time with continuous-time indexed policy
 void Trajectory::Rollout(std::function<void(double* action, const double* state, double time)> policy,
                          const Task* task, const mjModel* model, mjData* data, const double* state,
-                         double time, const double* mocap, const double* userdata, int steps) {
+                         double time, const double* mocap, const double* userdata, int steps,
+                         const MjpcPlannerControlCb& control_cb) {
   NoisyRollout(policy, task, model, data, state, time, mocap, userdata,
-               /*xfrc_std=*/0, /*xfrc_rate=*/1, steps);
+               /*xfrc_std=*/0, /*xfrc_rate=*/1, steps, control_cb);
 }
+
 void Trajectory::NoisyRollout(std::function<void(double* action, const double* state, double time)> policy,
                               const Task* task, const mjModel* model, mjData* data, const double* state,
                               double time, const double* mocap, const double* userdata, double xfrc_std,
-                              double xfrc_rate, int steps) {
+                              double xfrc_rate, int steps,
+                              const MjpcPlannerControlCb& control_cb) {
   // reset failure flag
   failure = false;
 
@@ -136,7 +139,8 @@ void Trajectory::NoisyRollout(std::function<void(double* action, const double* s
   for (int t = 0; t < horizon - 1; t++) {
     // set action
     policy(DataAt(actions, t * nu), DataAt(states, t * dim_state), data->time);
-    mju_copy(data->ctrl, DataAt(actions, t * nu), nu);
+    double* act = DataAt(actions, t * nu);
+    mju_copy(data->ctrl, control_cb ? control_cb(act, data).data() : act, nu);
 
     // apply perturbation
     if (xfrc_std > 0) {
@@ -202,7 +206,8 @@ void Trajectory::NoisyRollout(std::function<void(double* action, const double* s
 // simulate model forward in time with discrete-time indexed policy
 void Trajectory::RolloutDiscrete(std::function<void(double* action, const double* state, int index)> policy,
                                  const Task* task, const mjModel* model, mjData* data, const double* state,
-                                 double time, const double* mocap, const double* userdata, int steps) {
+                                 double time, const double* mocap, const double* userdata, int steps,
+                                 const MjpcPlannerControlCb& control_cb) {
   // reset failure flag
   failure = false;
 
@@ -239,7 +244,8 @@ void Trajectory::RolloutDiscrete(std::function<void(double* action, const double
   for (int t = 0; t < horizon - 1; t++) {
     // set action
     policy(DataAt(actions, t * nu), DataAt(states, t * dim_state), t);
-    mju_copy(data->ctrl, DataAt(actions, t * nu), nu);
+    double* act = DataAt(actions, t * nu);
+    mju_copy(data->ctrl, control_cb ? control_cb(act, data).data() : act, nu);
 
     // step
     mj_step(model, data);
@@ -308,5 +314,4 @@ void Trajectory::UpdateReturn(const Task* task) {
   // normalize return by trajectory horizon
   total_return /= mju_max(horizon, 1);
 }
-
-}  // namespace mjpc
+} // namespace mjpc

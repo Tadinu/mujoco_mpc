@@ -24,26 +24,25 @@ public:
 
   ~LsqpRelativeFrameTask() override = default;
 
-  SE3 GetFrameTransform(const LsqpConfig& config) const override {
-    return config.GetTransform(frame_name_, frame_type_, base_name_, base_type_);
+  SE3 GetFrameTransform(mjData* data, const LsqpConfig& config) const override {
+    return config.GetTransform(data, frame_name_, frame_type_, base_name_, base_type_);
   }
 
-  void SetTargetFromConfig(const LsqpConfig& config) override {
-    SetTarget(GetFrameTransform(config));
+  void SetTargetFromConfig(mjData* data, const LsqpConfig& config) override {
+    SetTarget(GetFrameTransform(data, config));
   }
 
-  Eigen::VectorXd ComputeError(const LsqpConfig& config) const override {
-    return GetFrameTransform(config).Minus(target_transform_);
+  Eigen::VectorXd ComputeError(mjData* data, const LsqpConfig& config) const override {
+    return GetFrameTransform(data, config).Minus(target_transform_);
   }
 
-  Eigen::MatrixXd ComputeJac(const LsqpConfig& config) const override {
-    const Eigen::MatrixXd frame_jac = config.GetFrameJacobian(frame_name_, frame_type_);
-    const Eigen::MatrixXd base_jac = config.GetFrameJacobian(base_name_, base_type_);
-    const SE3 current_frame_transf = GetFrameTransform(config);
+  Eigen::MatrixXd ComputeJac(mjData* data, const LsqpConfig& config) const override {
+    const Eigen::MatrixXd frame_jac = config.GetFrameJacobian(data, frame_name_, frame_type_);
+    const Eigen::MatrixXd base_jac = config.GetFrameJacobian(data, base_name_, base_type_);
+    const SE3 current_frame_transf = GetFrameTransform(data, config);
     const SE3 new_target_transf = target_transform_.Inverse() * current_frame_transf;
-    return new_target_transf.JacLog() * (
-             frame_jac
-             - current_frame_transf.Inverse().Adjoint() * base_jac);
+    return new_target_transf.JacLog() *
+           (frame_jac - current_frame_transf.Inverse().Adjoint() * base_jac);
   }
 
 private:

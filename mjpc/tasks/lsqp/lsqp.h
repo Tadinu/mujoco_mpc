@@ -11,11 +11,14 @@
 #include "mjpc/utilities.h"
 #include "mjpc/planners/planner.h"
 #include "mjpc/planners/lsqp/lsqp_common.h"
+#include "mjpc/planners/lsqp/lsqp_se3.h"
 
 #define MJPC_LSQP_PLANAR_ROBOT (0)
+#define MJPC_LSQP_SPAWN_OBJECT (1)
 
+namespace mjpc {
 static const std::string MUJOCO_DIR =
-#if 1
+#if 0
     "/home/tad/1_MUJOCO";
 #else
     "/media/ducthan/376b23a1-5a02-4960-b3ca-24b2fcef8f891/MUJOCO";
@@ -46,10 +49,12 @@ static const std::vector<mjtNum> IIWA14_ALLEGRO_HOME_QPOS = {
     -0.218949, -0.0318307, 1.25156, 0.840648,
     1.0593, 0.638801, 0.391599, 0.57284
 };
-static const std::vector<mjtNum> TARGET_OBJ_HOME_QPOS = {0.5, 0, 0.5, 1, 0, 0, 0};
+
+static std::vector<mjtNum> TARGET_OBJ_QPOS = {0.75, 0, 0.3, 1, 0, 0, 0};
 
 static constexpr uint8_t IIWA14_DOF = 7;
 static constexpr uint8_t ALLEGRO_DOF = 16;
+static constexpr uint8_t IIWA14_ALLEGRO_CEM_PARAMS_DIM = 15; // wrist + 4 fingers XYZ
 
 static const std::string MAIN_SCENE_XML_PATH =
 #if MJPC_PLANNER_LSQP_DIFFIK_ENABLED
@@ -73,11 +78,26 @@ static const double INTEGRATION_DT =
     0.01;
 #endif
 
-namespace mjpc {
+
 class LsqpPlanner;
 
 class Lsqp : public Task {
 public:
+  static constexpr float KGRAVITY = -9.81f;
+  static constexpr bool MODEL_UNDERACTUATED = false;
+  static constexpr bool POSITION_CTRL_ENABLED = true;
+
+  static constexpr const char* EE_TARGET_NAME = "ee_target";
+  static constexpr double EE_TARGET_PREGRASP_QUAT[4] = {0.644963, -0.112683, 0.75546, 0.0246038};
+  static constexpr const char* ATTACHMENT_SITE_NAME = "attachment_site";
+  static constexpr const char* PALM_NAME = "palm";
+  static const std::vector<std::string> FINGERTIP_NAMES;
+  static const std::map<std::string, std::vector<float>> FINGERTIPS_RGBA;
+  static constexpr const char* TARGET_OBJ_NAME = "target";
+
+  // NOTE: Hardcoded trace prefix as required in task.cc
+  static constexpr const char* TRACE_SENSOR_PREFIX = "trace";
+
   Lsqp() : residual_(this) {
     mj_defaultVFS(vfs_.get());
     for (const auto& [_, spec] : spec_map_) {
@@ -97,8 +117,26 @@ public:
   bool IsLSQPSupported() const override { return true; }
   std::string AttachmentPrefix() const { return attach_prefix_; }
   std::string AttachmentSuffix() const { return attach_suffix_; }
-  std::vector<std::string> FingertipNames() const { return fingertip_names_; }
-  std::map<std::string, std::vector<float>> FingertipRGBAs() const { return fingertip_rgbas_; }
+
+  std::string PalmBodyName() const {
+    return attach_prefix_ + PALM_NAME;
+  }
+
+  std::string PalmSiteName() const {
+    return PalmBodyName();
+  }
+
+  std::string FingertipBodyName(const std::string& fingertip_name) const {
+    return attach_prefix_ + fingertip_name;
+  }
+
+  std::string FingertipSiteName(const std::string& fingertip_name) const {
+    return FingertipBodyName(fingertip_name);
+  }
+
+  std::string FingertipTargetBodyName(const std::string& fingertip_name) const {
+    return FingertipSiteName(fingertip_name) + "_target";
+  }
 
   mjModel* ConstructModel() override {
 #if MJPC_LSQP_PLANAR_ROBOT
@@ -123,18 +161,7 @@ public:
     auto* scene_spec = CreateSpecFromXML(scene_name, SCENE_XML);
     if (!scene_spec) { return nullptr; }
     //scene_spec->memory = 10000000000;
-    if (auto* key_home = mjs_findElement(scene_spec, mjOBJ_KEY, "home")) {
-      mjs_delete(key_home);
-    }
-
-#if 0
-    for (auto i = 1; i <= IIWA14_DOF; i++) {
-      auto* act_spec = mjs_findElement(scene_spec, mjOBJ_ACTUATOR, ("actuator" + std::to_string(i)).c_str());
-      if (auto* act = mjs_asActuator(act_spec)) {
-        mju_copy3(act->biasprm, (double[]){0, -2000, -200});
-      }
-    }
-#endif
+    scene_spec->nuserdata = LsqpSE3::PARAMS_DIM; // Storing latest [T_ee] for LsqpPlanner's Diff-IK Control
 
     // 2- Create [allegro_spec]
     auto* allegro_spec = CreateSpecFromXML(allegro_name, ALLEGRO_HAND_XML);
@@ -144,46 +171,274 @@ public:
     mju_copy4(allegro_palm->quat, mjpc::ROTATION_IDENTITY);
     memcpy(allegro_palm->pos, (mjtNum[]){0.0, 0.0, 0.095}, sizeof(allegro_palm->pos));
 
-    // 3- Attach [allegro_palm] -> [scene_spec] through [attach_site]
-    // NOTE: This prefix will be prepended to names of all child elements (bodies, geoms, etc.) in [allegro_model]
-    attach_prefix_ = allegro_model_name + "/";
-    mjsSite* attach_site = mjpc::FindSiteSpec(scene_spec, "attachment_site");
-    mjs_attachToSite(attach_site, allegro_palm, attach_prefix_.c_str(), attach_suffix_.c_str());
+    // 3- Create agents' numeric data (horizon, timestep)
+    // Refer to: CrossEntropyPlanner::Initialize() for specific numeric data names
+    const auto fCreateNumeric = [&scene_spec](const char* numeric_name, double value) {
+      auto* numeric = mjs_addNumeric(scene_spec);
+      mjs_setString(numeric->name, numeric_name);
+      numeric->size = 1;
+      mjs_setDouble(numeric->data, (double[]){value}, 1);
+    };
+    // NOTE: Larger [agent_horizon] may require larger [kMaxTrajectoryHorizon] configured in [trajectory.h]
+    fCreateNumeric("agent_horizon", 0.1);
+    fCreateNumeric("agent_timestep", 0.01);
+    fCreateNumeric("sampling_trajectories", 10);
 
-    // Re-key new assembled robot model [scene_spec]
-    mjsKey* new_key = mjs_addKey(scene_spec);
-    mjs_setString(new_key->name, "home");
-    // [iiwa14] - vel actuator: init qpos
-    std::vector<mjtNum> total_qpos = IIWA14_ALLEGRO_HOME_QPOS;
-    total_qpos.insert(total_qpos.end(), TARGET_OBJ_HOME_QPOS.begin(), TARGET_OBJ_HOME_QPOS.end());
-    mjs_setDouble(new_key->qpos, total_qpos.data(), total_qpos.size());
-    // [allegro] - pos actuator: init ctrl
-    mjs_setDouble(new_key->ctrl, IIWA14_ALLEGRO_HOME_QPOS.data(),
-                  IIWA14_ALLEGRO_HOME_QPOS.size());
-    mju_zero(new_key->ctrl->data(), IIWA14_ALLEGRO_HOME_QPOS.size() - ALLEGRO_DOF);
+    // 4- Customize actuactors
+    if constexpr (MODEL_UNDERACTUATED) {
+      // Delete all the default fully-actuated actuators
+      for (auto i = 1; i <= IIWA14_DOF; i++) {
+        auto* act_spec = mjs_findElement(scene_spec, mjOBJ_ACTUATOR,
+                                         ("actuator" + std::to_string(i)).c_str());
+        if (mjs_asActuator(act_spec)) {
+          mjs_delete(act_spec);
+        }
+      }
 
-    // Add fingertip-mocap bodies
-    mjsBody* world_body = mjpc::FindWorldBodySpec(scene_spec);
-    for (const auto& fingertip : fingertip_names_) {
-      mjsBody* finger_mocap = mjs_addBody(world_body, nullptr);
-      mjs_setString(finger_mocap->name, (attach_prefix_ + fingertip + "_target").c_str());
-      finger_mocap->mocap = true;
-      mjsGeom* geom = mjs_addGeom(finger_mocap, nullptr);
-      geom->type = mjGEOM_SPHERE;
-      memcpy(geom->size, (mjtNum[]){0.02, 0.02, 0.02}, sizeof(geom->size));
-      memcpy(geom->rgba, fingertip_rgbas_[fingertip].data(), sizeof(geom->rgba));
-      // Disable collision
-      geom->contype = 0;
-      geom->conaffinity = 0;
+      static std::vector ALLEGRO_ACT_NAMES = {"ffa0", "ffa1", "ffa2", "ffa3",
+                                              "mfa0", "mfa1", "mfa2", "mfa3",
+                                              "rfa0", "rfa1", "rfa2", "rfa3",
+                                              "tha0", "tha1", "tha2", "tha3"};
+      for (const auto& act_name : ALLEGRO_ACT_NAMES) {
+        auto* act_spec = mjs_findElement(allegro_spec, mjOBJ_ACTUATOR, act_name);
+        if (mjs_asActuator(act_spec)) {
+          mjs_delete(act_spec);
+        }
+      }
+    } else {
+      for (auto i = 1; i <= IIWA14_DOF; i++) {
+        auto* act_spec = mjs_findElement(scene_spec, mjOBJ_ACTUATOR,
+                                         ("actuator" + std::to_string(i)).c_str());
+        if (auto* act = mjs_asActuator(act_spec)) {
+          act->trntype = mjTRN_JOINT;
+          act->dyntype = mjDYN_NONE;
+          act->biastype = mjBIAS_AFFINE;
+          act->gaintype = mjGAIN_FIXED;
+          constexpr double kp = 2000;
+          constexpr double kv = 200;
+          if constexpr (POSITION_CTRL_ENABLED) {
+            mju_copy3(act->gainprm, (double[]){kp, 0, 0});
+            mju_copy3(act->biasprm, (double[]){0, -kp, -kv});
+          } else {
+            mju_copy3(act->gainprm, (double[]){kv, 0, 0});
+            mju_copy3(act->biasprm, (double[]){0, 0, -kv});
+          }
+        }
+      }
     }
 
-    // Add user sensor as residuals
-    mjsSensor* user_sensor = mjs_addSensor(scene_spec);
-    mjs_setString(user_sensor->name, "Grasp");
-    user_sensor->dim = 4;
-    user_sensor->type = mjSENS_USER;
-    mjs_setDouble(user_sensor->userdata, (double[]){1, 75, 0, 100, 0.02, 2}, 6);
+    // 5- Attach [allegro_palm] -> [scene_spec] through [attach_site]
+    // NOTE: This prefix will be prepended to names of all child elements (bodies, geoms, etc.) in [allegro_model]
+    attach_prefix_ = allegro_model_name + "/";
+    mjsSite* attach_site = mjpc::FindSiteSpec(scene_spec, ATTACHMENT_SITE_NAME);
+    mjs_attachToSite(attach_site, allegro_palm, attach_prefix_.c_str(), attach_suffix_.c_str());
 
+    // 6- Re-key new assembled robot model [scene_spec]
+    auto* key_home = mjpc::FindKeySpec(scene_spec, "home");
+    if (!key_home) {
+      key_home = mjs_addKey(scene_spec);
+      mjs_setString(key_home->name, "home");
+    }
+
+    // 6.1- [iiwa14] - vel actuator: init qpos
+    system_qpos_home = IIWA14_ALLEGRO_HOME_QPOS;
+#if MJPC_LSQP_SPAWN_OBJECT
+    system_qpos_home.insert(system_qpos_home.end(), TARGET_OBJ_QPOS.begin(), TARGET_OBJ_QPOS.end());
+#endif
+    mjs_setDouble(key_home->qpos, system_qpos_home.data(), system_qpos_home.size());
+
+    // 6.2- [allegro] - pos actuator: init ctrl
+    if constexpr (MODEL_UNDERACTUATED) {
+    } else {
+      mjs_setDouble(key_home->ctrl, IIWA14_ALLEGRO_HOME_QPOS.data(),
+                    IIWA14_ALLEGRO_HOME_QPOS.size());
+      mju_zero(key_home->ctrl->data(), IIWA14_ALLEGRO_HOME_QPOS.size() - ALLEGRO_DOF);
+    }
+
+    // 7- Add mocap bodies
+    mjsBody* world_body = mjpc::FindWorldBodySpec(scene_spec);
+    const auto fCreateSite = [](mjsBody* body, const std::string& site_name) {
+      mjsSite* site = mjs_addSite(body, 0);
+      mjs_setString(site->name, site_name.c_str());
+      site->type = mjGEOM_SPHERE;
+      memcpy(site->size, (mjtNum[]){0.001, 0.001, 0.001}, sizeof(site->size));
+      site->group = 4;
+    };
+
+    // 7.1- [ee-mocap body]
+    mjsBody* ee_mocap = mjs_addBody(world_body, nullptr);
+    mjs_setString(ee_mocap->name, EE_TARGET_NAME);
+    memcpy(ee_mocap->pos, (double[]){0.5, 0, 0.5}, sizeof(ee_mocap->pos));
+    memcpy(ee_mocap->quat, (double[]){0, 1, 0, 0}, sizeof(ee_mocap->quat));
+    ee_mocap->mocap = true;
+    mjsGeom* ee_mocap_geom = mjs_addGeom(ee_mocap, nullptr);
+    ee_mocap_geom->type = mjGEOM_BOX;
+    memcpy(ee_mocap_geom->size, (double[]){0.05, 0.05, 0.05}, sizeof(ee_mocap_geom->size));
+    memcpy(ee_mocap_geom->rgba, (float[]){0.6, 0.5, 0.3, 0.2}, sizeof(ee_mocap_geom->rgba));
+    // Disable collision
+    ee_mocap_geom->contype = 0;
+    ee_mocap_geom->conaffinity = 0;
+
+    // [ee_mocap_site]/[palm_site]
+    if constexpr (MODEL_UNDERACTUATED) {
+      fCreateSite(ee_mocap, EE_TARGET_NAME);
+    } else {
+      fCreateSite(allegro_palm, PalmSiteName());;
+    }
+
+    // 7.2- [Fingertip-mocap bodies]
+    for (const auto& fingertip : FINGERTIP_NAMES) {
+      const auto fingertip_target_name = FingertipTargetBodyName(fingertip);
+      mjsBody* finger_mocap = mjs_addBody(world_body, nullptr);
+      mjs_setString(finger_mocap->name, fingertip_target_name.c_str());
+      finger_mocap->mocap = true;
+      mjsGeom* finger_mocap_geom = mjs_addGeom(finger_mocap, nullptr);
+      finger_mocap_geom->type = mjGEOM_SPHERE;
+      memcpy(finger_mocap_geom->size, (mjtNum[]){0.02, 0.02, 0.02}, sizeof(finger_mocap_geom->size));
+      memcpy(finger_mocap_geom->rgba, FINGERTIPS_RGBA.at(fingertip).data(), sizeof(finger_mocap_geom->rgba));
+      // Disable collision
+      finger_mocap_geom->contype = 0;
+      finger_mocap_geom->conaffinity = 0;
+
+      // [fingermocap_site]
+      if constexpr (MODEL_UNDERACTUATED) {
+        fCreateSite(finger_mocap, fingertip_target_name);
+      }
+    }
+
+    // 8- [Mocap site Actuators]
+    if constexpr (MODEL_UNDERACTUATED) {
+      const auto fCreateActuator = [&scene_spec](const std::string& actuator_name,
+                                                 const std::string& site_name,
+                                                 double gear[]) {
+        mjsActuator* act = mjs_addActuator(scene_spec, 0);
+        mjs_setString(act->name, actuator_name.c_str());
+        act->trntype = mjTRN_SITE;
+        //act->dyntype = mjtDyn::mjDYN_INTEGRATOR;
+        mjs_setString(act->target, site_name.c_str());
+        act->ctrllimited = true;
+        mju_copy(act->ctrlrange, (double[]){-1, 1}, 2);
+        mju_copy(act->gear, gear, 6);
+        act->gainprm[0] = 1;
+      };
+
+      // Add actuators for [ee + fingertip] targets
+      fCreateActuator("ee_act_x", EE_TARGET_NAME, (double[]){1, 0, 0, 0, 0, 0});
+      fCreateActuator("ee_act_y", EE_TARGET_NAME, (double[]){0, 1, 0, 0, 0, 0});
+      fCreateActuator("ee_act_z", EE_TARGET_NAME, (double[]){0, 0, 1, 0, 0, 0});
+      for (const auto& fingertip : FINGERTIP_NAMES) {
+        const auto fingertip_mocap_site_name = FingertipTargetBodyName(fingertip);
+        const auto fingertip_name = attach_prefix_ + fingertip;
+        fCreateActuator(fingertip_name + "_x", fingertip_mocap_site_name,
+                        (double[]){1, 0, 0, 0, 0, 0});
+        fCreateActuator(fingertip_name + "_y", fingertip_mocap_site_name,
+                        (double[]){0, 1, 0, 0, 0, 0});
+        fCreateActuator(fingertip_name + "_z", fingertip_mocap_site_name,
+                        (double[]){0, 0, 1, 0, 0, 0});
+      }
+    }
+
+    // 9- [User sensors] as residuals
+    // 9.1- Reach sensor
+    mjsSensor* reach_sensor = mjs_addSensor(scene_spec);
+    reach_sensor->type = mjSENS_USER;
+    reach_sensor->dim = 3;
+    mjs_setString(reach_sensor->name, "Reach");
+    mjs_setDouble(reach_sensor->userdata, (double[]){2, 2.5, 0, 5, 0.01}, 5);
+
+    // 9.2- Pick sensor
+    mjsSensor* pick_sensor = mjs_addSensor(scene_spec);
+    pick_sensor->type = mjSENS_USER;
+    pick_sensor->dim = 4;
+    mjs_setString(pick_sensor->name, "Pick");
+    mjs_setDouble(pick_sensor->userdata, (double[]){0, 1, 0, 1, 0.003}, 5);
+
+#if MJPC_LSQP_SPAWN_OBJECT
+    // 9.3- Object sensor
+    mjsSensor* obj_pos_sensor = mjs_addSensor(scene_spec);
+    obj_pos_sensor->type = mjSENS_FRAMEPOS;
+    obj_pos_sensor->objtype = mjOBJ_BODY;
+    mjs_setString(obj_pos_sensor->name, (std::string(TARGET_OBJ_NAME) + "_pos").c_str());
+    mjs_setString(obj_pos_sensor->objname, TARGET_OBJ_NAME);
+
+    mjsSensor* obj_quat_sensor = mjs_addSensor(scene_spec);
+    obj_quat_sensor->type = mjSENS_FRAMEQUAT;
+    obj_quat_sensor->objtype = mjOBJ_BODY;
+    mjs_setString(obj_quat_sensor->name, (std::string(TARGET_OBJ_NAME) + "_quat").c_str());
+    mjs_setString(obj_quat_sensor->objname, TARGET_OBJ_NAME);
+#endif
+
+    // 9.4- Palm sensor
+    mjsSensor* palm_sensor = mjs_addSensor(scene_spec);
+    const auto palm_site_name = PalmSiteName();
+    palm_sensor->type = mjSENS_FRAMEPOS;
+    palm_sensor->objtype = mjOBJ_SITE;
+    mjs_setString(palm_sensor->name, (palm_site_name + "_pos").c_str());
+    mjs_setString(palm_sensor->objname, palm_site_name.c_str());
+
+    // 9.5- Fingertip sensors
+    int trace_i = 0;
+    for (const auto& fingertip : FINGERTIP_NAMES) {
+      const auto fingertip_name = attach_prefix_ + fingertip;
+
+      // Trace
+      mjsSensor* trace_sensor = mjs_addSensor(scene_spec);
+      trace_sensor->type = mjSENS_FRAMEPOS;
+      trace_sensor->objtype = mjOBJ_SITE;
+      mjs_setString(trace_sensor->name, (TRACE_SENSOR_PREFIX + std::to_string(trace_i++)).c_str());
+      mjs_setString(trace_sensor->objname, fingertip_name.c_str());
+
+      // Framepos
+      mjsSensor* framepos_sensor = mjs_addSensor(scene_spec);
+      framepos_sensor->type = mjSENS_FRAMEPOS;
+      framepos_sensor->objtype = mjOBJ_SITE;
+      mjs_setString(framepos_sensor->name, (fingertip_name + "_pos").c_str());
+      mjs_setString(framepos_sensor->objname, fingertip_name.c_str());
+
+      // Framelinvel
+      mjsSensor* framelinvel_sensor = mjs_addSensor(scene_spec);
+      framelinvel_sensor->type = mjSENS_FRAMELINVEL;
+      framelinvel_sensor->objtype = mjOBJ_SITE;
+      mjs_setString(framelinvel_sensor->name, (fingertip_name + "_lin_vel").c_str());
+      mjs_setString(framelinvel_sensor->objname, fingertip_name.c_str());
+
+      // Framelinacc
+      mjsSensor* framelinacc_sensor = mjs_addSensor(scene_spec);
+      framelinacc_sensor->type = mjSENS_FRAMELINACC;
+      framelinacc_sensor->objtype = mjOBJ_SITE;
+      mjs_setString(framelinacc_sensor->name, (fingertip_name + "_lin_acc").c_str());
+      mjs_setString(framelinacc_sensor->objname, fingertip_name.c_str());
+
+      // Frameangvel
+      mjsSensor* frameangvel_sensor = mjs_addSensor(scene_spec);
+      frameangvel_sensor->type = mjSENS_FRAMEANGVEL;
+      frameangvel_sensor->objtype = mjOBJ_SITE;
+      mjs_setString(frameangvel_sensor->name, (fingertip_name + "_ang_vel").c_str());
+      mjs_setString(frameangvel_sensor->objname, fingertip_name.c_str());
+
+      // Frameangacc
+      mjsSensor* frameangacc_sensor = mjs_addSensor(scene_spec);
+      frameangacc_sensor->type = mjSENS_FRAMEANGACC;
+      frameangacc_sensor->objtype = mjOBJ_SITE;
+      mjs_setString(frameangacc_sensor->name, (fingertip_name + "_ang_acc").c_str());
+      mjs_setString(frameangacc_sensor->objname, fingertip_name.c_str());
+    }
+
+#if MJPC_LSQP_SPAWN_OBJECT
+    // 10- Picked object
+    mjsBody* pick_obj = mjs_addBody(world_body, nullptr);
+    mjs_addFreeJoint(pick_obj);
+    mjs_setString(pick_obj->name, TARGET_OBJ_NAME);
+    memcpy(pick_obj->pos, TARGET_OBJ_QPOS.data(), sizeof(ee_mocap->pos));
+    memcpy(pick_obj->quat, TARGET_OBJ_QPOS.data() + 3, sizeof(ee_mocap->quat));
+    pick_obj->mocap = false;
+    mjsGeom* pick_obj_geom = mjs_addGeom(pick_obj, nullptr);
+    pick_obj_geom->type = mjGEOM_BOX;
+    memcpy(pick_obj_geom->size, (double[]){0.03, 0.03, 0.03}, sizeof(pick_obj_geom->size));
+    memcpy(pick_obj_geom->rgba, (float[]){0.2, 0.5, 0.3, 0.5}, sizeof(pick_obj_geom->rgba));
+#endif
+
+    // 11- Compile [scene_spec] -> mjModel
     //!NOTE: If needed, consider setting [scene_spec->modelfiledir], base for all resource paths
     mjModel* model = mj_compile(scene_spec, vfs_.get());
 #if MJPC_PLANNER_LSQP_DEBUG
@@ -199,32 +454,63 @@ public:
   void ConfigureModel(mjModel* model) override {
     // Configure [model]
     //model->opt.disableactuator |= (1 << 0);
-    model->opt.timestep = 0.002;
-    // Disable gravity
-    static constexpr float kGravity = 0.; // -9.81f;
-    model->opt.gravity[2] = kGravity;
-    if (kGravity > 0.0) {
+    model->opt.timestep = 0.01;
+    // Gravity. NOTE: Enable "gravcomp='1'" in XML for gravity compensation
+    model->opt.gravity[2] = KGRAVITY;
+#if 0
+    // THIS DOES NOT HAVE ANY EFFECT, NEED TO CONFIG mjCBody directly, which is not supported by MuJoCo
+    if (KGRAVITY != 0.0) {
       // Enable gravity compensation
       for (auto i = 0; i < model->nbody; ++i) {
         model->body_gravcomp[i] = true;
       }
     }
+#endif
   }
 
-  void InitMocaps() const {
+  void InitMocaps(bool force_init = false) {
+    if (mocaps_inited_ && !force_init) {
+      return;
+    }
 #if MJPC_LSQP_PLANAR_ROBOT
     MoveBodyMocapToSite("target_mocap", "hand");
 #else
-    MoveBodyMocapToSite("target", "attachment_site");
-    for (const auto& fingertip_name : FingertipNames()) {
-      const auto fingertip_target = attach_prefix_ + fingertip_name + "_target";
-      assert(QueryBodyMocapId(fingertip_target.c_str()) >= 0);
-      const auto finger_site_name = attach_prefix_ + fingertip_name;
+    mju_copy3(initial_ee_target_pos, QuerySitePos(ATTACHMENT_SITE_NAME));
+    MoveBodyMocapToSite(EE_TARGET_NAME, ATTACHMENT_SITE_NAME);
+    for (const auto& fingertip_name : FINGERTIP_NAMES) {
+      const auto finger_site_name = FingertipSiteName(fingertip_name);
       if (const auto finger_site_id = QuerySiteId(finger_site_name.c_str())) {
-        MoveBodyMocapToSite(fingertip_target.c_str(), finger_site_id);
+        MoveBodyMocapToSite(FingertipTargetBodyName(fingertip_name).c_str(), finger_site_id);
       }
     }
+
+    // Mid position of {palm, fingertips}
+    double* palm_pos = QuerySitePos(PalmSiteName().data());
+    for (const auto& fingertip : FINGERTIP_NAMES) {
+      double* fingertip_pos = QuerySitePos(FingertipSiteName(fingertip).data());
+      mju_addTo3(palm_pos, fingertip_pos);
+      mju_copy3(initial_fingertips_direction[fingertip], fingertip_pos);
+    }
+    mju_scl3(palm_pos, palm_pos, 1.0 / (FINGERTIP_NAMES.size() + 1));
+
+    for (const auto& fingertip : FINGERTIP_NAMES) {
+      mju_subFrom3(initial_fingertips_direction[fingertip], palm_pos);
+      mju_normalize3(initial_fingertips_direction[fingertip]);
+    }
 #endif
+    mocaps_inited_ = true;
+  }
+
+  std::vector<double> GetHandCenterPos(const mjData* data) const {
+    std::vector<double> center_pos(3, 0);
+    // Mid position of {palm, fingertips}
+    double* palm_pos = mjpc::QuerySitePos(model_, data, PalmSiteName().data());
+    for (const auto& fingertip : FINGERTIP_NAMES) {
+      double* fingertip_pos = mjpc::QuerySitePos(model_, data, FingertipSiteName(fingertip).data());
+      mju_addTo3(palm_pos, fingertip_pos);
+    }
+    mju_scl3(center_pos.data(), palm_pos, 0.2);
+    return center_pos;
   }
 
   class ResidualFn : public BaseResidualFn {
@@ -264,15 +550,14 @@ protected:
     return nullptr;
   }
 
+public:
+  std::vector<double> system_qpos_home;
+  double initial_ee_target_pos[3];
+  std::map<std::string, double[3]> initial_fingertips_direction; // toward palm
+
 private:
   LsqpPlanner* lsqp_planner_ = nullptr;
   ResidualFn residual_;
-  std::vector<std::string> fingertip_names_ = {"rf_tip", "mf_tip", "ff_tip", "th_tip"};
-  std::map<std::string, std::vector<float>> fingertip_rgbas_ = {
-      {fingertip_names_[0], {0.9f, 0.f, 0.f, 1.f}}, // Red
-      {fingertip_names_[1], {0.f, 0.9f, 0.f, 1.f}}, // Green
-      {fingertip_names_[2], {0.f, 0.f, 0.9f, 1.f}}, // Blue
-      {fingertip_names_[3], {0.9f, 0.9f, 0.9f, 1.f}}}; // White
   bool mocaps_inited_ = false;
   std::unique_ptr<mjVFS> vfs_ = std::make_unique<mjVFS>();
   std::map<std::string, mjSpec*> spec_map_;

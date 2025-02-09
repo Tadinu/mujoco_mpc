@@ -406,6 +406,39 @@ static Eigen::VectorXd JoinEigenVectors(const std::vector<Eigen::VectorXd>& vect
 
 // MATH ---------------------
 //
+// Ref: mju_quatZ2Vec() calculates quaternion from Z-vector to a vector
+static void mjpc_quatFromVectors(mjtNum quat[4], const mjtNum vec1[3], const mjtNum vec2[3]) {
+  mjtNum axis[3], a, vec2n[3] = {vec2[0], vec2[1], vec2[2]};
+
+  // set default result to no-rotation quaternion
+  quat[0] = 1;
+  mju_zero3(quat + 1);
+
+  // normalize vector; if too small, no rotation
+  if (mju_normalize3(vec2n) < mjMINVAL) {
+    return;
+  }
+
+  // compute angle and axis
+  mju_cross(axis, vec1, vec2);
+  a = mju_normalize3(axis);
+
+  // almost parallel
+  if (mju_abs(a) < mjMINVAL) {
+    // opposite: 180 deg rotation around x axis
+    if (mju_dot3(vec2, vec1) < 0) {
+      quat[0] = 0;
+      quat[1] = 1;
+    }
+
+    return;
+  }
+
+  // make quaternion from angle and axis
+  a = mju_atan2(a, mju_dot3(vec2, vec1));
+  mju_axisAngle2Quat(quat, axis, a);
+}
+
 // Ref: https://github.com/google-deepmind/mujoco/blob/main/src/user/user_util.h
 // convert global to local axis relative to given frame
 static void mjpc_localaxis(double* al, const double* ag, const double* quat) {

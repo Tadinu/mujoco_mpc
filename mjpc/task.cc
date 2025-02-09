@@ -163,8 +163,6 @@ void Task::UpdateResidual() {
 
 void Task::Transition(mjModel* model, mjData* data) {
   std::lock_guard<std::mutex> lock(mutex_);
-  model_ = model;
-  data_ = data;
   TransitionLocked(model, data);
   InternalResidual()->Update();
 }

@@ -1,23 +1,18 @@
 #pragma once
 
 #include <cassert>
-#include <map>
 #include <memory>
 #include <shared_mutex>
-#include <stdexcept>
-#include <thread>
 
 #include <mujoco/mujoco.h>
 
 // mjpc
-#include "mjpc/planners/lsqp/lsqp_config.h"
-#include "mjpc/planners/planner.h"
-#include "mjpc/utilities.h"
 #include "mjpc/core/mjpc_common.h"
-#include "mjpc/planners/lsqp/lsqp_posture_task.h"
-#include "mjpc/planners/lsqp/lsqp_relative_frame_task.h"
-#include "mjpc/planners/lsqp/lsqp_limit.h"
+#include "mjpc/planners/lsqp/lsqp_solver.h"
+#include "mjpc/planners/planner.h"
+#include "mjpc/planners/cross_entropy/planner.h"
 #include "mjpc/tasks/lsqp/lsqp.h"
+#include "mjpc/utilities.h"
 
 #define MJPC_PLANNER_LSQP_DIFFIK_ENABLED (0)
 
@@ -29,23 +24,24 @@ public:
   LsqpPlanner() = default;
   ~LsqpPlanner() override = default;
 
-  explicit LsqpPlanner(MjOwnerAppType type) : Planner(type) {
+  explicit LsqpPlanner(const MjOwnerAppType type, std::unique_ptr<CrossEntropyPlanner> delegate = nullptr) :
+    Planner(type),
+    cem_delegate_(std::move(delegate)) {
   }
 
-  std::vector<std::string> FingertipNames() const;
-  std::map<std::string, std::vector<float>> FingertipRGBAs() const;
-  std::string GetAttachmentPrefix() const;
-
-  void InitLsqpEnv(const mjModel* model, mjData* data);
-  void LsqpControl(bool position_ctrl = false);
-  void RefreshMj(mjModel* model, mjData* data);
+  // Init task-specific LSQP (configuration, subtasks, etc.)
+  void InitTaskLsqp(const mjModel* model, const mjData* data);
+  std::vector<double> LsqpControl(double* policy_action = nullptr, mjData* data = nullptr);
 
   // =========================================================================================================
   // MJPC-PLANNER IMPL --
   //
   mjModel* model_ = nullptr;
-  mjData* data_ = nullptr;
+  // mjData is either accessed through [lsqp_task_->data_], which is already updated in [Task::TransitionLocked()],
+  // BUT ONLY if it is invoked in child task's TransitionLocked()
+  // OR provided by caller, eg as running in a thread of rollouts
   Lsqp* lsqp_task_ = nullptr;
+  std::unique_ptr<CrossEntropyPlanner> cem_delegate_ = nullptr;
 
   // initialize data and settings
   void Initialize(mjModel* model, const Task& task) override;
@@ -54,41 +50,56 @@ public:
 
   // reset memory to zeros
   void Reset(int horizon, const double* initial_repeated_action = nullptr) override {
+    if (cem_delegate_) {
+      cem_delegate_->Reset(horizon, initial_repeated_action);
+    }
   }
 
   void SetState(const State& state) override {
+    if (cem_delegate_) {
+      cem_delegate_->SetState(state);
+    }
   }
 
-  const Trajectory* BestTrajectory() override { return trajectory_.get(); }
+  const Trajectory* BestTrajectory() override {
+    return cem_delegate_ ? cem_delegate_->BestTrajectory() : nullptr;
+  }
 
   // visualize planner-specific traces
+  double policy_ee_target_pos_[3];
   void Traces(mjvScene* scn) override;
 
   void ClearTrace() override {
-    const MjpcSharedMutexLock lock(policy_mutex_);
-    trajectory_->trace.clear();
   }
 
   // planner-specific GUI elements
   void GUI(mjUI& ui) override {
+    if (cem_delegate_) {
+      cem_delegate_->GUI(ui);
+    }
   }
 
   // planner-specific plots
   void Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, int planner_shift, int timer_shift, int planning,
              int* shift) override {
+    if (cem_delegate_) {
+      cem_delegate_->Plots(fig_planner, fig_timer, planner_shift, timer_shift, planning, shift);
+    }
   }
 
   // return number of parameters optimized by planner
-  int NumParameters() override { return 0; }
+  int NumParameters() override {
+    return cem_delegate_ ? cem_delegate_->NumParameters() : 0;
+  }
 
   // optimize nominal policy
-  void OptimizePolicy(int horizon, ThreadPool& pool) override {
-    const MjpcSharedMutexLock lock(policy_mutex_);
-    LsqpControl();
-  }
+  void OptimizePolicy(int horizon, ThreadPool& pool) override;
 
   // compute trajectory using nominal policy
   void NominalTrajectory(int horizon, ThreadPool& pool) override {
+    if (cem_delegate_) {
+      cem_delegate_->NominalTrajectory(horizon, pool);
+    }
   }
 
   // set action from policy
@@ -96,27 +107,7 @@ public:
 
 protected:
   // mjpc
-  std::shared_ptr<Trajectory> trajectory_ = nullptr;
-  int dim_state_ = 0; // state
-  int dim_state_derivative_ = 0; // state derivative
-  int dim_action_ = 0; // action
-  int dim_sensor_ = 0; // output (i.e., all sensors)
-  int dim_max_ = 0; // maximum dimension
   mutable std::shared_mutex policy_mutex_;
-  // [action_] is shared among policy motion planning threads.
-  // NOTE: Using type as vector of primitive, CaSX is unclear why not well synch-protected yet.
-  std::vector<double> action_;
-
-  // lsqp
-  LsqpConfig config_;
-  std::vector<LsqpBaseTask*> subtasks_;
-  LsqpFrameTask end_effector_task_;
-  LsqpPostureTask posture_task_;
-  std::vector<LsqpRelativeFrameTask> finger_tasks_;
-  std::vector<LsqpLimitPtr> config_limits_;
-  LsqpSE3 T_ee_prev_;
-
-  void SetFrameTaskTarget(LsqpFrameTask* task, const char* target_mocap_name) const;
 };
 
 using LsqpPlannerPtr = std::shared_ptr<LsqpPlanner>;

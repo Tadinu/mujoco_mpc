@@ -29,9 +29,9 @@ void CEMSampler::Initialize(mjModel* model, const Task& task) {
 
 void CEMSampler::Allocate() {
   // policy
-  policy_(action_dim_).Allocate(model_, *task_, kMaxTrajectoryHorizon);
-  nominal_policy_(action_dim_).Allocate(model_, *task_, kMaxTrajectoryHorizon);
-  previous_policy_(action_dim_).Allocate(model_, *task_, kMaxTrajectoryHorizon);
+  policy_(model_, action_dim_).Allocate(model_, *task_, kMaxTrajectoryHorizon);
+  nominal_policy_(model_, action_dim_).Allocate(model_, *task_, kMaxTrajectoryHorizon);
+  previous_policy_(model_, action_dim_).Allocate(model_, *task_, kMaxTrajectoryHorizon);
 
   // scratch
   parameters_scratch.resize(model_->nu * kMaxTrajectoryHorizon);

@@ -17,6 +17,7 @@
 #include "mjpc/utils/mjpc_ctrl_util.h"
 #include "mjpc/utilities.h"
 #include "mjpc/planners/lsqp/lsqp_planner.h"
+#include "mjpc/planners/fabrics/include/fab_math_util.h"
 #include "mjpc/tasks/lsqp/lsqp.h"
 
 // mjapp
@@ -43,18 +44,15 @@ public:
 
   std::map<std::string, RobotModelPtr> GetRobotModels() const { return robot_models_; }
 
-  mjModel* ConstructCustomModel() const {
-    static mjpc::Lsqp lsqp;
-    lsqp_planner_->lsqp_task_ = &lsqp;
-
+  mjModel* ConstructCustomModel() {
     // Construct programmingly the model
-    mjModel* model = lsqp.ConstructModel();
+    mjModel* model = lsqp_task_.ConstructModel();
     if (model) {
       // Configure model (timestep, gravity, etc.)
-      lsqp.ConfigureModel(model);
+      lsqp_task_.ConfigureModel(model);
 
       // Initialize model with planner-specific infra, etc.
-      lsqp.Initialize(model);
+      lsqp_task_.Initialize(model);
     }
     return model;
   }
@@ -85,8 +83,13 @@ public:
       actuator_ids_.push_back(mjpc::QueryActuatorId(model, name));
     }
 #else
-    // Init LSQP optimizing env
-    lsqp_planner_->InitLsqpEnv(model, data);
+    // 1- Init [lsqp_task_]
+    lsqp_task_.model_ = model;
+    lsqp_task_.data_ = data;
+    lsqp_task_.SetPlanner(lsqp_planner_.get());
+
+    // 2- Init [lsqp_planner_] with [lsqp_task_]
+    lsqp_planner_->Initialize(model, lsqp_task_);
 #endif
   }
 
@@ -99,6 +102,7 @@ public:
   }
 
   void Control(const mjModel* model, mjData* data) override {
+    //const std::unique_lock<std::recursive_mutex> lock(mtx);
 #if MJPC_PLANNER_LSQP_DIFFIK_ENABLED
     const auto& main_robot_model = robot_models_[MAIN_ROBOT_MODEL_NAME];
     const int nv = model->nv;
@@ -123,11 +127,7 @@ public:
                                   MAIN_ROBOT_HAS_NULLSPACE);
 
     auto qpos = std::vector<mjtNum>(data->qpos, data->qpos + nv);
-#if 1
-    mj_integratePos(model, qpos.data(), qvel.data(), INTEGRATION_DT);
-#else
     mju_addToScl(qpos.data(), qvel.data(), INTEGRATION_DT, nv);
-#endif
     for (auto i = 0; i < jnt_ids_.size(); ++i) {
       const auto ctrl_id = actuator_ids_[i];
       const auto ctrl_val = qpos[jnt_ids_[i]];
@@ -135,7 +135,46 @@ public:
       main_robot_model->ApplyCtrl(ctrl_id, ctrl_val);
     }
 #else
+    // Move [ee_target] around
+    static constexpr float radius = 0.5;
+#if 0
+    double pos[3] = {
+        lsqp_task_.initial_ee_target_pos[0] /* + radius * cos(M_PI * data->time)*/,
+        lsqp_task_.initial_ee_target_pos[1] + radius * sin(M_PI * data->time),
+        lsqp_task_.initial_ee_target_pos[2]};
+#else
+    double pos[3];
+#endif
+
+#if 0
+    // RECORD EE_TARGET-POSE
+    double delta_pos[3];
+    mju_sub3(delta_pos, mjpc::QueryBodyPos(model, data, mjpc::Lsqp::TARGET_OBJ_NAME),
+             mjpc::QueryBodyMocapPos(model, data, mjpc::Lsqp::EE_TARGET_NAME));
+    mjpc::print("Pos", delta_pos[0], delta_pos[1], delta_pos[2]);
+
+    double quat[4];
+    mju_copy4(quat, mjpc::QueryBodyMocapQuat(model, data, mjpc::Lsqp::EE_TARGET_NAME));
+    mjpc::print("Quat", quat[0], quat[1], quat[2], quat[3]);
+#endif
+
+#if 0
+    // MOVE TO A SPECIFIC EE_TARGET-POSE
+    mju_add3(pos, mjpc::QueryBodyPos(model, data, mjpc::Lsqp::TARGET_OBJ_NAME),
+             (double[3]){-0.118099, -0.00698625, 0.15});
+    mjpc::SetBodyMocapPos(model, data, mjpc::Lsqp::EE_TARGET_NAME, pos);
+    mjpc::SetBodyMocapQuat(model, data, mjpc::Lsqp::EE_TARGET_NAME, mjpc::Lsqp::EE_TARGET_PREGRASP_QUAT);
+    // Follow [ee_target] by diff-ik
     lsqp_planner_->LsqpControl();
+#else
+    // MOVE RANDOMLY (FOR TESTING TO VISUALLY EVALUATE THE RESULTS IN ROLLOUTS)
+    // Follow [ee_target] by diff-ik
+    constexpr bool interactive = false;
+    lsqp_planner_->LsqpControl(interactive
+                                 ? nullptr
+                                 : (double[3]){FabRandom::rand(-1., 1.), FabRandom::rand(-1., 1.),
+                                               FabRandom::rand(-1., 1.)});
+#endif
 #endif
   }
 
@@ -144,11 +183,11 @@ protected:
 #if !MJAPP_VISUAL_DEBUG
     return;
 #endif
-    const std::string attach_prefix = lsqp_planner_->GetAttachmentPrefix();
-    for (const auto& fingertip_name : lsqp_planner_->FingertipNames()) {
-      const auto fingertip_target = attach_prefix + fingertip_name + "_target";
+    const std::string attach_prefix = lsqp_task_.AttachmentPrefix();
+    for (const auto& fingertip_name : mjpc::Lsqp::FINGERTIP_NAMES) {
+      const auto fingertip_target = lsqp_task_.FingertipTargetBodyName(fingertip_name);
       assert(mjpc::QueryBodyMocapId(model, fingertip_target.c_str()) >= 0);
-      const auto finger_site_name = attach_prefix + fingertip_name;
+      const auto finger_site_name = lsqp_task_.FingertipSiteName(fingertip_name);
       if (auto* finger_site_pos = mjpc::QuerySitePos(model, data, finger_site_name.c_str())) {
         mjpc::AddGeom(scn, mjGEOM_SPHERE, (mjtNum[]){0.02, 0.02, 0.02},
                       finger_site_pos,
@@ -157,7 +196,7 @@ protected:
       }
     }
 
-    if (auto* attachment_site_pos = mjpc::QuerySitePos(model, data, "attachment_site")) {
+    if (auto* attachment_site_pos = mjpc::QuerySitePos(model, data, mjpc::Lsqp::ATTACHMENT_SITE_NAME)) {
       mjpc::AddGeom(scn, mjGEOM_SPHERE, (mjtNum[]){0.06, 0.06, 0.06},
                     attachment_site_pos,
                     nullptr,
@@ -171,6 +210,7 @@ private:
   std::vector<int> jnt_ids_;
   std::vector<int> actuator_ids_;
 #endif
+  mjpc::Lsqp lsqp_task_;
   mjpc::LsqpPlannerPtr lsqp_planner_ = std::make_shared<mjpc::LsqpPlanner>(mjpc::MjOwnerAppType::MJAPP);
 };
 } // namespace mujoco

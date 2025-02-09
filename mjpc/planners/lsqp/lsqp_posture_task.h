@@ -12,7 +12,7 @@ public:
                   double lm_damping = 1.0) :
     LsqpBaseTask(std::move(name), model, cost, gain, lm_damping),
     target_q_(Eigen::VectorXd::Zero(model->nq)),
-    v_ids_(GetFreeJointDims(model).second) {
+    free_dof_ids_(GetFreeJointDims(model).second) {
     k_ = model->nv;
     SetCost(cost);
   }
@@ -38,33 +38,33 @@ public:
     target_q_ = std::move(target);
   }
 
-  Eigen::VectorXd ComputeError(const LsqpConfig& config) const override {
+  Eigen::VectorXd ComputeError(mjData* data, const LsqpConfig& config) const override {
     if (Empty()) {
       throw std::runtime_error("`target_q_` is empty");
     }
 
-    // NOTE: mj_differentiatePos calculates qpos2 ⊖ qpos1.
-    Eigen::VectorXd qvel = Eigen::VectorXd::Zero(config.nv());
-    mj_differentiatePos(config.MjModel(), qvel.data(), 1.0, config.MjData()->qpos, target_q_.data());
-    mjpc::ResetEigenVector(qvel, v_ids_);
-    return qvel;
+    assert(target_q_.size() == config.nq());
+    Eigen::VectorXd dq = Eigen::VectorXd::Zero(config.nq());
+    mj_differentiatePos(config.MjModel(), dq.data(), 1.0, data->qpos, target_q_.data());
+    mjpc::ResetEigenVector(dq, free_dof_ids_);
+    return dq;
   }
 
-  Eigen::MatrixXd ComputeJac(const LsqpConfig& config) const override {
+  Eigen::MatrixXd ComputeJac(mjData* data, const LsqpConfig& config) const override {
     if (Empty()) {
       throw std::runtime_error("`target_q_` is empty");
     }
 
     // !NOTE: Must declare [jac]'s type explicitly here for [setZero()] to compile
     Eigen::MatrixXd jac = -Eigen::MatrixXd::Identity(config.nv(), config.nv());
-    for (int v_id : v_ids_) {
-      jac.col(v_id).setZero();
+    for (int dof_id : free_dof_ids_) {
+      jac.col(dof_id).setZero();
     }
     return jac;
   }
 
 private:
   Eigen::VectorXd target_q_;
-  std::vector<int> v_ids_;
+  std::vector<int> free_dof_ids_;
 };
 }

@@ -27,27 +27,27 @@ public:
     target_CoM_ = std::move(target_q);
   }
 
-  virtual void SetTargetFromConfig(const LsqpConfig& config) {
-    SetTarget(mjpc::PosToEigen(&config.MjData()->subtree_com[1], k_));
+  virtual void SetTargetFromConfig(mjData* data, const LsqpConfig& config) {
+    SetTarget(mjpc::PosToEigen(&data->subtree_com[1], k_));
   }
 
-  Eigen::VectorXd ComputeError(const LsqpConfig& config) const override {
+  Eigen::VectorXd ComputeError(mjData* data, const LsqpConfig& config) const override {
     if (Empty()) {
       throw std::runtime_error("`target_CoM_` is empty");
     }
 
     std::vector<double> res(k_, 0);
-    mju_sub(res.data(), &config.MjData()->subtree_com[1], target_CoM_.data(), k_);
+    mju_sub(res.data(), &data->subtree_com[1], target_CoM_.data(), k_);
     return mjpc::PosToEigen(res.data(), k_);
   }
 
-  Eigen::MatrixXd ComputeJac(const LsqpConfig& config) const override {
+  Eigen::MatrixXd ComputeJac(mjData* data, const LsqpConfig& config) const override {
     if (Empty()) {
       throw std::runtime_error("`target_CoM_` is empty");
     }
 
     const auto jac = Eigen::MatrixXd(k_, config.nv());
-    mj_jacSubtreeCom(config.MjModel(), const_cast<mjData*>(config.MjData()), jac.data(), 1);
+    mj_jacSubtreeCom(config.MjModel(), data, jac.data(), 1);
     return jac;
   }
 
