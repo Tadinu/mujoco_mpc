@@ -42,7 +42,7 @@ public:
   }
   int GetStaticObstaclesNum() const override { return 2; }
   int GetDynamicObstaclesNum() const override {
-    return (planner_ && planner_->is_tuning_on()) ? static_cast<int>(GetCollisionLinkNames().size()) : 0;
+    return (planner_ && planner_->IsTuningOn()) ? static_cast<int>(GetCollisionLinkNames().size()) : 0;
   }
   int GetPlaneConstraintsNum() const override { return 0; }
   int GetActionDim() const override {

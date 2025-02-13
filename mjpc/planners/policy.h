@@ -20,7 +20,6 @@
 #include "mjpc/task.h"
 
 namespace mjpc {
-
 // virtual policy
 class Policy {
 public:
@@ -38,8 +37,14 @@ public:
   // the feedback term off and returns the nominal action for that time
   virtual void Action(double* action, const double* state, double time,
                       const std::vector<int>& indices = {}) const = 0;
-};
 
-}  // namespace mjpc
+  Policy& operator()(int dim_action) {
+    this->dim_action = dim_action;
+    return *this;
+  }
+
+  int dim_action = 0;
+};
+} // namespace mjpc
 
 #endif  // MJPC_PLANNERS_POLICY_H_

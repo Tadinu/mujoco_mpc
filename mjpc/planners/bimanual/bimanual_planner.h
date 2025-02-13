@@ -114,9 +114,9 @@ public:
     // dimensions
     dim_state_ = model->nq + model->nv + model->na; // state dimension
     dim_state_derivative_ = 2 * model->nv + model->na; // state derivative dimension
-    dim_action_ = task.GetActionDim(); // action dimension
+    action_dim_ = task.GetActionDim(); // action dimension
     dim_sensor_ = model->nsensordata; // number of sensor values
-    dim_max_ = std::max({dim_state_, dim_state_derivative_, dim_action_, model->nuser_sensor});
+    dim_max_ = std::max({dim_state_, dim_state_derivative_, action_dim_, model->nuser_sensor});
 
     if (trajectory_) {
       trajectory_->Reset(0);
@@ -137,7 +137,7 @@ public:
   }
 
   void Allocate() override {
-    trajectory_->Initialize(dim_state_, dim_action_, task_->num_residual, task_->num_trace, 1);
+    trajectory_->Initialize(dim_state_, action_dim_, task_->num_residual, task_->num_trace, 1);
     trajectory_->Allocate(1);
   }
 
@@ -252,7 +252,6 @@ protected:
   std::shared_ptr<mjpc::Trajectory> trajectory_ = nullptr;
   int dim_state_ = 0; // state
   int dim_state_derivative_ = 0; // state derivative
-  int dim_action_ = 0; // action
   int dim_sensor_ = 0; // output (i.e., all sensors)
   int dim_max_ = 0; // maximum dimension
   mutable std::shared_mutex policy_mutex_;

@@ -23,30 +23,31 @@
 #include "mjpc/utilities.h"
 
 namespace mjpc {
-
 // allocate memory
 void iLQGPolicy::Allocate(const mjModel* model, const Task& task, int horizon) {
+  assert(dim_action > 0);
+
   // model
   this->model = model;
 
   // reference trajectory
-  trajectory->Initialize(model->nq + model->nv + model->na, model->nu, task.num_residual, task.num_trace,
+  trajectory->Initialize(model->nq + model->nv + model->na, dim_action, task.num_residual, task.num_trace,
                          kMaxTrajectoryHorizon);
   trajectory->Allocate(kMaxTrajectoryHorizon);
 
   // feedback gains
-  feedback_gain.resize(model->nu * (2 * model->nv + model->na) * kMaxTrajectoryHorizon);
+  feedback_gain.resize(dim_action * (2 * model->nv + model->na) * kMaxTrajectoryHorizon);
 
   // action improvement
-  action_improvement.resize(model->nu * kMaxTrajectoryHorizon);
+  action_improvement.resize(dim_action * kMaxTrajectoryHorizon);
 
   // scratch
   state_scratch.resize(model->nq + model->nv + model->na);
-  action_scratch.resize(model->nu);
+  action_scratch.resize(dim_action);
 
   // interpolation
   // feedback gains ((T - 1) * dim_action * dim_state_derivative)
-  feedback_gain_scratch.resize(model->nu * (2 * model->nv + model->na));
+  feedback_gain_scratch.resize(dim_action * (2 * model->nv + model->na));
 
   // state interpolation (dim_state_derivative)
   state_interp.resize(model->nq + model->nv + model->na);
@@ -58,13 +59,13 @@ void iLQGPolicy::Allocate(const mjModel* model, const Task& task, int horizon) {
 // reset memory to zeros
 void iLQGPolicy::Reset(int horizon, const double* initial_repeated_action) {
   trajectory->Reset(horizon, initial_repeated_action);
-  std::fill(feedback_gain.begin(), feedback_gain.begin() + horizon * model->nu * (2 * model->nv + model->na),
+  std::fill(feedback_gain.begin(), feedback_gain.begin() + horizon * dim_action * (2 * model->nv + model->na),
             0.0);
-  std::fill(action_improvement.begin(), action_improvement.begin() + horizon * model->nu, 0.0);
+  std::fill(action_improvement.begin(), action_improvement.begin() + horizon * dim_action, 0.0);
   std::fill(state_scratch.begin(), state_scratch.begin() + model->nq + model->nv + model->na, 0.0);
-  std::fill(action_scratch.begin(), action_scratch.begin() + model->nu, 0.0);
+  std::fill(action_scratch.begin(), action_scratch.begin() + dim_action, 0.0);
   std::fill(feedback_gain_scratch.begin(),
-            feedback_gain_scratch.begin() + model->nu * (2 * model->nv + model->na), 0.0);
+            feedback_gain_scratch.begin() + dim_action * (2 * model->nv + model->na), 0.0);
   std::fill(state_interp.begin(), state_interp.begin() + model->nq + model->nv + model->na, 0.0);
 
   feedback_scaling = 1.0;
@@ -76,7 +77,6 @@ void iLQGPolicy::Action(double* action, const double* state, double time,
   // dimension
   int dim_state = model->nq + model->nv + model->na;
   int dim_state_derivative = 2 * model->nv + model->na;
-  int dim_action = model->nu;
 
   // find times bounds
   int bounds[2];
@@ -85,7 +85,7 @@ void iLQGPolicy::Action(double* action, const double* state, double time,
   // interpolate
   if (bounds[0] == bounds[1] || representation == 0) {
     // action reference
-    ZeroInterpolation(action, time, trajectory->times, trajectory->actions.data(), model->nu,
+    ZeroInterpolation(action, time, trajectory->times, trajectory->actions.data(), dim_action,
                       trajectory->horizon - 1);
 
     if (state) {
@@ -99,7 +99,7 @@ void iLQGPolicy::Action(double* action, const double* state, double time,
     }
   } else if (representation == 1) {
     // action
-    LinearInterpolation(action, time, trajectory->times, trajectory->actions.data(), model->nu,
+    LinearInterpolation(action, time, trajectory->times, trajectory->actions.data(), dim_action,
                         trajectory->horizon - 1);
 
     if (state) {
@@ -115,7 +115,7 @@ void iLQGPolicy::Action(double* action, const double* state, double time,
     }
   } else if (representation == 2) {
     // action
-    CubicInterpolation(action, time, trajectory->times, trajectory->actions.data(), model->nu,
+    CubicInterpolation(action, time, trajectory->times, trajectory->actions.data(), dim_action,
                        trajectory->horizon - 1);
 
     if (state) {
@@ -150,10 +150,9 @@ void iLQGPolicy::CopyFrom(const iLQGPolicy& policy, int horizon) {
 
   // feedback gains
   mju_copy(feedback_gain.data(), policy.feedback_gain.data(),
-           horizon * model->nu * (2 * model->nv + model->na));
+           horizon * dim_action * (2 * model->nv + model->na));
 
   // action improvement
-  mju_copy(action_improvement.data(), policy.action_improvement.data(), horizon * model->nu);
+  mju_copy(action_improvement.data(), policy.action_improvement.data(), horizon * dim_action);
 }
-
-}  // namespace mjpc
+} // namespace mjpc

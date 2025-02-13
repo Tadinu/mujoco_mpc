@@ -28,7 +28,6 @@
 #include "mjpc/trajectory.h"
 
 namespace mjpc {
-
 // planner for iLQG
 class iLQGPlanner : public Planner {
 public:
@@ -103,11 +102,10 @@ public:
   iLQGPolicy candidate_policy[kMaxTrajectory];
 
   // dimensions
-  int dim_state;             // state
-  int dim_state_derivative;  // state derivative
-  int dim_action;            // action
-  int dim_sensor;            // output (i.e., all sensors)
-  int dim_max;               // maximum dimension
+  int dim_state; // state
+  int dim_state_derivative; // state derivative
+  int dim_sensor; // output (i.e., all sensors)
+  int dim_max; // maximum dimension
 
   // model derivatives
   ModelDerivatives model_derivative;
@@ -153,7 +151,6 @@ private:
   int num_rollouts_gui_ = 1;
   int derivative_skip_ = 0;
 };
-
-}  // namespace mjpc
+} // namespace mjpc
 
 #endif  // MJPC_PLANNERS_ILQG_PLANNER_H_

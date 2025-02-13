@@ -54,6 +54,20 @@ public:
     }
   }
 
+  // action
+  int GetActionDim() const {
+    return action_dim_;
+  }
+
+  void SetActionDim(int dim) {
+    action_dim_ = dim;
+  }
+
+  // action limits
+  void SetActionLimits(std::vector<double> limits) {
+    action_limits_ = std::move(limits);
+  }
+
   // allocate memory
   virtual void Allocate() = 0;
 
@@ -95,7 +109,6 @@ public:
   // return number of parameters optimized by planner
   virtual int NumParameters() = 0;
 
-  std::vector<UniqueMjData> data_;
   void ResizeMjData(const mjModel* model, int num_threads);
 
   TrajectoryPtr trajectory[kMaxTrajectory];
@@ -103,12 +116,15 @@ public:
   MjOwnerAppType OwnerType() const { return owner_type_; }
   virtual urdf::UrdfModel RobotURDFModel() const { return {}; }
   virtual MjcfModel RobotMJCFModel() const { return {}; }
-  bool is_tuning_on() const { return tuning_on_; }
-  void set_tuning_on(bool on) { tuning_on_ = on; }
+  bool IsTuningOn() const { return tuning_on_; }
+  void SetTuningOn(bool on) { tuning_on_ = on; }
 
 protected:
   MjOwnerAppType owner_type_ = MjOwnerAppType::MJPC;
+  std::vector<UniqueMjData> data_;
   bool tuning_on_ = false;
+  int action_dim_ = 0;
+  std::vector<double> action_limits_; // [2 x action_dim_]
 };
 
 // additional optional interface for planners that can produce several policy

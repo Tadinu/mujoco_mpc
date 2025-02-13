@@ -49,6 +49,10 @@ void CrossEntropyPlanner::Initialize(mjModel* model, const Task& task) {
 
   // model
   this->model = model;
+  action_dim_ = model->nu;
+  const auto limits_num = 2 * action_dim_;
+  action_limits_.resize(limits_num);
+  mju_copy(action_limits_.data(), model->actuator_ctrlrange, limits_num); // [min, max, min, max, ..]
 
   // task
   this->task = &task;
@@ -82,20 +86,20 @@ void CrossEntropyPlanner::Allocate() {
   userdata.resize(model->nuserdata);
 
   // policy
-  int num_max_parameter = model->nu * kMaxTrajectoryHorizon;
-  policy.Allocate(model, *task, kMaxTrajectoryHorizon);
-  nominal_policy.Allocate(model, *task, kMaxTrajectoryHorizon);
-  previous_policy.Allocate(model, *task, kMaxTrajectoryHorizon);
+  int num_max_parameter = action_dim_ * kMaxTrajectoryHorizon;
+  policy(action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
+  nominal_policy(action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
+  previous_policy(action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
 
   // scratch
   parameters_scratch.resize(num_max_parameter);
   times_scratch.resize(kMaxTrajectoryHorizon);
 
   // noise
-  noise.resize(kMaxTrajectory * (model->nu * kMaxTrajectoryHorizon));
+  noise.resize(kMaxTrajectory * (action_dim_ * kMaxTrajectoryHorizon));
 
   // variance
-  variance.resize(model->nu * kMaxTrajectoryHorizon);  // (nu * horizon)
+  variance.resize(action_dim_ * kMaxTrajectoryHorizon); // (nu * horizon)
 
   // need to initialize an arbitrary order of the trajectories
   trajectory_order.resize(kMaxTrajectory);
@@ -105,12 +109,12 @@ void CrossEntropyPlanner::Allocate() {
 
   // trajectories and parameters
   for (int i = 0; i < kMaxTrajectory; i++) {
-    trajectory[i]->Initialize(num_state, model->nu, task->num_residual, task->num_trace,
+    trajectory[i]->Initialize(num_state, action_dim_, task->num_residual, task->num_trace,
                               kMaxTrajectoryHorizon);
     trajectory[i]->Allocate(kMaxTrajectoryHorizon);
-    candidate_policy[i].Allocate(model, *task, kMaxTrajectoryHorizon);
+    candidate_policy[i](action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
   }
-  nominal_trajectory->Initialize(num_state, model->nu, task->num_residual, task->num_trace,
+  nominal_trajectory->Initialize(num_state, action_dim_, task->num_residual, task->num_trace,
                                  kMaxTrajectoryHorizon);
   nominal_trajectory->Allocate(kMaxTrajectoryHorizon);
 }
@@ -147,7 +151,7 @@ void CrossEntropyPlanner::Reset(int horizon, const double* initial_repeated_acti
   nominal_trajectory->Reset(kMaxTrajectoryHorizon);
 
   for (const auto& d : data_) {
-    mju_zero(d->ctrl, model->nu);
+    mju_zero(d->ctrl, action_dim_);
   }
 
   // improvement
@@ -222,7 +226,7 @@ void CrossEntropyPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
 
   // dimensions
   int num_spline_points = nominal_policy.num_spline_points;
-  int num_parameters = num_spline_points * model->nu;
+  int num_parameters = num_spline_points * action_dim_;
 
   // averaged return over elites
   double avg_return = 0.0;
@@ -240,8 +244,8 @@ void CrossEntropyPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
     // add parameters
     for (int t = 0; t < num_spline_points; t++) {
       TimeSpline::ConstNode n = elite_plan.NodeAt(t);
-      for (int j = 0; j < model->nu; j++) {
-        parameters_scratch[t * model->nu + j] += n.values()[j];
+      for (int j = 0; j < action_dim_; j++) {
+        parameters_scratch[t * action_dim_ + j] += n.values()[j];
       }
     }
 
@@ -261,14 +265,14 @@ void CrossEntropyPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
     const TimeSpline& elite_plan = candidate_policy[idx].plan;
     for (int t = 0; t < num_spline_points; t++) {
       TimeSpline::ConstNode n = elite_plan.NodeAt(t);
-      for (int j = 0; j < model->nu; j++) {
+      for (int j = 0; j < action_dim_; j++) {
         // average
-        const double p_avg = parameters_scratch[t * model->nu + j];
+        const double p_avg = parameters_scratch[t * action_dim_ + j];
 
         // candidate parameter
         const double pi = n.values()[j];
         const double diff = pi - p_avg;
-        variance[t * model->nu + j] += (n_elite >= 1) ? (n_elite * pow(diff, 2)) / (n_elite - 1) : 0;
+        variance[t * action_dim_ + j] += (n_elite >= 1) ? (n_elite * pow(diff, 2)) / (n_elite - 1) : 0;
       }
     }
   }
@@ -288,8 +292,8 @@ void CrossEntropyPlanner::UpdatePolicyWithScratch(SamplingPolicy& in_policy) {
   in_policy.plan.Clear();
   in_policy.plan.SetInterpolation(interpolation_);
   for (int t = 0; t < in_policy.num_spline_points; t++) {
-    absl::Span<const double> values = absl::MakeConstSpan(parameters_scratch.data() + t * model->nu,
-                                                          parameters_scratch.data() + (t + 1) * model->nu);
+    absl::Span<const double> values = absl::MakeConstSpan(parameters_scratch.data() + t * action_dim_,
+                                                          parameters_scratch.data() + (t + 1) * action_dim_);
     in_policy.plan.AddNode(times_scratch[t], values);
   }
 }
@@ -330,15 +334,15 @@ void CrossEntropyPlanner::ResamplePolicy(int horizon) {
   // get spline points
   for (int t = 0; t < num_spline_points; t++) {
     times_scratch[t] = nominal_time;
-    nominal_policy.Action(DataAt(parameters_scratch, t * model->nu), nullptr, nominal_time);
+    nominal_policy.Action(DataAt(parameters_scratch, t * action_dim_), nullptr, nominal_time);
     nominal_time += time_shift;
   }
 
   // copy resampled policy parameters
   nominal_policy.plan.Clear();
   for (int t = 0; t < num_spline_points; t++) {
-    absl::Span<const double> values = absl::MakeConstSpan(parameters_scratch.data() + t * model->nu,
-                                                          parameters_scratch.data() + (t + 1) * model->nu);
+    absl::Span<const double> values = absl::MakeConstSpan(parameters_scratch.data() + t * action_dim_,
+                                                          parameters_scratch.data() + (t + 1) * action_dim_);
     nominal_policy.plan.AddNode(times_scratch[t], values);
   }
   nominal_policy.plan.SetInterpolation(policy.plan.Interpolation());
@@ -351,13 +355,13 @@ void CrossEntropyPlanner::AddNoiseToPolicy(int i, double std_min) {
 
   // dimensions
   int num_spline_points = candidate_policy[i].num_spline_points;
-  int num_parameters = num_spline_points * model->nu;
+  int num_parameters = num_spline_points * action_dim_;
 
   // sampling token
   absl::BitGen gen_;
 
   // shift index
-  int shift = i * (model->nu * kMaxTrajectoryHorizon);
+  int shift = i * (action_dim_ * kMaxTrajectoryHorizon);
 
   // sample noise
   // variance[k] is the standard deviation for the k^th control parameter over
@@ -370,9 +374,9 @@ void CrossEntropyPlanner::AddNoiseToPolicy(int i, double std_min) {
   for (int k = 0; k < candidate_policy[i].plan.Size(); k++) {
     TimeSpline::Node n = candidate_policy[i].plan.NodeAt(k);
     // add noise
-    mju_addTo(n.values().data(), DataAt(noise, shift + k * model->nu), model->nu);
+    mju_addTo(n.values().data(), DataAt(noise, shift + k * action_dim_), action_dim_);
     // clamp parameters
-    Clamp(n.values().data(), model->actuator_ctrlrange, model->nu);
+    Clamp(n.values().data(), action_limits_.data(), action_dim_);
   }
 
   // end timer

@@ -30,7 +30,6 @@
 #include "mjpc/trajectory.h"
 
 namespace mjpc {
-
 // sampling planner limits
 inline constexpr int MinSamplingSplinePoints = 1;
 inline constexpr int MaxSamplingSplinePoints = 36;
@@ -91,7 +90,7 @@ public:
              int* shift) override;
 
   // return number of parameters optimized by planner
-  int NumParameters() override { return policy.num_spline_points * model->nu; };
+  int NumParameters() override { return policy.num_spline_points * action_dim_; };
 
   // optimizes policies, but rather than picking the best, generate up to
   // ncandidates. returns number of candidates created.
@@ -116,7 +115,7 @@ public:
   std::vector<double> userdata;
 
   // policy
-  SamplingPolicy policy;  // (Guarded by mtx_)
+  SamplingPolicy policy; // (Guarded by mtx_)
   SamplingPolicy candidate_policy[kMaxTrajectory];
   SamplingPolicy previous_policy;
 
@@ -127,7 +126,7 @@ public:
   std::vector<int> trajectory_order;
 
   // ----- noise ----- //
-  double noise_exploration[2] = {0};  // stds for sampling: N(0, exploration)
+  double noise_exploration[2] = {0}; // stds for sampling: N(0, exploration)
   std::vector<double> noise;
   mjpc::spline::SplineInterpolation interpolation_ = mjpc::spline::SplineInterpolation::kZeroSpline;
 
@@ -151,7 +150,6 @@ public:
   int num_trajectory_;
   mutable std::shared_mutex mtx_;
 };
-
-}  // namespace mjpc
+} // namespace mjpc
 
 #endif  // MJPC_PLANNERS_SAMPLING_PLANNER_H_

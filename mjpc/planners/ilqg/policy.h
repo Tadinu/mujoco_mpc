@@ -24,7 +24,6 @@
 #include "mjpc/trajectory.h"
 
 namespace mjpc {
-
 // iLQG policy
 class iLQGPolicy : public Policy {
 public:
@@ -52,13 +51,13 @@ public:
   // ----- members ----- //
   const mjModel* model;
 
-  TrajectoryPtr trajectory = std::make_shared<Trajectory>();  // reference trajectory
-  std::vector<double> feedback_gain;                          // (T * dim_action * dim_state_derivative)
-  std::vector<double> action_improvement;                     // (T * dim_action)
+  TrajectoryPtr trajectory = std::make_shared<Trajectory>(); // reference trajectory
+  std::vector<double> feedback_gain; // (T * dim_action * dim_state_derivative)
+  std::vector<double> action_improvement; // (T * dim_action)
 
   // scratch space
-  mutable std::vector<double> state_scratch;   // dim_state
-  mutable std::vector<double> action_scratch;  // dim_action
+  mutable std::vector<double> state_scratch; // dim_state
+  mutable std::vector<double> action_scratch; // dim_action
 
   // interpolation
   mutable std::vector<double> feedback_gain_scratch;
@@ -66,7 +65,6 @@ public:
   int representation;
   double feedback_scaling;
 };
-
-}  // namespace mjpc
+} // namespace mjpc
 
 #endif  // MJPC_PLANNERS_ILQG_POLICY_H_

@@ -25,26 +25,27 @@
 #include "mjpc/utilities.h"
 
 namespace mjpc {
-
 using mjpc::spline::SplineInterpolation;
 
 // allocate memory
 void GradientPolicy::Allocate(const mjModel* model, const Task& task, int horizon) {
+  assert(dim_action > 0);
+
   // model
   this->model = model;
 
   // action improvement
-  k.resize(model->nu * kMaxTrajectoryHorizon);
+  k.resize(dim_action * kMaxTrajectoryHorizon);
 
   // parameters
-  parameters.resize(model->nu * kMaxTrajectoryHorizon);
-  parameter_update.resize(model->nu * kMaxTrajectoryHorizon);
+  parameters.resize(dim_action * kMaxTrajectoryHorizon);
+  parameter_update.resize(dim_action * kMaxTrajectoryHorizon);
 
   // parameter times
   times.resize(kMaxTrajectoryHorizon);
 
   // dimensions
-  num_parameters = model->nu * kMaxTrajectoryHorizon;
+  num_parameters = dim_action * kMaxTrajectoryHorizon;
 
   // spline points
   num_spline_points = GetNumberOrDefault(kMaxTrajectoryHorizon, model, "gradient_spline_points");
@@ -55,17 +56,17 @@ void GradientPolicy::Allocate(const mjModel* model, const Task& task, int horizo
 
 // reset memory to zeros
 void GradientPolicy::Reset(int horizon, const double* initial_repeated_action) {
-  std::fill(k.begin(), k.begin() + horizon * model->nu, 0.0);
+  std::fill(k.begin(), k.begin() + horizon * dim_action, 0.0);
 
   // parameters
   if (initial_repeated_action != nullptr) {
     for (int i = 0; i < horizon; ++i) {
-      mju_copy(parameters.data() + i * model->nu, initial_repeated_action, model->nu);
+      mju_copy(parameters.data() + i * dim_action, initial_repeated_action, dim_action);
     }
   } else {
-    std::fill(parameters.begin(), parameters.begin() + model->nu * horizon, 0.0);
+    std::fill(parameters.begin(), parameters.begin() + dim_action * horizon, 0.0);
   }
-  std::fill(parameter_update.begin(), parameter_update.begin() + model->nu * horizon, 0.0);
+  std::fill(parameter_update.begin(), parameter_update.begin() + dim_action * horizon, 0.0);
 
   // policy parameter times
   std::fill(times.begin(), times.begin() + horizon, 0.0);
@@ -81,21 +82,21 @@ void GradientPolicy::Action(double* action, const double* state, double time,
   // ----- get action ----- //
 
   if (bounds[0] == bounds[1] || representation == SplineInterpolation::kZeroSpline) {
-    ZeroInterpolation(action, time, times, parameters.data(), model->nu, num_spline_points, indices);
+    ZeroInterpolation(action, time, times, parameters.data(), dim_action, num_spline_points, indices);
   } else if (representation == SplineInterpolation::kLinearSpline) {
-    LinearInterpolation(action, time, times, parameters.data(), model->nu, num_spline_points, indices);
+    LinearInterpolation(action, time, times, parameters.data(), dim_action, num_spline_points, indices);
   } else if (representation == SplineInterpolation::kCubicSpline) {
-    CubicInterpolation(action, time, times, parameters.data(), model->nu, num_spline_points, indices);
+    CubicInterpolation(action, time, times, parameters.data(), dim_action, num_spline_points, indices);
   }
 
   // Clamp controls
-  Clamp(action, model->actuator_ctrlrange, model->nu);
+  Clamp(action, model->actuator_ctrlrange, dim_action);
 }
 
 // copy policy
 void GradientPolicy::CopyFrom(const GradientPolicy& policy, int horizon) {
   // action improvement
-  mju_copy(k.data(), policy.k.data(), horizon * model->nu);
+  mju_copy(k.data(), policy.k.data(), horizon * dim_action);
 
   // parameters
   mju_copy(parameters.data(), policy.parameters.data(), policy.num_parameters);
@@ -114,8 +115,7 @@ void GradientPolicy::CopyFrom(const GradientPolicy& policy, int horizon) {
 // copy parameters
 void GradientPolicy::CopyParametersFrom(const std::vector<double>& src_parameters,
                                         const std::vector<double>& src_times) {
-  mju_copy(parameters.data(), src_parameters.data(), num_spline_points * model->nu);
+  mju_copy(parameters.data(), src_parameters.data(), num_spline_points * dim_action);
   mju_copy(times.data(), src_times.data(), num_spline_points);
 }
-
-}  // namespace mjpc
+} // namespace mjpc

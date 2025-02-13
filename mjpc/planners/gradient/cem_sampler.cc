@@ -1,18 +1,18 @@
 #include "mjpc/planners/gradient/cem_sampler.h"
 
 namespace mjpc {
-
 void CEMSampler::Initialize(mjModel* model, const Task& task) {
   // model
   this->model_ = model;
+  action_dim_ = model->nu;
 
   // task
   this->task_ = &task;
 
   // sampling noise
   std_initial_ = GetNumberOrDefault(0.1, model,
-                                    "sampling_exploration");  // initial variance
-  std_min_ = GetNumberOrDefault(0.01, model, "std_min");      // minimum variance
+                                    "sampling_exploration"); // initial variance
+  std_min_ = GetNumberOrDefault(0.01, model, "std_min"); // minimum variance
   // fraction of the trajectories that will use full exploration noise
   explore_fraction_ = GetNumberOrDefault(0.0, model, "explore_fraction");
 
@@ -20,7 +20,7 @@ void CEMSampler::Initialize(mjModel* model, const Task& task) {
   num_trajectory_ = GetNumberOrDefault(10, model, "sampling_trajectories");
 
   // set number of elite samples max(best 10%, 2)
-  n_elite_ = GetNumberOrDefault(std::max(num_trajectory_ / 10, 2), model, "n_elite");
+  n_elite = GetNumberOrDefault(std::max(num_trajectory_ / 10, 2), model, "n_elite");
 
   if (num_trajectory_ > kMaxTrajectory) {
     mju_error_i("Too many trajectories, %d is the maximum allowed.", kMaxTrajectory);
@@ -29,19 +29,19 @@ void CEMSampler::Initialize(mjModel* model, const Task& task) {
 
 void CEMSampler::Allocate() {
   // policy
-  policy_.Allocate(model_, *task_, kMaxTrajectoryHorizon);
-  nominal_policy_.Allocate(model_, *task_, kMaxTrajectoryHorizon);
-  previous_policy_.Allocate(model_, *task_, kMaxTrajectoryHorizon);
+  policy_(action_dim_).Allocate(model_, *task_, kMaxTrajectoryHorizon);
+  nominal_policy_(action_dim_).Allocate(model_, *task_, kMaxTrajectoryHorizon);
+  previous_policy_(action_dim_).Allocate(model_, *task_, kMaxTrajectoryHorizon);
 
   // scratch
-  parameters_scratch_.resize(model_->nu * kMaxTrajectoryHorizon);
+  parameters_scratch.resize(model_->nu * kMaxTrajectoryHorizon);
   // times_scratch.resize(kMaxTrajectoryHorizon);
 
   // noise
-  noise_.resize(kMaxTrajectory * (model_->nu * kMaxTrajectoryHorizon));
+  noise.resize(kMaxTrajectory * (model_->nu * kMaxTrajectoryHorizon));
 
   // variance
-  variance_.resize(model_->nu * kMaxTrajectoryHorizon);  // (nu * horizon)
+  variance.resize(model_->nu * kMaxTrajectoryHorizon); // (nu * horizon)
 }
 
 // reset memory to zeros
@@ -54,14 +54,14 @@ void CEMSampler::Reset(int horizon, const double* initial_repeated_action) {
   previous_policy_.Reset(horizon, initial_repeated_action);
 
   // scratch
-  std::fill(parameters_scratch_.begin(), parameters_scratch_.end(), 0.0);
+  std::fill(parameters_scratch.begin(), parameters_scratch.end(), 0.0);
   // std::fill(times_scratch.begin(), times_scratch.end(), 0.0);
 
   // noise
-  std::fill(noise_.begin(), noise_.end(), 0.0);
+  std::fill(noise.begin(), noise.end(), 0.0);
 
   // variance
-  std::fill(variance_.begin(), variance_.end(), std_initial_ * std_initial_);
+  std::fill(variance.begin(), variance.end(), std_initial_ * std_initial_);
 
   // trajectory samples
   for (int i = 0; i < kMaxTrajectory; i++) {
@@ -97,14 +97,14 @@ void CEMSampler::AddNoiseToPolicy(GradientPolicy& in_policy, int i) {
   // the elite samples we draw a bunch of control actions from this distribution
   // (which i indexes) - the noise is stored in `noise`.
   for (int k = 0; k < num_parameters; k++) {
-    noise_[k + shift] = absl::Gaussian<double>(gen_, 0.0, std::max(std::sqrt(variance_[k]), std_min_));
+    noise[k + shift] = absl::Gaussian<double>(gen_, 0.0, std::max(std::sqrt(variance[k]), std_min_));
   }
 
   for (int k = 0; k < in_policy.parameters.size(); k++) {
     // add noise
-    mju_addTo(in_policy.parameters.data(), DataAt(noise_, shift + k * model_->nu), model_->nu);
+    mju_addTo(in_policy.parameters.data(), DataAt(noise, shift + k * model_->nu), model_->nu);
     // clamp parameters
     Clamp(in_policy.parameters.data(), model_->actuator_ctrlrange, model_->nu);
   }
 }
-}  // namespace mjpc
+} // namespace mjpc

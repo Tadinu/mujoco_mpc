@@ -86,7 +86,7 @@ public:
              int* shift) override;
 
   // return number of parameters optimized by planner
-  int NumParameters() override { return policy.num_spline_points * policy.model->nu; };
+  int NumParameters() override { return policy.num_spline_points * action_dim_; };
 
   // ----- members ----- //
   mjModel* model;
@@ -105,8 +105,8 @@ public:
   SamplingPolicy previous_policy;
 
   // scratch
-  std::vector<double> parameters_scratch;
-  std::vector<double> times_scratch;
+  std::vector<double> parameters_scratch; // [action_dim_]
+  std::vector<double> times_scratch; // [action_dim_]
   void UpdatePolicyWithScratch(SamplingPolicy& in_policy);
 
   // trajectories

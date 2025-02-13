@@ -38,9 +38,9 @@ void IdtoPlanner::Initialize(mjModel* model, const mjpc::Task& task) {
   // dimensions
   dim_state_ = model->nq + model->nv + model->na;     // state dimension
   dim_state_derivative_ = 2 * model->nv + model->na;  // state derivative dimension
-  dim_action_ = task.GetActionDim();                  // action dimension
+  action_dim_ = task.GetActionDim();                  // action dimension
   dim_sensor_ = model->nsensordata;                   // number of sensor values
-  dim_max_ = std::max({dim_state_, dim_state_derivative_, dim_action_, model->nuser_sensor});
+  dim_max_ = std::max({dim_state_, dim_state_derivative_, action_dim_, model->nuser_sensor});
 
   if (trajectory_) {
     trajectory_->Reset(0);

@@ -24,18 +24,18 @@
 #include "mjpc/utilities.h"
 
 namespace mjpc {
-
 using mjpc::spline::TimeSpline;
 
 // allocate memory
 void SamplingPolicy::Allocate(const mjModel* model, const Task& task, int horizon) {
+  assert(dim_action > 0);
   // model
   this->model = model;
 
   // spline points
   num_spline_points = GetNumberOrDefault(kMaxTrajectoryHorizon, model, "sampling_spline_points");
 
-  plan = TimeSpline(/*dim=*/model->nu);
+  plan = TimeSpline(/*dim=*/dim_action);
   plan.Reserve(num_spline_points);
 }
 
@@ -43,7 +43,7 @@ void SamplingPolicy::Allocate(const mjModel* model, const Task& task, int horizo
 void SamplingPolicy::Reset(int horizon, const double* initial_repeated_action) {
   plan.Clear();
   if (initial_repeated_action != nullptr) {
-    plan.AddNode(0, absl::MakeConstSpan(initial_repeated_action, model->nu));
+    plan.AddNode(0, absl::MakeConstSpan(initial_repeated_action, dim_action));
   }
 }
 
@@ -51,10 +51,10 @@ void SamplingPolicy::Reset(int horizon, const double* initial_repeated_action) {
 void SamplingPolicy::Action(double* action, const double* state, double time,
                             const std::vector<int>& indices) const {
   CHECK(action != nullptr);
-  plan.Sample(time, absl::MakeSpan(action, model->nu), indices);
+  plan.Sample(time, absl::MakeSpan(action, dim_action), indices);
 
   // Clamp controls
-  Clamp(action, model->actuator_ctrlrange, model->nu);
+  Clamp(action, model->actuator_ctrlrange, dim_action);
 }
 
 // copy policy
@@ -65,5 +65,4 @@ void SamplingPolicy::CopyFrom(const SamplingPolicy& policy, int horizon) {
 
 // copy parameters
 void SamplingPolicy::SetPlan(const TimeSpline& plan) { this->plan = plan; }
-
-}  // namespace mjpc
+} // namespace mjpc

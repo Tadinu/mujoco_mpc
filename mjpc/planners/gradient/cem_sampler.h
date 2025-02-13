@@ -20,42 +20,45 @@
 namespace mjpc {
 // Control inputs data augmentation with noise sampling
 class CEMSampler {
-public:
+protected:
   // ----- members ----- //
   mjModel* model_;
   const Task* task_;
+  int action_dim_ = 0;
 
   // state
   std::vector<double> state_;
   double time;
 
   // policy
-  SamplingPolicy policy_;  // (Guarded by mtx_)
+  SamplingPolicy policy_; // (Guarded by mtx_)
   SamplingPolicy candidate_policies_[kMaxTrajectory];
   SamplingPolicy nominal_policy_;
   SamplingPolicy previous_policy_;
 
   TrajectoryPtr nominal_trajectory_ = std::make_shared<Trajectory>();
 
-  // scratch
-  std::vector<double> parameters_scratch_;
-
-  // number of elite samples
-  int n_elite_;
-
   // improvement
   double improvement_;
 
   // ----- noise ----- //
-  double std_initial_;           // standard deviation for sampling normal: N(0,
-                                 // std)
-  double std_min_;               // the minimum allowable std
-  double explore_fraction_ = 0;  // fraction of trajectories that will use
-                                 // std_initial instead of the variance from CEM
-  std::vector<double> noise_;
-  std::vector<double> variance_;
+  double std_initial_; // standard deviation for sampling normal: N(0,
+  // std)
+  double std_min_; // the minimum allowable std
+  double explore_fraction_ = 0; // fraction of trajectories that will use
+  // std_initial instead of the variance from CEM
   int num_trajectory_;
   mutable std::shared_mutex mtx_;
+
+public:
+  // scratch
+  std::vector<double> parameters_scratch;
+
+  // number of elite samples
+  int n_elite;
+
+  std::vector<double> noise;
+  std::vector<double> variance;
 
 public:
   // initialize data and settings
@@ -73,4 +76,4 @@ public:
   // add noise to nominal policy
   void AddNoiseToPolicy(GradientPolicy& in_policy, int i);
 };
-}  // namespace mjpc
+} // namespace mjpc

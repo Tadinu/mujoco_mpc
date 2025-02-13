@@ -30,7 +30,8 @@ public:
   static constexpr int dim = TSpace::dim;
   RMPPlanner() = default;
 
-  explicit RMPPlanner(RMPConfigs configs) : configs_(std::move(configs)) {}
+  explicit RMPPlanner(RMPConfigs configs) : configs_(std::move(configs)) {
+  }
 
   ~RMPPlanner() override = default;
 
@@ -69,7 +70,7 @@ public:
   }
 
   std::shared_ptr<RMPTrajectory<TSpace>> getTrajectory() const override {
-    return trajectory_;  // only valid if planner has run.
+    return trajectory_; // only valid if planner has run.
   };
 
   bool hasTrajectory() const override { return trajectory_.operator bool(); }
@@ -102,11 +103,12 @@ public:
     data_ = task_->data_;
 
     // dimensions
-    dim_state = model->nq + model->nv + model->na;     // state dimension
-    dim_state_derivative = 2 * model->nv + model->na;  // state derivative dimension
-    dim_action = model->nu;                            // action dimension
-    dim_sensor = model->nsensordata;                   // number of sensor values
-    dim_max = mju_max(mju_max(mju_max(dim_state, dim_state_derivative), dim_action), model->nuser_sensor);
+    this->action_dim_ = model->nu; // action dimension
+    dim_state = model->nq + model->nv + model->na; // state dimension
+    dim_state_derivative = 2 * model->nv + model->na; // state derivative dimension
+    dim_sensor = model->nsensordata; // number of sensor values
+    dim_max = mju_max(mju_max(mju_max(dim_state, dim_state_derivative), this->action_dim_),
+                      model->nuser_sensor);
 
     trajectory_ = std::make_shared<RMPTrajectory<TSpace>>();
     trajectory_->setMaxLength(configs_.max_length);
@@ -114,15 +116,17 @@ public:
 
   // allocate memory
   void Allocate() override {
-    trajectory_->Initialize(dim_state, dim_action, task_->num_residual, task_->num_trace, 1);
+    trajectory_->Initialize(dim_state, this->action_dim_, task_->num_residual, task_->num_trace, 1);
     trajectory_->Allocate(1);
   }
 
   // reset memory to zeros
-  void Reset(int horizon, const double* initial_repeated_action = nullptr) override {}
+  void Reset(int horizon, const double* initial_repeated_action = nullptr) override {
+  }
 
   // set state
-  void SetState(const mjpc::State& state) override {}
+  void SetState(const mjpc::State& state) override {
+  }
 
   VectorQ GetStartPosQ() const {
     return this->geometry_.convertPosToQ(vectorFromScalarArray<TSpace::dim>(task_->GetRobotPos()));
@@ -213,11 +217,13 @@ public:
   void Traces(mjvScene* scn) override;
 
   // planner-specific GUI elements
-  void GUI(mjUI& ui) override {}
+  void GUI(mjUI& ui) override {
+  }
 
   // planner-specific plots
   void Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, int planner_shift, int timer_shift, int planning,
-             int* shift) override {}
+             int* shift) override {
+  }
 
   // return number of parameters optimized by planner
   int NumParameters() override { return 0; }
@@ -227,17 +233,16 @@ private:
   mutable std::shared_mutex policy_mutex_;
 
   TrapezoidalIntegrator<RMPPolicyBase<TSpace>, typename RMPPlannerBase<TSpace>::RiemannianGeometry>
-      integrator_;
+  integrator_;
   RMPConfigs configs_;
   std::shared_ptr<RMPTrajectory<TSpace>> trajectory_;
 
   // dimensions
-  int dim_state = 0;             // state
-  int dim_state_derivative = 0;  // state derivative
-  int dim_action = 0;            // action
-  int dim_sensor = 0;            // output (i.e., all sensors)
-  int dim_max = 0;               // maximum dimension
+  int dim_state = 0; // state
+  int dim_state_derivative = 0; // state derivative
+  int dim_sensor = 0; // output (i.e., all sensors)
+  int dim_max = 0; // maximum dimension
 };
-}  // namespace rmp
+} // namespace rmp
 
 #endif  // RMP_PLANNER_PLANNER_RMP_H

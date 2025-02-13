@@ -702,7 +702,7 @@ public:
   void InitTaskFabrics() override;
 
   void Allocate() override {
-    trajectory_->Initialize(dim_state_, dim_action_, task_->num_residual, task_->num_trace, 1);
+    trajectory_->Initialize(dim_state_, action_dim_, task_->num_residual, task_->num_trace, 1);
     trajectory_->Allocate(1);
   }
 
@@ -861,7 +861,6 @@ protected:
   std::shared_ptr<mjpc::Trajectory> trajectory_ = nullptr;
   int dim_state_ = 0; // state
   int dim_state_derivative_ = 0; // state derivative
-  int dim_action_ = 0; // action
   int dim_sensor_ = 0; // output (i.e., all sensors)
   int dim_max_ = 0; // maximum dimension
   mutable std::shared_mutex policy_mutex_;

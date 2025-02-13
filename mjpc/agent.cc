@@ -321,8 +321,8 @@ void Agent::PlanIteration(ThreadPool* pool) {
     residual_fn_ = task->Residual();
 
     // Tuning on/off -> switch between symbolic & scalar fabrics config, need to re-init task fabrics
-    const bool tuning_switched = (planner.is_tuning_on() != tune_enabled);
-    planner.set_tuning_on(tune_enabled);
+    const bool tuning_switched = (planner.IsTuningOn() != tune_enabled);
+    planner.SetTuningOn(tune_enabled);
     if (tuning_switched) {
       planner.InitTaskFabrics();
     }

@@ -33,7 +33,6 @@
 #include "mjpc/utilities.h"
 
 namespace mjpc {
-
 namespace mju = ::mujoco::util_mjpc;
 using mjpc::spline::SplineInterpolation;
 using mjpc::spline::TimeSpline;
@@ -47,6 +46,7 @@ void SamplingPlanner::Initialize(mjModel* model, const Task& task) {
 
   // model
   this->model = model;
+  action_dim_ = model->nu;
 
   // task
   this->task = &task;
@@ -85,20 +85,20 @@ void SamplingPlanner::Allocate() {
   userdata.resize(model->nuserdata);
 
   // policy
-  policy.Allocate(model, *task, kMaxTrajectoryHorizon);
-  previous_policy.Allocate(model, *task, kMaxTrajectoryHorizon);
-  plan_scratch = TimeSpline(/*dim=*/model->nu);
+  policy(action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
+  previous_policy(action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
+  plan_scratch = TimeSpline(/*dim=*/action_dim_);
 
   // noise
-  noise.resize(kMaxTrajectory * (model->nu * kMaxTrajectoryHorizon));
+  noise.resize(kMaxTrajectory * (action_dim_ * kMaxTrajectoryHorizon));
 
   // trajectory and parameters
   winner = -1;
   for (int i = 0; i < kMaxTrajectory; i++) {
-    trajectory[i]->Initialize(num_state, model->nu, task->num_residual, task->num_trace,
+    trajectory[i]->Initialize(num_state, action_dim_, task->num_residual, task->num_trace,
                               kMaxTrajectoryHorizon);
     trajectory[i]->Allocate(kMaxTrajectoryHorizon);
-    candidate_policy[i].Allocate(model, *task, kMaxTrajectoryHorizon);
+    candidate_policy[i](action_dim_).Allocate(model, *task, kMaxTrajectoryHorizon);
   }
 }
 
@@ -131,9 +131,9 @@ void SamplingPlanner::Reset(int horizon, const double* initial_repeated_action) 
 
   for (const auto& d : data_) {
     if (initial_repeated_action) {
-      mju_copy(d->ctrl, initial_repeated_action, model->nu);
+      mju_copy(d->ctrl, initial_repeated_action, action_dim_);
     } else {
-      mju_zero(d->ctrl, model->nu);
+      mju_zero(d->ctrl, action_dim_);
     }
   }
 
@@ -321,18 +321,18 @@ void SamplingPlanner::AddNoiseToPolicy(double start_time, int i) {
 
   // get standard deviation, fixed or mixture of noise_exploration[0,1]
   double std = noise_exploration[0];
-  constexpr double kStd2Proportion = 0.2;  // hardcoded proportion of 2nd std
+  constexpr double kStd2Proportion = 0.2; // hardcoded proportion of 2nd std
   if (noise_exploration[1] > 0 && absl::Bernoulli(gen_, kStd2Proportion)) {
     std = noise_exploration[1];
   }
 
   for (const TimeSpline::Node& node : candidate_policy[i].plan) {
-    for (int k = 0; k < model->nu; k++) {
+    for (int k = 0; k < action_dim_; k++) {
       double scale = 0.5 * (model->actuator_ctrlrange[2 * k + 1] - model->actuator_ctrlrange[2 * k]);
       double noise = absl::Gaussian<double>(gen_, 0.0, scale * std);
       node.values()[k] += noise;
     }
-    Clamp(node.values().data(), model->actuator_ctrlrange, model->nu);
+    Clamp(node.values().data(), model->actuator_ctrlrange, action_dim_);
   }
 
   // end timer
@@ -348,28 +348,29 @@ void SamplingPlanner::Rollouts(int num_trajectory, int horizon, ThreadPool& pool
   int count_before = pool.GetCount();
   for (int i = 0; i < num_trajectory; i++) {
     pool.Schedule([&s = *this, &model = this->model, &task = this->task, &state = this->state,
-                   &time = this->time, &mocap = this->mocap, &userdata = this->userdata, horizon, i]() {
-      // copy nominal policy
-      {
-        const std::shared_lock<std::shared_mutex> lock(s.mtx_);
-        s.candidate_policy[i].CopyFrom(s.policy, s.policy.num_spline_points);
-      }
+          &time = this->time, &mocap = this->mocap, &userdata = this->userdata, horizon, i]() {
+          // copy nominal policy
+          {
+            const std::shared_lock<std::shared_mutex> lock(s.mtx_);
+            s.candidate_policy[i].CopyFrom(s.policy, s.policy.num_spline_points);
+          }
 
-      // sample noise policy
-      if (i != 0) s.AddNoiseToPolicy(time, i);
+          // sample noise policy
+          if (i != 0) s.AddNoiseToPolicy(time, i);
 
-      // ----- rollout sample policy ----- //
+          // ----- rollout sample policy ----- //
 
-      // policy
-      auto sample_policy_i = [&candidate_policy = s.candidate_policy, &i](double* action, const double* state,
-                                                                          double time) {
-        candidate_policy[i].Action(action, state, time);
-      };
+          // policy
+          auto sample_policy_i = [&candidate_policy = s.candidate_policy, &i](
+              double* action, const double* state,
+              double time) {
+            candidate_policy[i].Action(action, state, time);
+          };
 
-      // policy rollout
-      s.trajectory[i]->Rollout(sample_policy_i, task, model, s.data_[ThreadPool::WorkerId()].get(),
-                               state.data(), time, mocap.data(), userdata.data(), horizon);
-    });
+          // policy rollout
+          s.trajectory[i]->Rollout(sample_policy_i, task, model, s.data_[ThreadPool::WorkerId()].get(),
+                                   state.data(), time, mocap.data(), userdata.data(), horizon);
+        });
   }
   pool.WaitCount(count_before + num_trajectory);
   pool.ResetCount();
@@ -508,4 +509,4 @@ void SamplingPlanner::CopyCandidateToPolicy(int candidate) {
     policy = candidate_policy[winner];
   }
 }
-}  // namespace mjpc
+} // namespace mjpc

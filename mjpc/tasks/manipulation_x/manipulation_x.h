@@ -82,7 +82,7 @@ public:
   int GetStaticObstaclesNum() const override { return AreObstaclesFixed() ? 3 : 0; }
 
   int GetDynamicObstaclesNum() const override {
-    return (planner_ && planner_->is_tuning_on())
+    return (planner_ && planner_->IsTuningOn())
              ? static_cast<int>(GetCollisionLinkNames().size())
              : (AreObstaclesFixed() ? 0 : 3);
   }
@@ -230,7 +230,7 @@ public:
 
     // Body arm links as obstacles
     // NOTE: As observed, unclear why yet involving body links (as obstacles) disrupt the arm ik planning
-    if (planner_ && planner_->is_tuning_on()) {
+    if (planner_ && planner_->IsTuningOn()) {
       static const auto prefix_len = std::string("panda_").size();
       static constexpr bool is_urdf = MJPC_MANIPULATION_X_URDF;
       for (const auto& link_name : GetCollisionLinkNames()) {

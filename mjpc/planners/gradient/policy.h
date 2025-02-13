@@ -24,7 +24,6 @@
 #include "mjpc/task.h"
 
 namespace mjpc {
-
 // policy for gradient descent planner
 class GradientPolicy : public Policy {
 public:
@@ -56,16 +55,16 @@ public:
   // ----- members ----- //
   const mjModel* model;
 
-  std::vector<double> k;  // action improvement
+  std::vector<double> k; // action improvement
 
-  std::vector<double> parameters;
+  int params_dim; // parameters dim
+  std::vector<double> parameters; // params_dim
   std::vector<double> parameter_update;
   std::vector<double> times;
   int num_parameters;
   int num_spline_points;
   mjpc::spline::SplineInterpolation representation;
 };
-
-}  // namespace mjpc
+} // namespace mjpc
 
 #endif  // MJPC_PLANNERS_GRADIENT_POLICY_H_
