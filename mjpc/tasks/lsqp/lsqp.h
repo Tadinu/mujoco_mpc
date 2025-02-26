@@ -55,7 +55,7 @@ static std::vector<mjtNum> TARGET_OBJ_QPOS = {0.9, 0, 0.3, 1, 0, 0, 0};
 
 static constexpr uint8_t IIWA14_DOF = 7;
 static constexpr uint8_t ALLEGRO_DOF = 16;
-static constexpr uint8_t EE_CEM_PARAMS_DIM = 4; // wrist(XYZ-loc + theta-rot]
+static constexpr uint8_t EE_CEM_PARAMS_DIM = 2; // wrist(XYZ-loc ratio away from goal + theta-rot]
 static constexpr uint8_t FINGERS_CEM_PARAMS_DIM = MJPC_LSQP_FINGERS_OSC
                                                     ? 4 // Fingertips
                                                     : ALLEGRO_DOF;

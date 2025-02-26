@@ -80,19 +80,16 @@ std::vector<double> LsqpPlanner::LsqpControl(double* policy_action, mjData* data
     double target_obj_pos[3];
     mju_copy3(target_obj_pos, mjpc::QueryBodyPos(model_, data, Lsqp::TARGET_OBJ_NAME));
 
-    // Consider policy_action as a point in Spherical coordinate with origin at [target_obj_pos]
-    // policy_action[i]: [-1, 1]
-    const double theta = M_PI * (1 + policy_action[0]);
-    const double phi = M_PI * (1 + policy_action[1]);
-    const double radius = 0.2 + 0.1 * policy_action[2];
-    // Convert to Cartesian
-    policy_action[0] = radius * std::sin(theta) * std::cos(phi);
-    policy_action[1] = radius * std::sin(theta) * std::sin(phi);
-    policy_action[2] = radius * std::cos(theta);
+    double target_goal_pos[3];
+    mju_copy3(target_goal_pos, mjpc::QuerySitePos(model_, data, Lsqp::TARGET_OBJ_GOAL_NAME));
+
+    double target_delta_pos[3];
+    mju_sub3(target_delta_pos, target_goal_pos, target_obj_pos);
+    mju_normalize3(target_delta_pos);
 
     // [EE-mocap pos] perturbation
     mjtNum new_ee_target_pos[3];
-    mju_add3(new_ee_target_pos, target_obj_pos, policy_action); // in world coordinate
+    mju_addScl3(new_ee_target_pos, target_obj_pos, target_delta_pos, std::abs(policy_action[0]));
     mjpc::SetBodyMocapPos(model_, data, Lsqp::EE_TARGET_NAME, new_ee_target_pos);
     if (use_lsqp_task_data) {
       const MjpcSharedMutexLock lock(policy_mutex_);
@@ -102,14 +99,14 @@ std::vector<double> LsqpPlanner::LsqpControl(double* policy_action, mjData* data
     // [EE-mocap quat]
     // Rot around Y 90
     mjtNum new_ee_target_quat[4];
-    mju_axisAngle2Quat(new_ee_target_quat, (double[3]){0, 1, 0}, M_PI_2);
+    mju_axisAngle2Quat(new_ee_target_quat, (double[]){0, 1, 0}, M_PI_2);
 #if 0
     mjtNum delta_ee_target_quat_Z[4];
-    mju_axisAngle2Quat(delta_ee_target_quat_Z, (double[3]){0, 0, 1},
-                       M_PI * (1 + policy_action[3]));
+    mju_axisAngle2Quat(delta_ee_target_quat_Z, (double[]){0, 0, 1},
+                       M_PI * (1 + policy_action[1]));
     //mjtNum delta_ee_target_quat_X[4];
-    //mju_axisAngle2Quat(delta_ee_target_quat_X, (double[3]){1, 0, 0},
-    //                  M_PI * (1 + policy_action[3]));
+    //mju_axisAngle2Quat(delta_ee_target_quat_X, (double[]){1, 0, 0},
+    //                  M_PI * (1 + policy_action[1]));
     mju_mulQuat(new_ee_target_quat, new_ee_target_quat, delta_ee_target_quat_Z);
     //mju_mulQuat(new_ee_target_quat, new_ee_target_quat, delta_ee_target_quat_X);
 #endif

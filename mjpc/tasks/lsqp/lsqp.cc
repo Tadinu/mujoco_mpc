@@ -24,6 +24,27 @@ void Lsqp::SetPlanner(Planner* planner) {
 
 void Lsqp::TransitionLocked(mjModel* model, mjData* data) {
   Task::TransitionLocked(model, data);
+  double residuals[100];
+  double terms[10];
+  residual_.Residual(model, data, residuals);
+  residual_.CostTerms(terms, residuals, /*weighted=*/false);
+  mjpc::print("WEIGHT:", weight[0], weight[1]);
+  mjpc::print("TERMS:", terms[0], terms[1]);
+
+  // reach is solved:
+  auto& norm_type = data->userdata[0];
+  if (data->time > 0 && norm_type == 0 && terms[0] < 0.04) {
+    weight[0] = 0; // disable reach
+    weight[1] = 1; // enable bring
+    norm_type = 2;
+  }
+
+  // bring is solved, reset:
+  if (norm_type == 2 && terms[1] < 0.01) {
+    weight[0] = 1; // enable reach
+    weight[1] = 0; // disable bring
+    norm_type = 0;
+  }
 
   // Init once is already checked here-in
   InitMocaps();
