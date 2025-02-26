@@ -1877,6 +1877,10 @@ void Simulate::InitializeRenderLoop() {
   // init abstract visualization
   mjv_defaultCamera(&this->cam);
   mjv_defaultOption(&this->opt);
+  // Configure visualization
+  for (auto i = 0; i < mjNGROUP; ++i) {
+    opt.sitegroup[i] = true;
+  }
   InitializeProfiler(this);
   InitializeSensor(this);
 

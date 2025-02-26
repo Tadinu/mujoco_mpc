@@ -169,10 +169,11 @@ public:
 #else
     // MOVE RANDOMLY (FOR TESTING TO VISUALLY EVALUATE THE RESULTS IN ROLLOUTS)
     // Follow [ee_target] by diff-ik
-    constexpr bool interactive = false;
+    constexpr bool interactive = true;
     lsqp_planner_->LsqpControl(interactive
                                  ? nullptr
-                                 : (double[3]){FabRandom::rand(-1., 1.), FabRandom::rand(-1., 1.),
+                                 : (double[4]){FabRandom::rand(-1., 1.), FabRandom::rand(-1., 1.),
+                                               FabRandom::rand(-1., 1.),
                                                FabRandom::rand(-1., 1.)});
 #endif
 #endif

@@ -6,6 +6,7 @@ namespace mjpc {
 void LsqpPlanner::Initialize(mjModel* model, const Task& task) {
   model_ = model;
   action_dim_ = model->nu;
+  prev_action_ = std::vector(action_dim_, 0.);
 
   // Init task fabrics
   if (task.IsFabricsSupported()) {
@@ -72,8 +73,9 @@ std::vector<double> LsqpPlanner::LsqpControl(double* policy_action, mjData* data
     data = lsqp_task_->data_;
   }
 
-  // APPLY [policy_action], outputs from [cem_delegate_]
+  // APPLY [policy_action], if outputted from the delegate planner (eg: [cem_delegate_])
   if (policy_action) {
+    // NOTE: THIS MUST TAKE INTO ACCOUNT OF BOTH SCENARIOS WHEREBY TARGET-OBJ STAYS ON GROUND & ALREADY IN-HAND
     // Current target-obj pos
     double target_obj_pos[3];
     mju_copy3(target_obj_pos, mjpc::QueryBodyPos(model_, data, Lsqp::TARGET_OBJ_NAME));
@@ -82,11 +84,11 @@ std::vector<double> LsqpPlanner::LsqpControl(double* policy_action, mjData* data
     // policy_action[i]: [-1, 1]
     const double theta = M_PI * (1 + policy_action[0]);
     const double phi = M_PI * (1 + policy_action[1]);
-    const double radius = 0.12 + 0.1 * std::abs(policy_action[2]);
+    const double radius = 0.2 + 0.1 * policy_action[2];
     // Convert to Cartesian
     policy_action[0] = radius * std::sin(theta) * std::cos(phi);
     policy_action[1] = radius * std::sin(theta) * std::sin(phi);
-    policy_action[2] = std::abs(radius * std::cos(theta));
+    policy_action[2] = radius * std::cos(theta);
 
     // [EE-mocap pos] perturbation
     mjtNum new_ee_target_pos[3];
@@ -98,30 +100,34 @@ std::vector<double> LsqpPlanner::LsqpControl(double* policy_action, mjData* data
     }
 
     // [EE-mocap quat]
-#if 0
-    mjtNum new_ee_target_quat[4];
-    mjtNum target_obj_pos_delta[3];
-    mju_sub3(target_obj_pos_delta, target_obj_pos, new_ee_target_pos);
-
-    // OR: mju_quatZ2Vec(new_ee_target_quat, target_obj_pos_delta);
-    mjpc::mjpc_quatFromVectors(new_ee_target_quat, (double[3]){0, 0, -1}, target_obj_pos_delta);
-    mjpc::SetBodyMocapQuat(model_, data, Lsqp::EE_TARGET_NAME, new_ee_target_quat);
-#else
     // Rot around Y 90
-    mjpc::SetBodyMocapQuat(model_, data, Lsqp::EE_TARGET_NAME, (double[4]){0.707, 0, 0.707, 0});
+    mjtNum new_ee_target_quat[4];
+    mju_axisAngle2Quat(new_ee_target_quat, (double[3]){0, 1, 0}, M_PI_2);
+#if 0
+    mjtNum delta_ee_target_quat_Z[4];
+    mju_axisAngle2Quat(delta_ee_target_quat_Z, (double[3]){0, 0, 1},
+                       M_PI * (1 + policy_action[3]));
+    //mjtNum delta_ee_target_quat_X[4];
+    //mju_axisAngle2Quat(delta_ee_target_quat_X, (double[3]){1, 0, 0},
+    //                  M_PI * (1 + policy_action[3]));
+    mju_mulQuat(new_ee_target_quat, new_ee_target_quat, delta_ee_target_quat_Z);
+    //mju_mulQuat(new_ee_target_quat, new_ee_target_quat, delta_ee_target_quat_X);
 #endif
+    mjpc::SetBodyMocapQuat(model_, data, Lsqp::EE_TARGET_NAME, new_ee_target_quat);
 
     // [Fingertip-mocaps] perturbation
+#if MJPC_LSQP_FINGERS_OSC
     uint8_t i = 0;
     const auto hand_center_pos = lsqp_task_->GetHandCenterPos(data);
     for (const auto& fingertip : Lsqp::FINGERTIP_NAMES) {
       mjtNum new_finger_target_pos[3];
       mju_addScl3(new_finger_target_pos, hand_center_pos.data(),
                   lsqp_task_->initial_fingertips_direction[fingertip],
-                  0.1 * policy_action[3 * (i++)]);
+                  0.1 * policy_action[EE_CEM_PARAMS_DIM + (++i)]);
       mjpc::SetBodyMocapPos(model_, data, lsqp_task_->FingertipTargetBodyName(fingertip).c_str(),
                             new_finger_target_pos);
     }
+#endif
   }
 
   // [Lsqp solver]: solve diff-ik
@@ -129,7 +135,23 @@ std::vector<double> LsqpPlanner::LsqpControl(double* policy_action, mjData* data
   // which would cause sporadic crashes.
   auto lsqp_solver = LsqpSolver(model_, lsqp_task_, owner_type_);
   lsqp_solver.Init(data, action_dim_);
-  return lsqp_solver.Solve(data);
+  auto ctrl = lsqp_solver.Solve(data);
+#if !MJPC_LSQP_FINGERS_OSC
+  for (uint8_t i = IIWA14_DOF; i < IIWA14_DOF + ALLEGRO_DOF; ++i) {
+    const int jnt_id = model_->dof_jntid[i];
+    const double low_lim = model_->jnt_range[2 * jnt_id];
+    const double high_lim = model_->jnt_range[2 * jnt_id + 1];
+    ctrl[i] = low_lim + (policy_action
+                           ? std::abs(policy_action[EE_CEM_PARAMS_DIM + (i - IIWA14_DOF)])
+                           : FabRandom::rand()) * (high_lim - low_lim);
+  }
+#endif
+  if ((MjOwnerAppType::MJAPP == owner_type_) &&
+      lsqp_solver.config().CheckJointValues(ctrl.data(), ctrl.size(), 0.1)) {
+    mju_copy(data->ctrl, ctrl.data(), ctrl.size());
+  }
+  mjpc::print(ctrl);
+  return ctrl;
 }
 
 void LsqpPlanner::Traces(mjvScene* scn) {
@@ -173,7 +195,13 @@ void LsqpPlanner::ActionFromPolicy(double* action, const double* state, double t
   if (cem_delegate_) {
     cem_delegate_->ActionFromPolicy(action, state, time, use_previous);
     // Convert [action] from [cem_delegate_]'s output space to control (data->ctrl) space
-    mju_copy(action, LsqpControl(action).data(), action_dim_);
+    auto act = LsqpControl(action);
+    if (mju_isZero(act.data(), action_dim_)) {
+      mju_copy(action, prev_action_.data(), action_dim_);
+    } else {
+      mju_copy(action, act.data(), action_dim_);
+      mju_copy(prev_action_.data(), act.data(), action_dim_);
+    }
   }
 }
 }

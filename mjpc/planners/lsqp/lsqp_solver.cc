@@ -135,10 +135,6 @@ std::vector<double> LsqpSolver::Solve(mjData* data) {
       // Integrate [vel] into current [q]
       // NOTE: DO NOT USE mj_integratePos() here due to its looping over all joints of not only robots but also objects
       mju_addToScl(ctrl.data(), vel.data(), INTEGRATION_DT, ctrl.size());
-      if ((MjOwnerAppType::MJAPP == owner_type_) &&
-          config_.CheckJointValues(ctrl.data(), ctrl.size()), 0.1) {
-        mju_copy(data->ctrl, ctrl.data(), ctrl.size());
-      }
     } else {
       // [vel] -> [ctrl]
       mju_copy(ctrl.data(), vel.data(), ctrl.size());
@@ -146,11 +142,10 @@ std::vector<double> LsqpSolver::Solve(mjData* data) {
   } else {
     mju_zero(ctrl.data(), ctrl.size());
   }
+#endif
 
   // Save latest [T_ee] to [data->userdata]
   mju_copy(data->userdata, T_ee.Parameters().data(), T_ee.PARAMS_DIM);
-#endif
-
   return ctrl;
 }
 } // end namespace mjpc

@@ -153,7 +153,13 @@ void Trajectory::NoisyRollout(std::function<void(double* action, const double* s
     }
 
     // step
-    mj_step(model, data);
+    if (control_cb) {
+      for (uint8_t i = 0; i < 1 / model->opt.timestep; ++i) {
+        mj_step(model, data);
+      }
+    } else {
+      mj_step(model, data);
+    }
 
     // record residual
     mju_copy(DataAt(residual, t * dim_residual), data->sensordata, dim_residual);

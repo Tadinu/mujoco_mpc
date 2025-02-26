@@ -30,6 +30,10 @@ public:
     return std::vector(config_.ndofs(), 0.);
   }
 
+  LsqpConfig config() const {
+    return config_;
+  }
+
 private:
   const mjModel* model_ = nullptr;
   Lsqp* lsqp_task_ = nullptr;

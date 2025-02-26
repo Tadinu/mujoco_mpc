@@ -15,6 +15,7 @@
 
 #define MJPC_LSQP_PLANAR_ROBOT (0)
 #define MJPC_LSQP_SPAWN_OBJECT (1)
+#define MJPC_LSQP_FINGERS_OSC (1)
 
 namespace mjpc {
 static const std::string MUJOCO_DIR =
@@ -50,11 +51,15 @@ static const std::vector<mjtNum> IIWA14_ALLEGRO_HOME_QPOS = {
     1.0593, 0.638801, 0.391599, 0.57284
 };
 
-static std::vector<mjtNum> TARGET_OBJ_QPOS = {0.75, 0, 0.3, 1, 0, 0, 0};
+static std::vector<mjtNum> TARGET_OBJ_QPOS = {0.9, 0, 0.3, 1, 0, 0, 0};
 
 static constexpr uint8_t IIWA14_DOF = 7;
 static constexpr uint8_t ALLEGRO_DOF = 16;
-static constexpr uint8_t IIWA14_ALLEGRO_CEM_PARAMS_DIM = 15; // wrist + 4 fingers XYZ
+static constexpr uint8_t EE_CEM_PARAMS_DIM = 4; // wrist(XYZ-loc + theta-rot]
+static constexpr uint8_t FINGERS_CEM_PARAMS_DIM = MJPC_LSQP_FINGERS_OSC
+                                                    ? 4 // Fingertips
+                                                    : ALLEGRO_DOF;
+static constexpr uint8_t IIWA14_ALLEGRO_CEM_PARAMS_DIM = EE_CEM_PARAMS_DIM + FINGERS_CEM_PARAMS_DIM;
 
 static const std::string MAIN_SCENE_XML_PATH =
 #if MJPC_PLANNER_LSQP_DIFFIK_ENABLED
@@ -84,7 +89,7 @@ class LsqpPlanner;
 class Lsqp : public Task {
 public:
   static constexpr float KGRAVITY = -9.81f;
-  static constexpr bool MODEL_UNDERACTUATED = false;
+  static constexpr bool SYSTEM_MODEL_ACTUATORS_OSC = false;
   static constexpr bool POSITION_CTRL_ENABLED = true;
 
   static constexpr const char* EE_TARGET_NAME = "ee_target";
@@ -94,6 +99,7 @@ public:
   static const std::vector<std::string> FINGERTIP_NAMES;
   static const std::map<std::string, std::vector<float>> FINGERTIPS_RGBA;
   static constexpr const char* TARGET_OBJ_NAME = "target";
+  static constexpr const char* TARGET_OBJ_GOAL_NAME = "target_goal";
 
   // NOTE: Hardcoded trace prefix as required in task.cc
   static constexpr const char* TRACE_SENSOR_PREFIX = "trace";
@@ -185,7 +191,7 @@ public:
     fCreateNumeric("sampling_trajectories", 10);
 
     // 4- Customize actuactors
-    if constexpr (MODEL_UNDERACTUATED) {
+    if constexpr (SYSTEM_MODEL_ACTUATORS_OSC) {
       // Delete all the default fully-actuated actuators
       for (auto i = 1; i <= IIWA14_DOF; i++) {
         auto* act_spec = mjs_findElement(scene_spec, mjOBJ_ACTUATOR,
@@ -248,7 +254,7 @@ public:
     mjs_setDouble(key_home->qpos, system_qpos_home.data(), system_qpos_home.size());
 
     // 6.2- [allegro] - pos actuator: init ctrl
-    if constexpr (MODEL_UNDERACTUATED) {
+    if constexpr (SYSTEM_MODEL_ACTUATORS_OSC) {
     } else {
       mjs_setDouble(key_home->ctrl, IIWA14_ALLEGRO_HOME_QPOS.data(),
                     IIWA14_ALLEGRO_HOME_QPOS.size());
@@ -257,12 +263,14 @@ public:
 
     // 7- Add mocap bodies
     mjsBody* world_body = mjpc::FindWorldBodySpec(scene_spec);
-    const auto fCreateSite = [](mjsBody* body, const std::string& site_name) {
-      mjsSite* site = mjs_addSite(body, 0);
+    const auto fCreateSite = [](mjsBody* body, const std::string& site_name,
+                                mjtGeom type = mjGEOM_SPHERE, double size = 0.001) {
+      mjsSite* site = mjs_addSite(body, nullptr);
       mjs_setString(site->name, site_name.c_str());
-      site->type = mjGEOM_SPHERE;
-      memcpy(site->size, (mjtNum[]){0.001, 0.001, 0.001}, sizeof(site->size));
+      site->type = type;
+      memcpy(site->size, (mjtNum[]){size, size, size}, sizeof(site->size));
       site->group = 4;
+      return site;
     };
 
     // 7.1- [ee-mocap body]
@@ -280,7 +288,7 @@ public:
     ee_mocap_geom->conaffinity = 0;
 
     // [ee_mocap_site]/[palm_site]
-    if constexpr (MODEL_UNDERACTUATED) {
+    if constexpr (SYSTEM_MODEL_ACTUATORS_OSC) {
       fCreateSite(ee_mocap, EE_TARGET_NAME);
     } else {
       fCreateSite(allegro_palm, PalmSiteName());;
@@ -301,13 +309,13 @@ public:
       finger_mocap_geom->conaffinity = 0;
 
       // [fingermocap_site]
-      if constexpr (MODEL_UNDERACTUATED) {
+      if constexpr (SYSTEM_MODEL_ACTUATORS_OSC) {
         fCreateSite(finger_mocap, fingertip_target_name);
       }
     }
 
     // 8- [Mocap site Actuators]
-    if constexpr (MODEL_UNDERACTUATED) {
+    if constexpr (SYSTEM_MODEL_ACTUATORS_OSC) {
       const auto fCreateActuator = [&scene_spec](const std::string& actuator_name,
                                                  const std::string& site_name,
                                                  double gear[]) {
@@ -339,19 +347,20 @@ public:
     }
 
     // 9- [User sensors] as residuals
+    // https://github.com/google-deepmind/mujoco_mpc/blob/main/docs/OVERVIEW.md#residual-specification
     // 9.1- Reach sensor
     mjsSensor* reach_sensor = mjs_addSensor(scene_spec);
     reach_sensor->type = mjSENS_USER;
     reach_sensor->dim = 3;
     mjs_setString(reach_sensor->name, "Reach");
-    mjs_setDouble(reach_sensor->userdata, (double[]){2, 2.5, 0, 5, 0.01}, 5);
+    mjs_setDouble(reach_sensor->userdata, (double[]){0 /*Quadratic norm*/, 2.5, 0, 5, 0.01}, 5);
 
-    // 9.2- Pick sensor
-    mjsSensor* pick_sensor = mjs_addSensor(scene_spec);
-    pick_sensor->type = mjSENS_USER;
-    pick_sensor->dim = 4;
-    mjs_setString(pick_sensor->name, "Pick");
-    mjs_setDouble(pick_sensor->userdata, (double[]){0, 1, 0, 1, 0.003}, 5);
+    // 9.2- Bring sensor
+    mjsSensor* bring_sensor = mjs_addSensor(scene_spec);
+    bring_sensor->type = mjSENS_USER;
+    bring_sensor->dim = 7;
+    mjs_setString(bring_sensor->name, "Bring");
+    mjs_setDouble(bring_sensor->userdata, (double[]){2 /*L2 norm*/, 1, 0, 1, 0.003}, 5);
 
 #if MJPC_LSQP_SPAWN_OBJECT
     // 9.3- Object sensor
@@ -429,13 +438,26 @@ public:
     mjsBody* pick_obj = mjs_addBody(world_body, nullptr);
     mjs_addFreeJoint(pick_obj);
     mjs_setString(pick_obj->name, TARGET_OBJ_NAME);
-    memcpy(pick_obj->pos, TARGET_OBJ_QPOS.data(), sizeof(ee_mocap->pos));
-    memcpy(pick_obj->quat, TARGET_OBJ_QPOS.data() + 3, sizeof(ee_mocap->quat));
+    memcpy(pick_obj->pos, TARGET_OBJ_QPOS.data(), sizeof(pick_obj->pos));
+    memcpy(pick_obj->quat, TARGET_OBJ_QPOS.data() + 3, sizeof(pick_obj->quat));
     pick_obj->mocap = false;
+
     mjsGeom* pick_obj_geom = mjs_addGeom(pick_obj, nullptr);
     pick_obj_geom->type = mjGEOM_BOX;
+#if 1
+    pick_obj_geom->density = 5000000;
+#else
+    pick_obj->mass = 1;
+    memcpy(pick_obj->inertia, (double[]){1., 1., 1.}, sizeof(pick_obj->inertia));
+#endif
     memcpy(pick_obj_geom->size, (double[]){0.03, 0.03, 0.03}, sizeof(pick_obj_geom->size));
     memcpy(pick_obj_geom->rgba, (float[]){0.2, 0.5, 0.3, 0.5}, sizeof(pick_obj_geom->rgba));
+
+    // 10.1- Picked obj's target site (!NOTE: Enable site group for visualization)
+    auto* target_site = fCreateSite(world_body, TARGET_OBJ_GOAL_NAME, mjGEOM_BOX, 0.03);
+    memcpy(target_site->pos, (mjtNum[]){0.1, 0.5, 0.5}, sizeof(target_site->pos));
+    memcpy(target_site->quat, (mjtNum[]){0.7, 0., 0.7, 0}, sizeof(target_site->quat));
+    memcpy(target_site->rgba, (float[]){0.5, 0., 0., 0.5}, sizeof(target_site->rgba));
 #endif
 
     // 11- Compile [scene_spec] -> mjModel

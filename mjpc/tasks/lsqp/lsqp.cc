@@ -29,7 +29,7 @@ void Lsqp::TransitionLocked(mjModel* model, mjData* data) {
   InitMocaps();
 
   // Reset target obj if being flung away
-  if (mju_dist3(mjpc::QueryBodyPos(model_, data, Lsqp::TARGET_OBJ_NAME), (double[3]){0, 0, 0}) > 1) {
+  if (mju_dist3(mjpc::QueryBodyPos(model_, data, Lsqp::TARGET_OBJ_NAME), (double[3]){0, 0, 0}) > 2) {
     int obj_id = mj_name2id(model, mjOBJ_BODY, TARGET_OBJ_NAME);
     if (obj_id != -1) {
       int jnt_qposadr = model->jnt_qposadr[model->body_jntadr[obj_id]];
@@ -65,9 +65,12 @@ void Lsqp::ResidualFn::Residual(const mjModel* model, const mjData* data, double
   counter += 3;
 
   // ---------- Residual (1) ----------
-  // orientation error
-  double goal_orientation[4] = {0.500, 0.866, 0, 0};
-  mju_subQuat(residual + counter, goal_orientation, obj_quat);
+  // goal position error
+  mju_sub3(residual + counter, mjpc::QuerySitePos(model, data, TARGET_OBJ_GOAL_NAME), obj_position);
+  counter += 3;
+
+  // goal orientation error
+  mju_subQuat(residual + counter, mjpc::QuerySiteQuat(model, data, TARGET_OBJ_GOAL_NAME), obj_quat);
   counter += 4;
 
 #if 0

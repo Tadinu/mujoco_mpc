@@ -108,6 +108,7 @@ public:
 protected:
   // mjpc
   mutable std::shared_mutex policy_mutex_;
+  std::vector<double> prev_action_;
 };
 
 using LsqpPlannerPtr = std::shared_ptr<LsqpPlanner>;

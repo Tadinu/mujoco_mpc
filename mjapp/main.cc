@@ -267,7 +267,6 @@ void StepModel(mjapp::Simulate& sim, mjModel* m, mjData* d) {
   for (auto& [_,robot_model] : sim.GetRobotModels()) {
     robot_model->Step();
   }
-  //sim.Control(m, d);
 }
 
 void PostLoadModel(mjapp::Simulate& sim, mjModel* m, mjData* d) {
