@@ -28,19 +28,21 @@ void Lsqp::TransitionLocked(mjModel* model, mjData* data) {
   double terms[10];
   residual_.Residual(model, data, residuals);
   residual_.CostTerms(terms, residuals, /*weighted=*/false);
-  mjpc::print("WEIGHT:", weight[0], weight[1]);
-  mjpc::print("TERMS:", terms[0], terms[1]);
+  //mjpc::print("WEIGHT:", weight[0], weight[1]);
+  //mjpc::print("TERMS:", terms[0], terms[1]);
 
   // reach is solved:
   auto& norm_type = data->userdata[0];
-  if (data->time > 0 && norm_type == 0 && terms[0] < 0.04) {
+  const auto& reach_distance = terms[0]; // Distance to target object
+  if (data->time > 0 && norm_type == 0 && reach_distance < 0.04) {
     weight[0] = 0; // disable reach
     weight[1] = 1; // enable bring
     norm_type = 2;
   }
 
   // bring is solved, reset:
-  if (norm_type == 2 && terms[1] < 0.01) {
+  const auto& bring_distance = terms[1]; // Distance to target goal
+  if (norm_type == 2 && bring_distance < 0.01) {
     weight[0] = 1; // enable reach
     weight[1] = 0; // disable bring
     norm_type = 0;

@@ -73,13 +73,13 @@ std::vector<double> LsqpPlanner::LsqpControl(double* policy_action, mjData* data
     data = lsqp_task_->data_;
   }
 
+  // NOTE: THIS MUST TAKE INTO ACCOUNT OF BOTH SCENARIOS WHEREBY TARGET-OBJ STAYS ON GROUND & ALREADY IN-HAND
+  // Current target-obj pos
+  double target_obj_pos[3];
+  mju_copy3(target_obj_pos, mjpc::QueryBodyPos(model_, data, Lsqp::TARGET_OBJ_NAME));
+
   // APPLY [policy_action], if outputted from the delegate planner (eg: [cem_delegate_])
   if (policy_action) {
-    // NOTE: THIS MUST TAKE INTO ACCOUNT OF BOTH SCENARIOS WHEREBY TARGET-OBJ STAYS ON GROUND & ALREADY IN-HAND
-    // Current target-obj pos
-    double target_obj_pos[3];
-    mju_copy3(target_obj_pos, mjpc::QueryBodyPos(model_, data, Lsqp::TARGET_OBJ_NAME));
-
     double target_goal_pos[3];
     mju_copy3(target_goal_pos, mjpc::QuerySitePos(model_, data, Lsqp::TARGET_OBJ_GOAL_NAME));
 
@@ -87,20 +87,20 @@ std::vector<double> LsqpPlanner::LsqpControl(double* policy_action, mjData* data
     mju_sub3(target_delta_pos, target_goal_pos, target_obj_pos);
     mju_normalize3(target_delta_pos);
 
-    // [EE-mocap pos] perturbation
+    // [EE-mocap pos] perturbation along the path from [target_obj] -> [target_goal]
     mjtNum new_ee_target_pos[3];
     mju_addScl3(new_ee_target_pos, target_obj_pos, target_delta_pos, std::abs(policy_action[0]));
-    mjpc::SetBodyMocapPos(model_, data, Lsqp::EE_TARGET_NAME, new_ee_target_pos);
+    mjpc::SetBodyMocapPos(model_, data, lsqp_task_->EETargetMocapName().data(), new_ee_target_pos);
     if (use_lsqp_task_data) {
       const MjpcSharedMutexLock lock(policy_mutex_);
       mju_copy3(policy_ee_target_pos_, new_ee_target_pos);
     }
 
     // [EE-mocap quat]
+#if 0
     // Rot around Y 90
     mjtNum new_ee_target_quat[4];
     mju_axisAngle2Quat(new_ee_target_quat, (double[]){0, 1, 0}, M_PI_2);
-#if 0
     mjtNum delta_ee_target_quat_Z[4];
     mju_axisAngle2Quat(delta_ee_target_quat_Z, (double[]){0, 0, 1},
                        M_PI * (1 + policy_action[1]));
@@ -109,23 +109,32 @@ std::vector<double> LsqpPlanner::LsqpControl(double* policy_action, mjData* data
     //                  M_PI * (1 + policy_action[1]));
     mju_mulQuat(new_ee_target_quat, new_ee_target_quat, delta_ee_target_quat_Z);
     //mju_mulQuat(new_ee_target_quat, new_ee_target_quat, delta_ee_target_quat_X);
-#endif
-    mjpc::SetBodyMocapQuat(model_, data, Lsqp::EE_TARGET_NAME, new_ee_target_quat);
-
-    // [Fingertip-mocaps] perturbation
-#if MJPC_LSQP_FINGERS_OSC
-    uint8_t i = 0;
-    const auto hand_center_pos = lsqp_task_->GetHandCenterPos(data);
-    for (const auto& fingertip : Lsqp::FINGERTIP_NAMES) {
-      mjtNum new_finger_target_pos[3];
-      mju_addScl3(new_finger_target_pos, hand_center_pos.data(),
-                  lsqp_task_->initial_fingertips_direction[fingertip],
-                  0.1 * policy_action[EE_CEM_PARAMS_DIM + (++i)]);
-      mjpc::SetBodyMocapPos(model_, data, lsqp_task_->FingertipTargetBodyName(fingertip).c_str(),
-                            new_finger_target_pos);
-    }
+    mjpc::SetBodyMocapQuat(model_, data, lsqp_task_->EETargetMocapName().data(), new_ee_target_quat);
+#else
+    mjpc::SetBodyMocapQuat(model_, data, lsqp_task_->EETargetMocapName().data(),
+                           lsqp_task_->initial_ee_target_quat);
 #endif
   }
+
+  // [Fingertip-mocaps] perturbation
+#if MJPC_LSQP_FINGERS_OSC
+  const auto dist = mju_dist3(target_obj_pos,
+                              mjpc::QuerySitePos(model_, data, lsqp_task_->EETargetSiteName().data()));
+  if (dist <= 0.2) {
+    //uint8_t i = 0;
+    for (const auto& fingertip : Lsqp::FINGERTIP_NAMES) {
+      if (false) {
+        //mjtNum new_finger_target_pos[3];
+        //mju_addScl3(new_finger_target_pos, ee_target_pos,
+        //            lsqp_task_->initial_fingertips_direction[fingertip],
+        //           0.1 * policy_action[EE_CEM_PARAMS_DIM + (++i)]);
+      } else {
+        mjpc::SetBodyMocapPos(model_, data, lsqp_task_->FingertipTargetMocapName(fingertip).c_str(),
+                              target_obj_pos);
+      }
+    }
+  }
+#endif
 
   // [Lsqp solver]: solve diff-ik
   // NOTE: This is made instance created per [LsqpControl()] to avoid dynamic allocation in threads,

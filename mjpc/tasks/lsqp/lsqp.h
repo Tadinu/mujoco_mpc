@@ -19,7 +19,7 @@
 
 namespace mjpc {
 static const std::string MUJOCO_DIR =
-#if 0
+#if 1
     "/home/tad/1_MUJOCO";
 #else
     "/media/ducthan/376b23a1-5a02-4960-b3ca-24b2fcef8f891/MUJOCO";
@@ -59,7 +59,7 @@ static constexpr uint8_t EE_CEM_PARAMS_DIM = 2; // wrist(XYZ-loc ratio away from
 static constexpr uint8_t FINGERS_CEM_PARAMS_DIM = MJPC_LSQP_FINGERS_OSC
                                                     ? 4 // Fingertips
                                                     : ALLEGRO_DOF;
-static constexpr uint8_t IIWA14_ALLEGRO_CEM_PARAMS_DIM = EE_CEM_PARAMS_DIM + FINGERS_CEM_PARAMS_DIM;
+static constexpr uint8_t IIWA14_ALLEGRO_CEM_PARAMS_DIM = EE_CEM_PARAMS_DIM + 0; //FINGERS_CEM_PARAMS_DIM;
 
 static const std::string MAIN_SCENE_XML_PATH =
 #if MJPC_PLANNER_LSQP_DIFFIK_ENABLED
@@ -140,8 +140,20 @@ public:
     return FingertipBodyName(fingertip_name);
   }
 
-  std::string FingertipTargetBodyName(const std::string& fingertip_name) const {
+  std::string FingertipTargetMocapName(const std::string& fingertip_name) const {
     return FingertipSiteName(fingertip_name) + "_target";
+  }
+
+  std::string EETargetName() const {
+    return attach_prefix_ + EE_TARGET_NAME;
+  }
+
+  std::string EETargetSiteName() const {
+    return EETargetName();
+  }
+
+  std::string EETargetMocapName() const {
+    return EETargetName();
   }
 
   mjModel* ConstructModel() override {
@@ -264,18 +276,23 @@ public:
     // 7- Add mocap bodies
     mjsBody* world_body = mjpc::FindWorldBodySpec(scene_spec);
     const auto fCreateSite = [](mjsBody* body, const std::string& site_name,
-                                mjtGeom type = mjGEOM_SPHERE, double size = 0.001) {
+                                double pos[3] = nullptr, double quat[4] = nullptr,
+                                mjtGeom type = mjGEOM_SPHERE, double size = 0.001,
+                                float rgba[4] = nullptr) {
       mjsSite* site = mjs_addSite(body, nullptr);
       mjs_setString(site->name, site_name.c_str());
       site->type = type;
       memcpy(site->size, (mjtNum[]){size, size, size}, sizeof(site->size));
+      if (pos) { memcpy(site->pos, pos, sizeof(site->pos)); }
+      if (quat) { memcpy(site->quat, quat, sizeof(site->quat)); }
+      if (rgba) { memcpy(site->rgba, (float[]){0.5, 0., 0., 0.5}, sizeof(site->rgba)); }
       site->group = 4;
       return site;
     };
 
     // 7.1- [ee-mocap body]
     mjsBody* ee_mocap = mjs_addBody(world_body, nullptr);
-    mjs_setString(ee_mocap->name, EE_TARGET_NAME);
+    mjs_setString(ee_mocap->name, EETargetMocapName().data());
     memcpy(ee_mocap->pos, (double[]){0.5, 0, 0.5}, sizeof(ee_mocap->pos));
     memcpy(ee_mocap->quat, (double[]){0, 1, 0, 0}, sizeof(ee_mocap->quat));
     ee_mocap->mocap = true;
@@ -289,14 +306,15 @@ public:
 
     // [ee_mocap_site]/[palm_site]
     if constexpr (SYSTEM_MODEL_ACTUATORS_OSC) {
-      fCreateSite(ee_mocap, EE_TARGET_NAME);
+      fCreateSite(ee_mocap, EETargetSiteName());
     } else {
-      fCreateSite(allegro_palm, PalmSiteName());;
+      fCreateSite(allegro_palm, EETargetSiteName(), (double[]){0.03, 0, 0.03});
+      fCreateSite(allegro_palm, PalmSiteName());
     }
 
     // 7.2- [Fingertip-mocap bodies]
     for (const auto& fingertip : FINGERTIP_NAMES) {
-      const auto fingertip_target_name = FingertipTargetBodyName(fingertip);
+      const auto fingertip_target_name = FingertipTargetMocapName(fingertip);
       mjsBody* finger_mocap = mjs_addBody(world_body, nullptr);
       mjs_setString(finger_mocap->name, fingertip_target_name.c_str());
       finger_mocap->mocap = true;
@@ -331,11 +349,12 @@ public:
       };
 
       // Add actuators for [ee + fingertip] targets
-      fCreateActuator("ee_act_x", EE_TARGET_NAME, (double[]){1, 0, 0, 0, 0, 0});
-      fCreateActuator("ee_act_y", EE_TARGET_NAME, (double[]){0, 1, 0, 0, 0, 0});
-      fCreateActuator("ee_act_z", EE_TARGET_NAME, (double[]){0, 0, 1, 0, 0, 0});
+      const auto eetarget_site_name = EETargetSiteName();
+      fCreateActuator("ee_act_x", eetarget_site_name, (double[]){1, 0, 0, 0, 0, 0});
+      fCreateActuator("ee_act_y", eetarget_site_name, (double[]){0, 1, 0, 0, 0, 0});
+      fCreateActuator("ee_act_z", eetarget_site_name, (double[]){0, 0, 1, 0, 0, 0});
       for (const auto& fingertip : FINGERTIP_NAMES) {
-        const auto fingertip_mocap_site_name = FingertipTargetBodyName(fingertip);
+        const auto fingertip_mocap_site_name = FingertipTargetMocapName(fingertip);
         const auto fingertip_name = attach_prefix_ + fingertip;
         fCreateActuator(fingertip_name + "_x", fingertip_mocap_site_name,
                         (double[]){1, 0, 0, 0, 0, 0});
@@ -445,7 +464,7 @@ public:
     mjsGeom* pick_obj_geom = mjs_addGeom(pick_obj, nullptr);
     pick_obj_geom->type = mjGEOM_BOX;
 #if 1
-    pick_obj_geom->density = 5000000;
+    pick_obj_geom->density = 5000;
 #else
     pick_obj->mass = 1;
     memcpy(pick_obj->inertia, (double[]){1., 1., 1.}, sizeof(pick_obj->inertia));
@@ -454,10 +473,9 @@ public:
     memcpy(pick_obj_geom->rgba, (float[]){0.2, 0.5, 0.3, 0.5}, sizeof(pick_obj_geom->rgba));
 
     // 10.1- Picked obj's target site (!NOTE: Enable site group for visualization)
-    auto* target_site = fCreateSite(world_body, TARGET_OBJ_GOAL_NAME, mjGEOM_BOX, 0.03);
-    memcpy(target_site->pos, (mjtNum[]){0.1, 0.5, 0.5}, sizeof(target_site->pos));
-    memcpy(target_site->quat, (mjtNum[]){0.7, 0., 0.7, 0}, sizeof(target_site->quat));
-    memcpy(target_site->rgba, (float[]){0.5, 0., 0., 0.5}, sizeof(target_site->rgba));
+    auto* target_site = fCreateSite(world_body, TARGET_OBJ_GOAL_NAME,
+                                    /*pos*/(mjtNum[]){0.1, 0.5, 0.5},/*quat*/(mjtNum[]){0.7, 0., 0.7, 0},
+                                    mjGEOM_BOX, /*size*/0.03, /*rgba*/(float[]){0.5, 0., 0., 0.5});
 #endif
 
     // 11- Compile [scene_spec] -> mjModel
@@ -497,26 +515,20 @@ public:
 #if MJPC_LSQP_PLANAR_ROBOT
     MoveBodyMocapToSite("target_mocap", "hand");
 #else
-    mju_copy3(initial_ee_target_pos, QuerySitePos(ATTACHMENT_SITE_NAME));
-    MoveBodyMocapToSite(EE_TARGET_NAME, ATTACHMENT_SITE_NAME);
+    const auto ee_site_name = EETargetSiteName();
+    mju_copy3(initial_ee_target_pos, QuerySitePos(ee_site_name.data()));
+    mju_copy3(initial_ee_target_quat, QuerySiteQuat(ee_site_name.data()));
+    MoveBodyMocapToSite(EETargetMocapName().data(), ee_site_name.data());
     for (const auto& fingertip_name : FINGERTIP_NAMES) {
       const auto finger_site_name = FingertipSiteName(fingertip_name);
       if (const auto finger_site_id = QuerySiteId(finger_site_name.c_str())) {
-        MoveBodyMocapToSite(FingertipTargetBodyName(fingertip_name).c_str(), finger_site_id);
+        MoveBodyMocapToSite(FingertipTargetMocapName(fingertip_name).c_str(), finger_site_id);
       }
     }
 
-    // Mid position of {palm, fingertips}
-    double* palm_pos = QuerySitePos(PalmSiteName().data());
     for (const auto& fingertip : FINGERTIP_NAMES) {
-      double* fingertip_pos = QuerySitePos(FingertipSiteName(fingertip).data());
-      mju_addTo3(palm_pos, fingertip_pos);
-      mju_copy3(initial_fingertips_direction[fingertip], fingertip_pos);
-    }
-    mju_scl3(palm_pos, palm_pos, 1.0 / (FINGERTIP_NAMES.size() + 1));
-
-    for (const auto& fingertip : FINGERTIP_NAMES) {
-      mju_subFrom3(initial_fingertips_direction[fingertip], palm_pos);
+      mju_sub3(initial_fingertips_direction[fingertip],
+               QuerySitePos(FingertipSiteName(fingertip).data()), initial_ee_target_pos);
       mju_normalize3(initial_fingertips_direction[fingertip]);
     }
 #endif
@@ -575,6 +587,7 @@ protected:
 public:
   std::vector<double> system_qpos_home;
   double initial_ee_target_pos[3];
+  double initial_ee_target_quat[4];
   std::map<std::string, double[3]> initial_fingertips_direction; // toward palm
 
 private:

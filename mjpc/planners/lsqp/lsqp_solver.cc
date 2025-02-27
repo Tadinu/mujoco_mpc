@@ -35,7 +35,7 @@ void LsqpSolver::Init(const mjData* data, int ndofs) {
   // 2- Tasks
   // 2.1- End-effector task
   end_effector_subtask_ = LsqpFrameTask("EE", model_,
-                                        Lsqp::ATTACHMENT_SITE_NAME,
+                                        lsqp_task_->EETargetSiteName(),
                                         mjOBJ_SITE,
                                         /*position_cost*/Eigen::VectorXd::Constant(1, 1.0),
                                         /*orientation_cost*/Eigen::VectorXd::Constant(1, 1.0),
@@ -67,7 +67,7 @@ void LsqpSolver::Init(const mjData* data, int ndofs) {
 
   // 3- Config limits
   config_limits_ = {std::make_shared<LsqpPositionLimit>(model_, config_.ndofs())};
-  T_ee_initial_ = config_.GetTransformFrameToWorld(data, Lsqp::ATTACHMENT_SITE_NAME, mjOBJ_SITE);
+  T_ee_initial_ = config_.GetTransformFrameToWorld(data, lsqp_task_->EETargetSiteName(), mjOBJ_SITE);
 #endif
 }
 
@@ -83,7 +83,7 @@ std::vector<double> LsqpSolver::Solve(mjData* data) {
 #if MJPC_LSQP_PLANAR_ROBOT
   SetFrameTaskTarget(data, &end_effector_subtask_, "target_mocap");
 #else
-  SetFrameTaskTarget(data, &end_effector_subtask_, Lsqp::EE_TARGET_NAME);
+  SetFrameTaskTarget(data, &end_effector_subtask_, lsqp_task_->EETargetMocapName().data());
 
   // Update [finger tasks]' targets & mocaps
   const auto attach_prefix = lsqp_task_->AttachmentPrefix();
@@ -92,11 +92,11 @@ std::vector<double> LsqpSolver::Solve(mjData* data) {
                               ? T_ee_initial_
                               : LsqpSE3(data->userdata);
   for (auto i = 0; i < Lsqp::FINGERTIP_NAMES.size(); ++i) {
-    T_ee = config_.GetTransformFrameToWorld(data, Lsqp::ATTACHMENT_SITE_NAME, mjOBJ_SITE);
+    T_ee = config_.GetTransformFrameToWorld(data, lsqp_task_->EETargetSiteName(), mjOBJ_SITE);
     const auto& fingertip = Lsqp::FINGERTIP_NAMES[i];
 
     // Update [finger_task]s target, as transform of fingertip mocaps relative to hand base
-    const auto finger_target = lsqp_task_->FingertipTargetBodyName(fingertip);
+    const auto finger_target = lsqp_task_->FingertipTargetMocapName(fingertip);
     auto& finger_task = finger_subtasks_[i];
     const LsqpSE3 T_pm = config_.GetTransform(data, finger_target, mjOBJ_BODY,
                                               lsqp_task_->PalmBodyName(), mjOBJ_BODY);

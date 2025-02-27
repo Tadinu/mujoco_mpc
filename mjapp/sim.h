@@ -139,42 +139,39 @@ public:
     static constexpr float radius = 0.5;
 #if 0
     double pos[3] = {
-        lsqp_task_.initial_ee_target_pos[0] /* + radius * cos(M_PI * data->time)*/,
-        lsqp_task_.initial_ee_target_pos[1] + radius * sin(M_PI * data->time),
-        lsqp_task_.initial_ee_target_pos[2]};
+      lsqp_task_.initial_ee_target_pos[0] /* + radius * cos(M_PI * data->time)*/,
+      lsqp_task_.initial_ee_target_pos[1] + radius * sin(M_PI * data->time),
+      lsqp_task_.initial_ee_target_pos[2]};
 #else
     double pos[3];
 #endif
 
+    const auto eetarget_mocap_name = lsqp_task_.EETargetMocapName();
 #if 0
     // RECORD EE_TARGET-POSE
     double delta_pos[3];
     mju_sub3(delta_pos, mjpc::QueryBodyPos(model, data, mjpc::Lsqp::TARGET_OBJ_NAME),
-             mjpc::QueryBodyMocapPos(model, data, mjpc::Lsqp::EE_TARGET_NAME));
+             mjpc::QueryBodyMocapPos(model, data, eetarget_mocap_name.data()));
     mjpc::print("Pos", delta_pos[0], delta_pos[1], delta_pos[2]);
 
     double quat[4];
-    mju_copy4(quat, mjpc::QueryBodyMocapQuat(model, data, mjpc::Lsqp::EE_TARGET_NAME));
+    mju_copy4(quat, mjpc::QueryBodyMocapQuat(model, data, eetarget_mocap_name.data()));
     mjpc::print("Quat", quat[0], quat[1], quat[2], quat[3]);
 #endif
 
 #if 0
     // MOVE TO A SPECIFIC EE_TARGET-POSE
-    mju_add3(pos, mjpc::QueryBodyPos(model, data, mjpc::Lsqp::TARGET_OBJ_NAME),
-             (double[3]){-0.118099, -0.00698625, 0.15});
-    mjpc::SetBodyMocapPos(model, data, mjpc::Lsqp::EE_TARGET_NAME, pos);
-    mjpc::SetBodyMocapQuat(model, data, mjpc::Lsqp::EE_TARGET_NAME, mjpc::Lsqp::EE_TARGET_PREGRASP_QUAT);
-    // Follow [ee_target] by diff-ik
-    lsqp_planner_->LsqpControl();
+    mjpc::SetBodyMocapPos(model, data, eetarget_mocap_name.data(),
+                          mjpc::QueryBodyPos(model, data, mjpc::Lsqp::TARGET_OBJ_NAME));
+    //mjpc::SetBodyMocapQuat(model, data, eetarget_mocap_name.data(), mjpc::Lsqp::EE_TARGET_PREGRASP_QUAT);
 #else
     // MOVE RANDOMLY (FOR TESTING TO VISUALLY EVALUATE THE RESULTS IN ROLLOUTS)
     // Follow [ee_target] by diff-ik
     constexpr bool interactive = true;
     lsqp_planner_->LsqpControl(interactive
                                  ? nullptr
-                                 : (double[4]){FabRandom::rand(-1., 1.), FabRandom::rand(-1., 1.),
-                                               FabRandom::rand(-1., 1.),
-                                               FabRandom::rand(-1., 1.)});
+                                 : std::vector<double>(mjpc::IIWA14_ALLEGRO_CEM_PARAMS_DIM,
+                                                       FabRandom::rand(-1., 1.)).data());
 #endif
 #endif
   }
@@ -186,7 +183,7 @@ protected:
 #endif
     const std::string attach_prefix = lsqp_task_.AttachmentPrefix();
     for (const auto& fingertip_name : mjpc::Lsqp::FINGERTIP_NAMES) {
-      const auto fingertip_target = lsqp_task_.FingertipTargetBodyName(fingertip_name);
+      const auto fingertip_target = lsqp_task_.FingertipTargetMocapName(fingertip_name);
       assert(mjpc::QueryBodyMocapId(model, fingertip_target.c_str()) >= 0);
       const auto finger_site_name = lsqp_task_.FingertipSiteName(fingertip_name);
       if (auto* finger_site_pos = mjpc::QuerySitePos(model, data, finger_site_name.c_str())) {
@@ -195,13 +192,6 @@ protected:
                       nullptr,
                       (float[]){0., 0., 1., 0.8});
       }
-    }
-
-    if (auto* attachment_site_pos = mjpc::QuerySitePos(model, data, mjpc::Lsqp::ATTACHMENT_SITE_NAME)) {
-      mjpc::AddGeom(scn, mjGEOM_SPHERE, (mjtNum[]){0.06, 0.06, 0.06},
-                    attachment_site_pos,
-                    nullptr,
-                    (float[]){0., 0., 1., 0.8});
     }
   }
 
