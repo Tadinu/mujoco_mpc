@@ -54,18 +54,21 @@ public:
   void Rollout(std::function<void(double* action, const double* state, double time)> policy, const Task* task,
                const mjModel* model, mjData* data, const double* state, double time, const double* mocap,
                const double* userdata, int steps,
+               const BaseSolverPtr& solver = nullptr,
                const MjpcPlannerControlCb& control_cb = nullptr);
 
   void NoisyRollout(std::function<void(double* action, const double* state, double time)> policy,
                     const Task* task, const mjModel* model, mjData* data, const double* state, double time,
                     const double* mocap, const double* userdata, double xfrc_std, double xfrc_rate,
                     int steps,
+                    const BaseSolverPtr& solver = nullptr,
                     const MjpcPlannerControlCb& control_cb = nullptr);
 
   // simulate model forward in time with discrete-time indexed policy
   void RolloutDiscrete(std::function<void(double* action, const double* state, int index)> policy,
                        const Task* task, const mjModel* model, mjData* data, const double* state, double time,
                        const double* mocap, const double* userdata, int steps,
+                       const BaseSolverPtr& solver = nullptr,
                        const MjpcPlannerControlCb& control_cb = nullptr);
   // ----- members ----- //
   int horizon; // trajectory length

@@ -109,7 +109,7 @@ public:
   // return number of parameters optimized by planner
   virtual int NumParameters() = 0;
 
-  void ResizeMjData(const mjModel* model, int num_threads);
+  virtual void ResizeMjData(const mjModel* model, int num_threads);
 
   TrajectoryPtr trajectory[kMaxTrajectory];
 
@@ -126,9 +126,16 @@ public:
     control_cb_ = cb;
   }
 
+  std::vector<BaseSolverPtr>& LsqpSolvers() {
+    return solvers_;
+  }
+
+  const std::vector<UniqueMjData>& RolloutData() const { return data_; }
+
 protected:
   MjOwnerAppType owner_type_ = MjOwnerAppType::MJPC;
   std::vector<UniqueMjData> data_;
+  std::vector<BaseSolverPtr> solvers_;
   bool tuning_on_ = false;
   bool planning_on_ = false;
   int action_dim_ = 0;

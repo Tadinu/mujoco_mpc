@@ -71,25 +71,20 @@ void Lsqp::ResidualFn::Residual(const mjModel* model, const mjData* data, double
   int counter = 0;
 
   // Obj position, quat
-  double* obj_position = SensorByName(model, data, std::string(TARGET_OBJ_NAME) + "_pos");
+  double* obj_pos = SensorByName(model, data, std::string(TARGET_OBJ_NAME) + "_pos");
   double* obj_quat = SensorByName(model, data, std::string(TARGET_OBJ_NAME) + "_quat");
 
   // ---------- Residual (0) ----------
-  // Mid position of {palm, fingertips}
-  double* palm_position = SensorByName(model, data, lsqp_task->PalmSiteName() + "_pos");
-  for (const auto& fingertip : FINGERTIP_NAMES) {
-    double* fingertip_position = SensorByName(model, data, lsqp_task->FingertipSiteName(fingertip) + "_pos");
-    mju_addTo3(palm_position, fingertip_position);
-  }
-  mju_scl3(palm_position, palm_position, 1.0 / 5);
+  // EE target position
+  double* ee_target_pos = SensorByName(model, data, lsqp_task->EETargetSiteName() + "_pos");
 
   // position error
-  mju_sub3(residual + counter, obj_position, palm_position);
+  mju_sub3(residual + counter, obj_pos, ee_target_pos);
   counter += 3;
 
   // ---------- Residual (1) ----------
   // goal position error
-  mju_sub3(residual + counter, mjpc::QuerySitePos(model, data, TARGET_OBJ_GOAL_NAME), obj_position);
+  mju_sub3(residual + counter, mjpc::QuerySitePos(model, data, TARGET_OBJ_GOAL_NAME), obj_pos);
   counter += 3;
 
   // goal orientation error

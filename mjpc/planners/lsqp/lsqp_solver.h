@@ -13,11 +13,11 @@
 namespace mjpc {
 class Lsqp;
 
-class LsqpSolver {
+class LsqpSolver : public BaseSolver {
 public:
   LsqpSolver() = default;
 
-  explicit LsqpSolver(const mjModel* model, Lsqp* lsqp, MjOwnerAppType owner_type) :
+  explicit LsqpSolver(const mjModel* model, Lsqp* lsqp, MjOwnerAppType owner_type) : BaseSolver(),
     model_(model),
     lsqp_task_(lsqp),
     owner_type_(owner_type) {

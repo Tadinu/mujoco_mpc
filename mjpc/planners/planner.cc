@@ -19,6 +19,7 @@
 #include <mujoco/mujoco.h>
 #include "mjpc/utilities.h"
 
+
 namespace mjpc {
 void Planner::ResizeMjData(const mjModel* model, int num_threads) {
   int new_size = std::max(1, num_threads);
@@ -26,9 +27,10 @@ void Planner::ResizeMjData(const mjModel* model, int num_threads) {
     data_.erase(data_.begin() + new_size, data_.end());
   } else {
     data_.reserve(new_size);
+
     while (data_.size() < new_size) {
       data_.push_back(MakeUniqueMjData(mj_makeData(model)));
     }
   }
 }
-}  // namespace mjpc
+} // namespace mjpc

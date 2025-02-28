@@ -79,7 +79,7 @@ void LsqpSolver::SetFrameTaskTarget(mjData* data, LsqpFrameTask* task, const cha
 }
 
 std::vector<double> LsqpSolver::Solve(mjData* data) {
-  // Update [end-effector task]'s target
+  // Update [end-effector task]'s mocap target
 #if MJPC_LSQP_PLANAR_ROBOT
   SetFrameTaskTarget(data, &end_effector_subtask_, "target_mocap");
 #else

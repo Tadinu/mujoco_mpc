@@ -68,7 +68,9 @@ protected:
 
 using LsqpLimitPtr = std::shared_ptr<LsqpLimit>;
 
-// Ref: https://github.com/kevinzakka/mink/blob/main/mink/limits/configuration_limit.py
+// Refs:
+// [kevinzakka]: https://github.com/kevinzakka/mink/blob/main/mink/limits/configuration_limit.py
+// [dm_robotics] : https://github.com/google-deepmind/dm_robotics/blob/main/cpp/controllers/lsqp/include/dm_robotics/controllers/lsqp/joint_position_limit_constraint.h
 class LsqpPositionLimit : public LsqpLimit {
 public:
   LsqpPositionLimit() = default;
@@ -126,26 +128,32 @@ public:
 
     // NOTE: Don't use mj_differentiatePos(), which loops over all joints, assuming inputs as c-arrays also hosting all such joints
     const auto* qpos = data->qpos;
-    Eigen::VectorXd delta_q_min(lower_.size());
-    mju_sub(delta_q_min.data(), qpos, lower_.data(), lower_.size());
-    mju_scl(delta_q_min.data(), delta_q_min.data(), 1 / dt, lower_.size());
+    Eigen::VectorXd dq_min(lower_.size());
+    mju_sub(dq_min.data(), qpos, lower_.data(), lower_.size());
+    mju_scl(dq_min.data(), dq_min.data(), 1 / dt, lower_.size());
 
-    Eigen::VectorXd delta_q_max(upper_.size());
-    mju_sub(delta_q_max.data(), upper_.data(), qpos, upper_.size());
-    mju_scl(delta_q_max.data(), delta_q_max.data(), 1 / dt, upper_.size());
+    Eigen::VectorXd dq_max(upper_.size());
+    mju_sub(dq_max.data(), upper_.data(), qpos, upper_.size());
+    mju_scl(dq_max.data(), dq_max.data(), 1 / dt, upper_.size());
 
-    const Eigen::VectorXd p_min = gain_ * delta_q_min(indices_);
-    const Eigen::VectorXd p_max = gain_ * delta_q_max(indices_);
+    const Eigen::VectorXd p_min = gain_ * dq_min(indices_);
+    const Eigen::VectorXd p_max = gain_ * dq_max(indices_);
 
+    // https://kevinzakka.github.io/mink/derivations.html
+    // q_min <= q + dq <= q_max
+    //  -dq <= (q - q_min)
+    //   dq <= (q_max - q)
+    // [G*dq <= h]
     const auto rows = projection_matrix_.rows();
     Eigen::MatrixXd G(2 * rows, projection_matrix_.cols());
-    G.topRows(indices_.size()) = projection_matrix_;
-    G.bottomRows(indices_.size()) = -projection_matrix_;
+    G.topRows(indices_.size()) = -projection_matrix_; // G_min
+    G.bottomRows(indices_.size()) = projection_matrix_; // G_max
 
+    // NOTE: p_min, p_max are fed into [h] following the structure of [G]
     const auto size = indices_.size();
     Eigen::VectorXd h(2 * size);
-    h.head(size) = p_max;
-    h.tail(size) = p_min;
+    h.head(size) = p_min;
+    h.tail(size) = p_max;
 
     return LsqpConstraint{.G = std::move(G), .h = std::move(h)};
   }
@@ -159,7 +167,9 @@ private:
 }; // LsqpPositionLimit
 
 
-// Ref: https://github.com/kevinzakka/mink/blob/main/mink/limits/velocity_limit.py
+// Refs:
+// [kevinzakka]: https://github.com/kevinzakka/mink/blob/main/mink/limits/velocity_limit.py
+// [dm_robotics]: https://github.com/google-deepmind/dm_robotics/blob/main/cpp/controllers/lsqp/include/dm_robotics/controllers/lsqp/joint_velocity_filter.h
 class LsqpVelocityLimit : public LsqpLimit {
 public:
   LsqpVelocityLimit() = default;
@@ -210,15 +220,19 @@ public:
       return {};
     }
 
+    // https://kevinzakka.github.io/mink/derivations.html
+    // [G*dq <= h]
     const auto rows = projection_matrix_.rows();
     Eigen::MatrixXd G(2 * rows, projection_matrix_.cols());
-    G.topRows(rows) = projection_matrix_;
-    G.bottomRows(rows) = -projection_matrix_;
+    G.topRows(rows) = -projection_matrix_;
+    G.bottomRows(rows) = projection_matrix_;
 
+    // -limits_ <= dq/dt <= limits
     const auto size = limits_.size();
+    const auto max_limits = dt * limits_;
     Eigen::VectorXd h(2 * size);
-    h.head(size) = dt * limits_;
-    h.tail(size) = dt * limits_;
+    h.head(size) = max_limits;
+    h.tail(size) = max_limits;
 
     return LsqpConstraint{.G = std::move(G), .h = std::move(h)};
   }

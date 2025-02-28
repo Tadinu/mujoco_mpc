@@ -159,20 +159,20 @@ public:
     mjpc::print("Quat", quat[0], quat[1], quat[2], quat[3]);
 #endif
 
-#if 0
+#if 1
     // MOVE TO A SPECIFIC EE_TARGET-POSE
-    mjpc::SetBodyMocapPos(model, data, eetarget_mocap_name.data(),
-                          mjpc::QueryBodyPos(model, data, mjpc::Lsqp::TARGET_OBJ_NAME));
-    //mjpc::SetBodyMocapQuat(model, data, eetarget_mocap_name.data(), mjpc::Lsqp::EE_TARGET_PREGRASP_QUAT);
-#else
-    // MOVE RANDOMLY (FOR TESTING TO VISUALLY EVALUATE THE RESULTS IN ROLLOUTS)
+    mjtNum target_pos[3];
+    mju_add3(target_pos, mjpc::QueryBodyPos(model, data, mjpc::Lsqp::TARGET_OBJ_NAME),
+             (double [3]){0, 0, 0.07});
+    mjpc::SetBodyMocapPos(model, data, eetarget_mocap_name.data(), target_pos);
+    mjpc::SetBodyMocapQuat(model, data, eetarget_mocap_name.data(), mjpc::Lsqp::EE_TARGET_PREGRASP_QUAT);
+#endif
     // Follow [ee_target] by diff-ik
     constexpr bool interactive = true;
     lsqp_planner_->LsqpControl(interactive
                                  ? nullptr
-                                 : std::vector<double>(mjpc::IIWA14_ALLEGRO_CEM_PARAMS_DIM,
+                                 : std::vector<double>(mjpc::CEM_PARAMS_TOTAL_DIM,
                                                        FabRandom::rand(-1., 1.)).data());
-#endif
 #endif
   }
 
@@ -181,18 +181,7 @@ protected:
 #if !MJAPP_VISUAL_DEBUG
     return;
 #endif
-    const std::string attach_prefix = lsqp_task_.AttachmentPrefix();
-    for (const auto& fingertip_name : mjpc::Lsqp::FINGERTIP_NAMES) {
-      const auto fingertip_target = lsqp_task_.FingertipTargetMocapName(fingertip_name);
-      assert(mjpc::QueryBodyMocapId(model, fingertip_target.c_str()) >= 0);
-      const auto finger_site_name = lsqp_task_.FingertipSiteName(fingertip_name);
-      if (auto* finger_site_pos = mjpc::QuerySitePos(model, data, finger_site_name.c_str())) {
-        mjpc::AddGeom(scn, mjGEOM_SPHERE, (mjtNum[]){0.02, 0.02, 0.02},
-                      finger_site_pos,
-                      nullptr,
-                      (float[]){0., 0., 1., 0.8});
-      }
-    }
+    lsqp_planner_->Traces(scn);
   }
 
 private:

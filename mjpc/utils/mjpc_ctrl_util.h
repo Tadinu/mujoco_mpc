@@ -54,8 +54,8 @@ inline Eigen::VectorXd DiffIk(const Eigen::MatrixXd& J, // Jacobian matrix
 }
 
 inline Eigen::VectorXd DiffNullspace(const Eigen::MatrixXd& J, // Jacobian matrix
-                                     const Vector6d& vee_desired, // Desired end-effector velocity
-                                     const VectorXd& delta_q, // Desired end-effector velocity
+                                     const Vector6d& vee_desired,
+                                     const VectorXd& delta_q,
                                      double damping = 1e-4) {
   // Nullspace control biasing joint velocities towards the home configuration
   Eigen::VectorXd dq = DiffIk(J, vee_desired, damping);

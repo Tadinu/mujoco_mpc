@@ -52,6 +52,15 @@ public:
   // set state
   void SetState(const State& state) override;
 
+  // resize rollout data list
+  void ResizeMjData(const mjModel* model, int num_threads) override;
+
+  std::function<void()> post_resize_mjdata_cb_ = nullptr;
+
+  void SetPostResizeMjData(const std::function<void()>& cb) {
+    post_resize_mjdata_cb_ = cb;
+  }
+
   // optimize nominal policy using random sampling
   void OptimizePolicy(int horizon, ThreadPool& pool) override;
 

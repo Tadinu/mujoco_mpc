@@ -6,14 +6,13 @@
 #include <variant>
 #include <vector>
 #include <functional>
+#include <memory>
 
 // MuJoCo
 #include <mujoco/mujoco.h>
 #define MJPC_DEBUG (0)
 
 namespace mjpc {
-using MjpcPlannerControlCb = std::function<std::vector<double>(double* policy_action, mjData* data)>;
-
 template <typename... TVariant>
 using MjpcVariant = std::variant<std::monostate, TVariant...>;
 template <typename... TVariant>
@@ -28,6 +27,10 @@ using MjpcNamedAnyMap = std::map<std::string, std::any>;
 
 using MjpcSharedMutexLock = std::shared_lock<std::shared_mutex>;
 using MjpcMutexLock = std::lock_guard<std::mutex>;
+
+static constexpr const mjtNum* UNIT_X = (mjtNum[]){1, 0, 0};
+static constexpr const mjtNum* UNIT_Y = (mjtNum[]){0, 1, 0};
+static constexpr const mjtNum* UNIT_Z = (mjtNum[]){0, 0, 1};
 
 enum class MjOwnerAppType : int8_t {
   MJAPP,
@@ -72,4 +75,14 @@ struct MjpcParamNotFoundError : public std::runtime_error {
     : std::runtime_error("[Param not found]: " + std::string(error_msg)) {
   }
 };
+
+class BaseSolver {
+public:
+  BaseSolver() = default;
+  virtual ~BaseSolver() = default;
+};
+
+using BaseSolverPtr = std::shared_ptr<BaseSolver>;
+using MjpcPlannerControlCb = std::function<std::vector<double>(double* policy_action, mjData* data,
+                                                               const BaseSolverPtr& solver)>;
 } // namespace mjpc

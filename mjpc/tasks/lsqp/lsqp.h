@@ -55,11 +55,13 @@ static std::vector<mjtNum> TARGET_OBJ_QPOS = {0.9, 0, 0.3, 1, 0, 0, 0};
 
 static constexpr uint8_t IIWA14_DOF = 7;
 static constexpr uint8_t ALLEGRO_DOF = 16;
-static constexpr uint8_t EE_CEM_PARAMS_DIM = 2; // wrist(XYZ-loc ratio away from goal + theta-rot]
+static constexpr uint8_t EE_CEM_PARAMS_DIM = 1; // wrist(XYZ-loc ratio away from goal + theta-rot]
 static constexpr uint8_t FINGERS_CEM_PARAMS_DIM = MJPC_LSQP_FINGERS_OSC
                                                     ? 4 // Fingertips
                                                     : ALLEGRO_DOF;
-static constexpr uint8_t IIWA14_ALLEGRO_CEM_PARAMS_DIM = EE_CEM_PARAMS_DIM + 0; //FINGERS_CEM_PARAMS_DIM;
+static constexpr uint8_t CEM_PARAMS_TOTAL_DIM = EE_CEM_PARAMS_DIM + 0; //FINGERS_CEM_PARAMS_DIM;
+static constexpr float CEM_PARAMS_LIMIT_LOWER = 0.;
+static constexpr float CEM_PARAMS_LIMIT_UPPER = 1.;
 
 static const std::string MAIN_SCENE_XML_PATH =
 #if MJPC_PLANNER_LSQP_DIFFIK_ENABLED
@@ -452,8 +454,16 @@ public:
       mjs_setString(frameangacc_sensor->objname, fingertip_name.c_str());
     }
 
+    // 10- EE Target sensor
+    mjsSensor* ee_target_sensor = mjs_addSensor(scene_spec);
+    const auto ee_target_site_name = EETargetSiteName();
+    ee_target_sensor->type = mjSENS_FRAMEPOS;
+    ee_target_sensor->objtype = mjOBJ_SITE;
+    mjs_setString(ee_target_sensor->name, (ee_target_site_name + "_pos").c_str());
+    mjs_setString(ee_target_sensor->objname, ee_target_site_name.c_str());
+
 #if MJPC_LSQP_SPAWN_OBJECT
-    // 10- Picked object
+    // 11- Picked object
     mjsBody* pick_obj = mjs_addBody(world_body, nullptr);
     mjs_addFreeJoint(pick_obj);
     mjs_setString(pick_obj->name, TARGET_OBJ_NAME);
@@ -472,13 +482,13 @@ public:
     memcpy(pick_obj_geom->size, (double[]){0.03, 0.03, 0.03}, sizeof(pick_obj_geom->size));
     memcpy(pick_obj_geom->rgba, (float[]){0.2, 0.5, 0.3, 0.5}, sizeof(pick_obj_geom->rgba));
 
-    // 10.1- Picked obj's target site (!NOTE: Enable site group for visualization)
+    // 11.1- Picked obj's target goal site (!NOTE: Enable site group for visualization)
     auto* target_site = fCreateSite(world_body, TARGET_OBJ_GOAL_NAME,
                                     /*pos*/(mjtNum[]){0.1, 0.5, 0.5},/*quat*/(mjtNum[]){0.7, 0., 0.7, 0},
                                     mjGEOM_BOX, /*size*/0.03, /*rgba*/(float[]){0.5, 0., 0., 0.5});
 #endif
 
-    // 11- Compile [scene_spec] -> mjModel
+    // 12- Compile [scene_spec] -> mjModel
     //!NOTE: If needed, consider setting [scene_spec->modelfiledir], base for all resource paths
     mjModel* model = mj_compile(scene_spec, vfs_.get());
 #if MJPC_PLANNER_LSQP_DEBUG

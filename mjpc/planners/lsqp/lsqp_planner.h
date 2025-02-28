@@ -31,7 +31,7 @@ public:
 
   // Init task-specific LSQP (configuration, subtasks, etc.)
   void InitTaskLsqp(const mjModel* model, const mjData* data);
-  std::vector<double> LsqpControl(double* policy_action = nullptr, mjData* data = nullptr);
+  std::vector<double> LsqpControl(double* policy_action = nullptr, mjData* data = nullptr, const LsqpSolverPtr& solver = nullptr);
 
   // =========================================================================================================
   // MJPC-PLANNER IMPL --
@@ -66,7 +66,9 @@ public:
   }
 
   // visualize planner-specific traces
-  double policy_ee_target_pos_[3];
+  double visual_policy_ee_target_pos_[3];
+  double visual_ee_direction_[3];
+  double palm_normal_[3];
   void Traces(mjvScene* scn) override;
 
   void ClearTrace() override {
@@ -108,7 +110,7 @@ public:
 protected:
   // mjpc
   mutable std::shared_mutex policy_mutex_;
-  std::vector<double> prev_action_;
+  LsqpSolverPtr lsqp_solver_ = nullptr;
 };
 
 using LsqpPlannerPtr = std::shared_ptr<LsqpPlanner>;

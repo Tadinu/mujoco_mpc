@@ -42,6 +42,7 @@ using mjpc::spline::TimeSpline;
 void CrossEntropyPlanner::Initialize(mjModel* model, const Task& task) {
   // delete mjData instances since model might have changed.
   data_.clear();
+  solvers_.clear();
 
   // allocate one mjData for nominal.
   ResizeMjData(model, 1);
@@ -160,6 +161,13 @@ void CrossEntropyPlanner::Reset(int horizon, const double* initial_repeated_acti
 // set state
 void CrossEntropyPlanner::SetState(const State& state) {
   state.CopyTo(this->state.data(), this->mocap.data(), this->userdata.data(), &this->time);
+}
+
+void CrossEntropyPlanner::ResizeMjData(const mjModel* model, int num_threads) {
+  Planner::ResizeMjData(model, num_threads);
+  if (post_resize_mjdata_cb_) {
+    post_resize_mjdata_cb_();
+  }
 }
 
 // optimize nominal policy using random sampling
@@ -306,7 +314,9 @@ void CrossEntropyPlanner::NominalTrajectory(int horizon) {
 
   // rollout nominal policy
   nominal_trajectory->Rollout(frun_nominal_policy, task, model, data_[ThreadPool::WorkerId()].get(),
-                              state.data(), time, mocap.data(), userdata.data(), horizon, control_cb_);
+                              state.data(), time, mocap.data(), userdata.data(), horizon,
+                              solvers_[ThreadPool::WorkerId()],
+                              control_cb_);
 }
 
 void CrossEntropyPlanner::NominalTrajectory(int horizon, ThreadPool& pool) { NominalTrajectory(horizon); }
@@ -424,7 +434,8 @@ void CrossEntropyPlanner::Rollouts(int num_trajectory, int horizon, ThreadPool& 
 
           // policy rollout
           s.trajectory[i]->Rollout(sample_policy_i, task, model, s.data_[ThreadPool::WorkerId()].get(),
-                                   state.data(), time, mocap.data(), userdata.data(), horizon, s.control_cb_);
+                                   state.data(), time, mocap.data(), userdata.data(), horizon,
+                                   s.solvers_[ThreadPool::WorkerId()], s.control_cb_);
         });
   }
   // nominal

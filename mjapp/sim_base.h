@@ -40,7 +40,7 @@
 // mjapp
 #include "platform_ui_adapter.h"
 
-#define MJAPP_VISUAL_DEBUG (0)
+#define MJAPP_VISUAL_DEBUG (1)
 #define MJAPP_ACTUATOR_UI_DISABLED (1)
 
 namespace mjapp {
