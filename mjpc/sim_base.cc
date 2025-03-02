@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mjapp/sim_base.h"
+#include "mjpc/sim_base.h"
 
 #include <algorithm>
 #include <atomic>
@@ -28,13 +28,10 @@
 #include <utility>
 
 #include "lodepng.h"
-#include <mujoco/mjdata.h>
-#include <mujoco/mjui.h>
-#include <mujoco/mjvisualize.h>
-#include <mujoco/mjxmacro.h>
 #include <mujoco/mujoco.h>
-#include "platform_ui_adapter.h"
-#include "array_safety.h"
+#include <mujoco/mjxmacro.h>
+#include <platform_ui_adapter.h>
+#include <array_safety.h>
 
 // When launched via an App Bundle on macOS, the working directory is the path to the App Bundle's
 // resource directory. This causes files to be saved into the bundle, which is not the desired
@@ -49,8 +46,8 @@ static std::string GetSavePath(const char* filename) {
 }
 #endif
 
-namespace mjapp {
-namespace mjapp_util = ::mjapp::sample_util;
+namespace mjpc {
+namespace mju = ::mujoco::sample_util;
 
 using Seconds = std::chrono::duration<double>;
 using Milliseconds = std::chrono::duration<double, std::milli>;
@@ -102,6 +99,9 @@ enum {
   SECT_OPTION,
   SECT_SIMULATION,
   SECT_WATCH,
+  SECT_TASK,
+  SECT_AGENT,
+  SECT_ESTIMATOR,
   SECT_PHYSICS,
   SECT_RENDERING,
   SECT_VISUALIZATION,
@@ -183,7 +183,7 @@ static constexpr int kConstraintNum = 5;
 static constexpr int kCostNum = 3;
 
 // init profiler figures
-void InitializeProfiler(mjapp::SimulateBase* sim) {
+void InitializeProfiler(mjpc::SimulateBase* sim) {
   // set figures to default
   mjv_defaultFigure(&sim->figconstraint);
   mjv_defaultFigure(&sim->figcost);
@@ -191,22 +191,22 @@ void InitializeProfiler(mjapp::SimulateBase* sim) {
   mjv_defaultFigure(&sim->figsize);
 
   // titles
-  mjapp_util::strcpy_arr(sim->figconstraint.title, "Counts");
-  mjapp_util::strcpy_arr(sim->figcost.title, "Convergence (log 10)");
-  mjapp_util::strcpy_arr(sim->figsize.title, "Dimensions");
-  mjapp_util::strcpy_arr(sim->figtimer.title, "CPU time (msec)");
+  mju::strcpy_arr(sim->figconstraint.title, "Counts");
+  mju::strcpy_arr(sim->figcost.title, "Convergence (log 10)");
+  mju::strcpy_arr(sim->figsize.title, "Dimensions");
+  mju::strcpy_arr(sim->figtimer.title, "CPU time (msec)");
 
   // x-labels
-  mjapp_util::strcpy_arr(sim->figconstraint.xlabel, "Solver iteration");
-  mjapp_util::strcpy_arr(sim->figcost.xlabel, "Solver iteration");
-  mjapp_util::strcpy_arr(sim->figsize.xlabel, "Video frame");
-  mjapp_util::strcpy_arr(sim->figtimer.xlabel, "Video frame");
+  mju::strcpy_arr(sim->figconstraint.xlabel, "Solver iteration");
+  mju::strcpy_arr(sim->figcost.xlabel, "Solver iteration");
+  mju::strcpy_arr(sim->figsize.xlabel, "Video frame");
+  mju::strcpy_arr(sim->figtimer.xlabel, "Video frame");
 
   // y-tick number formats
-  mjapp_util::strcpy_arr(sim->figconstraint.yformat, "%.0f");
-  mjapp_util::strcpy_arr(sim->figcost.yformat, "%.1f");
-  mjapp_util::strcpy_arr(sim->figsize.yformat, "%.0f");
-  mjapp_util::strcpy_arr(sim->figtimer.yformat, "%.2f");
+  mju::strcpy_arr(sim->figconstraint.yformat, "%.0f");
+  mju::strcpy_arr(sim->figcost.yformat, "%.1f");
+  mju::strcpy_arr(sim->figsize.yformat, "%.0f");
+  mju::strcpy_arr(sim->figtimer.yformat, "%.2f");
 
   // colors
   sim->figconstraint.figurergba[0] = 0.1f;
@@ -225,6 +225,7 @@ void InitializeProfiler(mjapp::SimulateBase* sim) {
     fig->linergb[i][1] = fig->linergb[i - kCostNum][1];
     fig->linergb[i][2] = fig->linergb[i - kCostNum][2];
   }
+
   fig = &sim->figconstraint;
   for (int i = kConstraintNum; i < mjMAXLINE; i++) {
     fig->linergb[i][0] = fig->linergb[i - kConstraintNum][0];
@@ -233,25 +234,25 @@ void InitializeProfiler(mjapp::SimulateBase* sim) {
   }
 
   // legends
-  mjapp_util::strcpy_arr(sim->figconstraint.linename[0], "total");
-  mjapp_util::strcpy_arr(sim->figconstraint.linename[1], "active");
-  mjapp_util::strcpy_arr(sim->figconstraint.linename[2], "changed");
-  mjapp_util::strcpy_arr(sim->figconstraint.linename[3], "evals");
-  mjapp_util::strcpy_arr(sim->figconstraint.linename[4], "updates");
-  mjapp_util::strcpy_arr(sim->figcost.linename[0], "improvement");
-  mjapp_util::strcpy_arr(sim->figcost.linename[1], "gradient");
-  mjapp_util::strcpy_arr(sim->figcost.linename[2], "lineslope");
-  mjapp_util::strcpy_arr(sim->figsize.linename[0], "dof");
-  mjapp_util::strcpy_arr(sim->figsize.linename[1], "body");
-  mjapp_util::strcpy_arr(sim->figsize.linename[2], "constraint");
-  mjapp_util::strcpy_arr(sim->figsize.linename[3], "sqrt(nnz)");
-  mjapp_util::strcpy_arr(sim->figsize.linename[4], "contact");
-  mjapp_util::strcpy_arr(sim->figsize.linename[5], "iteration");
-  mjapp_util::strcpy_arr(sim->figtimer.linename[0], "total");
-  mjapp_util::strcpy_arr(sim->figtimer.linename[1], "collision");
-  mjapp_util::strcpy_arr(sim->figtimer.linename[2], "prepare");
-  mjapp_util::strcpy_arr(sim->figtimer.linename[3], "solve");
-  mjapp_util::strcpy_arr(sim->figtimer.linename[4], "other");
+  mju::strcpy_arr(sim->figconstraint.linename[0], "total");
+  mju::strcpy_arr(sim->figconstraint.linename[1], "active");
+  mju::strcpy_arr(sim->figconstraint.linename[2], "changed");
+  mju::strcpy_arr(sim->figconstraint.linename[3], "evals");
+  mju::strcpy_arr(sim->figconstraint.linename[4], "updates");
+  mju::strcpy_arr(sim->figcost.linename[0], "improvement");
+  mju::strcpy_arr(sim->figcost.linename[1], "gradient");
+  mju::strcpy_arr(sim->figcost.linename[2], "lineslope");
+  mju::strcpy_arr(sim->figsize.linename[0], "dof");
+  mju::strcpy_arr(sim->figsize.linename[1], "body");
+  mju::strcpy_arr(sim->figsize.linename[2], "constraint");
+  mju::strcpy_arr(sim->figsize.linename[3], "sqrt(nnz)");
+  mju::strcpy_arr(sim->figsize.linename[4], "contact");
+  mju::strcpy_arr(sim->figsize.linename[5], "iteration");
+  mju::strcpy_arr(sim->figtimer.linename[0], "total");
+  mju::strcpy_arr(sim->figtimer.linename[1], "collision");
+  mju::strcpy_arr(sim->figtimer.linename[2], "prepare");
+  mju::strcpy_arr(sim->figtimer.linename[3], "solve");
+  mju::strcpy_arr(sim->figtimer.linename[4], "other");
 
   // grid sizes
   sim->figconstraint.gridsize[0] = 5;
@@ -291,7 +292,7 @@ void InitializeProfiler(mjapp::SimulateBase* sim) {
 }
 
 // update profiler figures
-void UpdateProfiler(mjapp::SimulateBase* sim, const mjModel* m, const mjData* d) {
+void UpdateProfiler(mjpc::SimulateBase* sim, const mjModel* m, const mjData* d) {
   // reset lines in Constraint and Cost figures
   memset(sim->figconstraint.linepnt, 0, mjMAXLINE * sizeof(int));
   memset(sim->figcost.linepnt, 0, mjMAXLINE * sizeof(int));
@@ -431,7 +432,7 @@ void UpdateProfiler(mjapp::SimulateBase* sim, const mjModel* m, const mjData* d)
 }
 
 // show profiler figures
-void ShowProfiler(mjapp::SimulateBase* sim, mjrRect rect) {
+void ShowProfiler(mjpc::SimulateBase* sim, mjrRect rect) {
   mjrRect viewport = {
       rect.left + rect.width - rect.width / 4,
       rect.bottom,
@@ -449,7 +450,7 @@ void ShowProfiler(mjapp::SimulateBase* sim, mjrRect rect) {
 
 
 // init sensor figure
-void InitializeSensor(mjapp::SimulateBase* sim) {
+void InitializeSensor(mjpc::SimulateBase* sim) {
   mjvFigure& figsensor = sim->figsensor;
 
   // set figure to default
@@ -462,10 +463,10 @@ void InitializeSensor(mjapp::SimulateBase* sim) {
   figsensor.flg_symmetric = 1;
 
   // title
-  mjapp_util::strcpy_arr(figsensor.title, "Sensor data");
+  mju::strcpy_arr(figsensor.title, "Sensor data");
 
   // y-tick nubmer format
-  mjapp_util::strcpy_arr(figsensor.yformat, "%.1f");
+  mju::strcpy_arr(figsensor.yformat, "%.1f");
 
   // grid size
   figsensor.gridsize[0] = 2;
@@ -479,7 +480,7 @@ void InitializeSensor(mjapp::SimulateBase* sim) {
 }
 
 // update sensor figure
-void UpdateSensor(mjapp::SimulateBase* sim, const mjModel* m, const mjData* d) {
+void UpdateSensor(mjpc::SimulateBase* sim, const mjModel* m, const mjData* d) {
   mjvFigure& figsensor = sim->figsensor;
   static const int maxline = 10;
 
@@ -528,7 +529,7 @@ void UpdateSensor(mjapp::SimulateBase* sim, const mjModel* m, const mjData* d) {
 }
 
 // show sensor figure
-void ShowSensor(mjapp::SimulateBase* sim, mjrRect rect) {
+void ShowSensor(mjpc::SimulateBase* sim, mjrRect rect) {
   // constant width with and without profiler
   int width = sim->profiler ? rect.width / 3 : rect.width / 4;
 
@@ -543,7 +544,7 @@ void ShowSensor(mjapp::SimulateBase* sim, mjrRect rect) {
 }
 
 // load state from history buffer
-static void LoadScrubState(mjapp::SimulateBase* sim) {
+static void LoadScrubState(mjpc::SimulateBase* sim) {
   // get index into circular buffer
   int i = (sim->scrub_index + sim->history_cursor_) % sim->nhistory_;
   i = (i + sim->nhistory_) % sim->nhistory_;
@@ -557,14 +558,14 @@ static void LoadScrubState(mjapp::SimulateBase* sim) {
 }
 
 // update an entire section of ui0
-static void mjui0_update_section(mjapp::SimulateBase* sim, int section) {
+static void mjui0_update_section(mjpc::SimulateBase* sim, int section) {
   mjui_update(section, -1, &sim->ui0, &sim->uistate, &sim->platform_ui->mjr_context());
 }
 
 // prepare info text
-void UpdateInfoText(mjapp::SimulateBase* sim, const mjModel* m, const mjData* d,
-                    char (&title)[mjapp::SimulateBase::kMaxFilenameLength],
-                    char (&content)[mjapp::SimulateBase::kMaxFilenameLength]) {
+void UpdateInfoText(mjpc::SimulateBase* sim, const mjModel* m, const mjData* d,
+                    char (&title)[mjpc::SimulateBase::kMaxFilenameLength],
+                    char (&content)[mjpc::SimulateBase::kMaxFilenameLength]) {
   char tmp[20];
 
   // number of islands with statistics
@@ -589,9 +590,9 @@ void UpdateInfoText(mjapp::SimulateBase* sim, const mjModel* m, const mjData* d,
   // format FPS text
   char fps[10];
   if (sim->fps_ < 1) {
-    mjapp_util::sprintf_arr(fps, "%0.1f ", sim->fps_);
+    mju::sprintf_arr(fps, "%0.1f ", sim->fps_);
   } else {
-    mjapp_util::sprintf_arr(fps, "%.0f ", sim->fps_);
+    mju::sprintf_arr(fps, "%.0f ", sim->fps_);
   }
 
   // total iterations of all islands with statistics
@@ -601,67 +602,78 @@ void UpdateInfoText(mjapp::SimulateBase* sim, const mjModel* m, const mjData* d,
   }
 
   // prepare info text
-  mjapp_util::strcpy_arr(title, "Time\nSize\nCPU\nSolver   \nFPS\nMemory");
-  mjapp_util::sprintf_arr(content,
-                          "%-9.3f\n%d  (%d con)\n%.3f\n%.1f  (%d it)\n%s\n%.1f%% of %s",
-                          d->time,
-                          d->nefc, d->ncon,
-                          sim->run
-                            ? d->timer[mjTIMER_STEP].duration / mjMAX(1, d->timer[mjTIMER_STEP].number)
-                            : d->timer[mjTIMER_FORWARD].duration / mjMAX(1, d->timer[mjTIMER_FORWARD].number),
-                          solerr, solver_niter,
-                          fps,
-                          100 * d->maxuse_arena / (double)(d->narena),
-                          mju_writeNumBytes(d->narena));
+  mju::strcpy_arr(title, "Time\nSize\nCPU\nSolver   \nFPS\nMemory");
+  mju::sprintf_arr(content,
+                   "%-9.3f\n%d  (%d con)\n%.3f\n%.1f  (%d it)\n%s\n%.1f%% of %s",
+                   d->time,
+                   d->nefc, d->ncon,
+                   sim->run
+                     ? d->timer[mjTIMER_STEP].duration / mjMAX(1, d->timer[mjTIMER_STEP].number)
+                     : d->timer[mjTIMER_FORWARD].duration / mjMAX(1, d->timer[mjTIMER_FORWARD].number),
+                   solerr, solver_niter,
+                   fps,
+                   100 * d->maxuse_arena / (double)(d->narena),
+                   mju_writeNumBytes(d->narena));
+
+  if (sim->agent) {
+    mju::strcpy_arr(title, "Objective\nDoFs\nControls\nParameters\nTime\nMemory");
+    const mjpc::Trajectory* best_trajectory = sim->agent->ActivePlanner().BestTrajectory();
+    if (best_trajectory) {
+      int nparam = sim->agent->ActivePlanner().NumParameters();
+      mju::sprintf_arr(content, "%.3f\n%d\n%d\n%d\n%-9.3f\n%.2g of %s", best_trajectory->total_return, m->nv,
+                       m->nu, nparam, d->time, d->maxuse_arena / (double)(d->narena),
+                       mju_writeNumBytes(d->narena));
+    }
+  }
 
   // add Energy if enabled
   {
     if (mjENABLED(mjENBL_ENERGY)) {
-      mjapp_util::sprintf_arr(tmp, "\n%.3f", d->energy[0] + d->energy[1]);
-      mjapp_util::strcat_arr(content, tmp);
-      mjapp_util::strcat_arr(title, "\nEnergy");
+      mju::sprintf_arr(tmp, "\n%.3f", d->energy[0] + d->energy[1]);
+      mju::strcat_arr(content, tmp);
+      mju::strcat_arr(title, "\nEnergy");
     }
 
     // add FwdInv if enabled
     if (mjENABLED(mjENBL_FWDINV)) {
-      mjapp_util::sprintf_arr(tmp, "\n%.1f %.1f",
-                              mju_log10(mju_max(mjMINVAL, d->solver_fwdinv[0])),
-                              mju_log10(mju_max(mjMINVAL, d->solver_fwdinv[1])));
-      mjapp_util::strcat_arr(content, tmp);
-      mjapp_util::strcat_arr(title, "\nFwdInv");
+      mju::sprintf_arr(tmp, "\n%.1f %.1f",
+                       mju_log10(mju_max(mjMINVAL, d->solver_fwdinv[0])),
+                       mju_log10(mju_max(mjMINVAL, d->solver_fwdinv[1])));
+      mju::strcat_arr(content, tmp);
+      mju::strcat_arr(title, "\nFwdInv");
     }
 
     // add islands if enabled
     if (mjENABLED(mjENBL_ISLAND)) {
-      mjapp_util::sprintf_arr(tmp, "\n%d", d->nisland);
-      mjapp_util::strcat_arr(content, tmp);
-      mjapp_util::strcat_arr(title, "\nIslands");
+      mju::sprintf_arr(tmp, "\n%d", d->nisland);
+      mju::strcat_arr(content, tmp);
+      mju::strcat_arr(title, "\nIslands");
     }
   }
 }
 
 // sprintf forwarding, to avoid compiler warning in x-macro
 void PrintField(char (&str)[mjMAXUINAME], void* ptr) {
-  mjapp_util::sprintf_arr(str, "%g", *static_cast<mjtNum*>(ptr));
+  mju::sprintf_arr(str, "%g", *static_cast<mjtNum*>(ptr));
 }
 
 // update watch
-void UpdateWatch(mjapp::SimulateBase* sim, const mjModel* m, const mjData* d) {
+void UpdateWatch(mjpc::SimulateBase* sim, const mjModel* m, const mjData* d) {
   // clear
   sim->ui0.sect[SECT_WATCH].item[2].multi.nelem = 1;
-  mjapp_util::strcpy_arr(sim->ui0.sect[SECT_WATCH].item[2].multi.name[0], "invalid field");
+  mju::strcpy_arr(sim->ui0.sect[SECT_WATCH].item[2].multi.name[0], "invalid field");
 
   // prepare symbols needed by xmacro
   MJDATA_POINTERS_PREAMBLE(m);
 
   // find specified field in mjData arrays, update value
 #define X(TYPE, NAME, NR, NC)                                                                  \
-    if (!mjapp_util::strcmp_arr(#NAME, sim->field) &&                                                   \
-        !mjapp_util::strcmp_arr(#TYPE, "mjtNum")) {                                                     \
+    if (!mju::strcmp_arr(#NAME, sim->field) &&                                                   \
+        !mju::strcmp_arr(#TYPE, "mjtNum")) {                                                     \
       if (sim->index >= 0 && sim->index < m->NR * NC) {                                          \
         PrintField(sim->ui0.sect[SECT_WATCH].item[2].multi.name[0], d->NAME + sim->index);       \
       } else {                                                                                   \
-        mjapp_util::strcpy_arr(sim->ui0.sect[SECT_WATCH].item[2].multi.name[0], "invalid index");       \
+        mju::strcpy_arr(sim->ui0.sect[SECT_WATCH].item[2].multi.name[0], "invalid index");       \
       }                                                                                          \
       return;                                                                                    \
     }
@@ -674,10 +686,10 @@ void UpdateWatch(mjapp::SimulateBase* sim, const mjModel* m, const mjData* d) {
 //---------------------------------- UI construction -----------------------------------------------
 
 // make physics section of UI
-void MakePhysicsSection(mjapp::SimulateBase* sim) {
+void MakePhysicsSection(mjpc::SimulateBase* sim, int oldstate) {
   mjOption* opt = sim->is_passive_ ? &sim->scnstate_.model.opt : &sim->m_->opt;
   mjuiDef defPhysics[] = {
-      {mjITEM_SECTION, "Physics", mjPRESERVE, nullptr, "AP"},
+      {mjITEM_SECTION, "Physics", oldstate, nullptr, "AP"},
       {mjITEM_SELECT, "Integrator", 2, &(opt->integrator), "Euler\nRK4\nimplicit\nimplicitfast"},
       {mjITEM_SELECT, "Cone", 2, &(opt->cone), "Pyramidal\nElliptic"},
       {mjITEM_SELECT, "Jacobian", 2, &(opt->jacobian), "Dense\nSparse\nAuto"},
@@ -737,13 +749,13 @@ void MakePhysicsSection(mjapp::SimulateBase* sim) {
       {mjITEM_END}
   };
   for (int i = 0; i < mjNDISABLE; i++) {
-    mjapp_util::strcpy_arr(defFlag[0].name, mjDISABLESTRING[i]);
+    mju::strcpy_arr(defFlag[0].name, mjDISABLESTRING[i]);
     defFlag[0].pdata = sim->disable + i;
     mjui_add(&sim->ui0, defFlag);
   }
   mjui_add(&sim->ui0, defEnableFlags);
   for (int i = 0; i < mjNENABLE; i++) {
-    mjapp_util::strcpy_arr(defFlag[0].name, mjENABLESTRING[i]);
+    mju::strcpy_arr(defFlag[0].name, mjENABLESTRING[i]);
     defFlag[0].pdata = sim->enable + i;
     mjui_add(&sim->ui0, defFlag);
   }
@@ -759,9 +771,9 @@ void MakePhysicsSection(mjapp::SimulateBase* sim) {
 
     // close less useful subsections
     if (it->type == mjITEM_SEPARATOR) {
-      if (mjapp_util::strcmp_arr(it->name, "Actuator Group Enable") &&
-          mjapp_util::strcmp_arr(it->name, "Contact Override") &&
-          mjapp_util::strcmp_arr(it->name, "Physical Parameters")) {
+      if (mju::strcmp_arr(it->name, "Actuator Group Enable") &&
+          mju::strcmp_arr(it->name, "Contact Override") &&
+          mju::strcmp_arr(it->name, "Physical Parameters")) {
         it->state = mjSEPCLOSED + 1;
       }
     }
@@ -770,9 +782,9 @@ void MakePhysicsSection(mjapp::SimulateBase* sim) {
 
 
 // make rendering section of UI
-void MakeRenderingSection(mjapp::SimulateBase* sim, const mjModel* m) {
+void MakeRenderingSection(mjpc::SimulateBase* sim, const mjModel* m, int oldstate) {
   mjuiDef defRendering[] = {
-      {mjITEM_SECTION, "Rendering", mjPRESERVE, nullptr, "AR"},
+      {mjITEM_SECTION, "Rendering", oldstate, nullptr, "AR"},
       {mjITEM_SELECT, "Camera", 2, &(sim->camera), "Free\nTracking"},
       {mjITEM_SELECT, "Label", 2, &(sim->opt.label),
        "None\nBody\nJoint\nGeom\nSite\nCamera\nLight\nTendon\n"
@@ -795,18 +807,18 @@ void MakeRenderingSection(mjapp::SimulateBase* sim, const mjModel* m) {
     // prepare name
     char camname[mjMAXUINAME] = "\n";
     if (m->names[m->name_camadr[i]]) {
-      mjapp_util::strcat_arr(camname, m->names + m->name_camadr[i]);
+      mju::strcat_arr(camname, m->names + m->name_camadr[i]);
     } else {
-      mjapp_util::sprintf_arr(camname, "\nCamera %d", i);
+      mju::sprintf_arr(camname, "\nCamera %d", i);
     }
 
     // check string length
-    if (mjapp_util::strlen_arr(camname) + mjapp_util::strlen_arr(defRendering[1].other) >= mjMAXUITEXT - 1) {
+    if (mju::strlen_arr(camname) + mju::strlen_arr(defRendering[1].other) >= mjMAXUITEXT - 1) {
       break;
     }
 
     // add camera
-    mjapp_util::strcat_arr(defRendering[1].other, camname);
+    mju::strcat_arr(defRendering[1].other, camname);
   }
 
   // add rendering standard
@@ -819,13 +831,13 @@ void MakeRenderingSection(mjapp::SimulateBase* sim, const mjModel* m) {
   };
   for (int i = 0; i < mjNVISFLAG; i++) {
     // set name
-    mjapp_util::strcpy_arr(defFlag[0].name, mjVISSTRING[i][0]);
+    mju::strcpy_arr(defFlag[0].name, mjVISSTRING[i][0]);
 
     // set shortcut and data
     if (mjVISSTRING[i][2][0]) {
-      mjapp_util::sprintf_arr(defFlag[0].other, " %s", mjVISSTRING[i][2]);
+      mju::sprintf_arr(defFlag[0].other, " %s", mjVISSTRING[i][2]);
     } else {
-      mjapp_util::sprintf_arr(defFlag[0].other, "");
+      mju::sprintf_arr(defFlag[0].other, "");
     }
     defFlag[0].pdata = sim->opt.flags + i;
     mjui_add(&sim->ui0, defFlag);
@@ -843,13 +855,13 @@ void MakeRenderingSection(mjapp::SimulateBase* sim, const mjModel* m) {
   mjui_add(&sim->ui0, defOpenGL);
   for (int i = 0; i < mjNRNDFLAG; i++) {
     // set name
-    mjapp_util::strcpy_arr(defFlag[0].name, mjRNDSTRING[i][0]);
+    mju::strcpy_arr(defFlag[0].name, mjRNDSTRING[i][0]);
 
     // set shortcut and data
     if (mjRNDSTRING[i][2][0]) {
-      mjapp_util::sprintf_arr(defFlag[0].other, " %s", mjRNDSTRING[i][2]);
+      mju::sprintf_arr(defFlag[0].other, " %s", mjRNDSTRING[i][2]);
     } else {
-      mjapp_util::sprintf_arr(defFlag[0].other, "");
+      mju::sprintf_arr(defFlag[0].other, "");
     }
     defFlag[0].pdata = sim->scn.flags + i;
     mjui_add(&sim->ui0, defFlag);
@@ -857,12 +869,12 @@ void MakeRenderingSection(mjapp::SimulateBase* sim, const mjModel* m) {
 }
 
 // make visualization section of UI
-void MakeVisualizationSection(mjapp::SimulateBase* sim, const mjModel* m) {
+void MakeVisualizationSection(mjpc::SimulateBase* sim, const mjModel* m, int oldstate) {
   mjStatistic* stat = sim->is_passive_ ? &sim->scnstate_.model.stat : &sim->m_->stat;
   mjVisual* vis = sim->is_passive_ ? &sim->scnstate_.model.vis : &sim->m_->vis;
 
   mjuiDef defVisualization[] = {
-      {mjITEM_SECTION, "Visualization", mjPRESERVE, nullptr, "AV"},
+      {mjITEM_SECTION, "Visualization", oldstate, nullptr, "AV"},
       {mjITEM_SEPARATOR, "Headlight", 1},
       {mjITEM_RADIO, "Active", 5, &(vis->headlight.active), "Off\nOn"},
       {mjITEM_EDITFLOAT, "Ambient", 2, &(vis->headlight.ambient), "3"},
@@ -944,9 +956,9 @@ void MakeVisualizationSection(mjapp::SimulateBase* sim, const mjModel* m) {
 }
 
 // make group section of UI
-void MakeGroupSection(mjapp::SimulateBase* sim) {
+void MakeGroupSection(mjpc::SimulateBase* sim, int oldstate) {
   mjuiDef defGroup[] = {
-      {mjITEM_SECTION, "Group enable", mjPRESERVE, nullptr, "AG"},
+      {mjITEM_SECTION, "Group enable", oldstate, nullptr, "AG"},
       {mjITEM_SEPARATOR, "Geom groups", 1},
       {mjITEM_CHECKBYTE, "Geom 0", 2, sim->opt.geomgroup, " 0"},
       {mjITEM_CHECKBYTE, "Geom 1", 2, sim->opt.geomgroup + 1, " 1"},
@@ -1004,9 +1016,9 @@ void MakeGroupSection(mjapp::SimulateBase* sim) {
 }
 
 // make joint section of UI
-void MakeJointSection(mjapp::SimulateBase* sim) {
+void MakeJointSection(mjpc::SimulateBase* sim, int oldstate) {
   mjuiDef defJoint[] = {
-      {mjITEM_SECTION, "Joint", mjPRESERVE, nullptr, "AJ"},
+      {mjITEM_SECTION, "Joint", oldstate, nullptr, "AJ"},
       {mjITEM_END}
   };
   mjuiDef defSlider[] = {
@@ -1034,19 +1046,19 @@ void MakeJointSection(mjapp::SimulateBase* sim) {
         defSlider[0].pdata = &sim->qpos_[sim->jnt_qposadr_[i]];
       }
       if (!sim->jnt_names_[i].empty()) {
-        mjapp_util::strcpy_arr(defSlider[0].name, sim->jnt_names_[i].c_str());
+        mju::strcpy_arr(defSlider[0].name, sim->jnt_names_[i].c_str());
       } else {
-        mjapp_util::sprintf_arr(defSlider[0].name, "joint %d", i);
+        mju::sprintf_arr(defSlider[0].name, "joint %d", i);
       }
 
       // set range
       if (sim->jnt_range_[i].has_value())
-        mjapp_util::sprintf_arr(defSlider[0].other, "%.4g %.4g",
-                                sim->jnt_range_[i]->first, sim->jnt_range_[i]->second);
+        mju::sprintf_arr(defSlider[0].other, "%.4g %.4g",
+                         sim->jnt_range_[i]->first, sim->jnt_range_[i]->second);
       else if (sim->jnt_type_[i] == mjJNT_SLIDE) {
-        mjapp_util::strcpy_arr(defSlider[0].other, "-1 1");
+        mju::strcpy_arr(defSlider[0].other, "-1 1");
       } else {
-        mjapp_util::strcpy_arr(defSlider[0].other, "-3.1416 3.1416");
+        mju::strcpy_arr(defSlider[0].other, "-3.1416 3.1416");
       }
 
       // add and count
@@ -1057,9 +1069,9 @@ void MakeJointSection(mjapp::SimulateBase* sim) {
 }
 
 // make control section of UI
-void MakeControlSection(mjapp::SimulateBase* sim) {
+void MakeControlSection(mjpc::SimulateBase* sim, int oldstate) {
   mjuiDef defControl[] = {
-      {mjITEM_SECTION, "Control", mjPRESERVE, nullptr, "AC"},
+      {mjITEM_SECTION, "Control", oldstate, nullptr, "AC"},
       {mjITEM_BUTTON, "Clear all", 2},
       {mjITEM_END}
   };
@@ -1094,17 +1106,17 @@ void MakeControlSection(mjapp::SimulateBase* sim) {
     }
 
     if (!sim->actuator_names_[i].empty()) {
-      mjapp_util::strcpy_arr(defSlider[0].name, sim->actuator_names_[i].c_str());
+      mju::strcpy_arr(defSlider[0].name, sim->actuator_names_[i].c_str());
     } else {
-      mjapp_util::sprintf_arr(defSlider[0].name, "control %d", i);
+      mju::sprintf_arr(defSlider[0].name, "control %d", i);
     }
 
     // set range
     if (sim->actuator_ctrlrange_[i].has_value())
-      mjapp_util::sprintf_arr(defSlider[0].other, "%.4g %.4g",
-                              sim->actuator_ctrlrange_[i]->first, sim->actuator_ctrlrange_[i]->second);
+      mju::sprintf_arr(defSlider[0].other, "%.4g %.4g",
+                       sim->actuator_ctrlrange_[i]->first, sim->actuator_ctrlrange_[i]->second);
     else {
-      mjapp_util::strcpy_arr(defSlider[0].other, "-1 1");
+      mju::strcpy_arr(defSlider[0].other, "-1 1");
     }
 
     // add and count
@@ -1114,40 +1126,60 @@ void MakeControlSection(mjapp::SimulateBase* sim) {
 }
 
 // make model-dependent UI sections
-void MakeUiSections(mjapp::SimulateBase* sim, const mjModel* m, const mjData* d) {
+void MakeUiSections(mjpc::SimulateBase* sim, const mjModel* m, const mjData* d) {
+  // get section open-close state, UI 0
+  int oldstate0[NSECT0];
+  for (int i = 0; i < NSECT0; i++) {
+    oldstate0[i] = 0;
+    if (sim->ui0.nsect > i) {
+      oldstate0[i] = sim->ui0.sect[i].state;
+    }
+  }
+
+  // get section open-close state, UI 1
+  int oldstate1[NSECT1];
+  for (int i = 0; i < NSECT1; i++) {
+    oldstate1[i] = 0;
+    if (sim->ui1.nsect > i) {
+      oldstate1[i] = sim->ui1.sect[i].state;
+    }
+  }
+
   // clear model-dependent sections of UI
-  sim->ui0.nsect = SECT_PHYSICS;
+  sim->ui0.nsect = SECT_TASK;
   sim->ui1.nsect = 0;
 
   // make
-  MakePhysicsSection(sim);
-  MakeRenderingSection(sim, m);
-  MakeVisualizationSection(sim, m);
-  MakeGroupSection(sim);
-  MakeJointSection(sim);
-  MakeControlSection(sim);
+  if (sim->agent) {
+    sim->agent->GUI(sim->ui0);
+  }
+  MakePhysicsSection(sim, oldstate0[SECT_PHYSICS]);
+  MakeRenderingSection(sim, m, oldstate0[SECT_RENDERING]);
+  MakeGroupSection(sim, oldstate0[SECT_GROUP]);
+  MakeJointSection(sim, oldstate1[SECT_JOINT]);
+  MakeControlSection(sim, oldstate1[SECT_CONTROL]);
 }
 
 //---------------------------------- utility functions ---------------------------------------------
 
 // align and scale view
-void AlignAndScaleView(mjapp::SimulateBase* sim, const mjModel* m) {
+void AlignAndScaleView(mjpc::SimulateBase* sim, const mjModel* m) {
   // use default free camera parameters
   mjv_defaultFreeCamera(m, &sim->cam);
 }
 
 
 // copy qpos to clipboard as key
-void CopyPose(mjapp::SimulateBase* sim, const mjModel* m, const mjData* d) {
+void CopyPose(mjpc::SimulateBase* sim, const mjModel* m, const mjData* d) {
   char clipboard[5000] = "<key qpos='";
   char buf[200];
 
   // prepare string
   for (int i = 0; i < m->nq; i++) {
-    mjapp_util::sprintf_arr(buf, i == m->nq - 1 ? "%g" : "%g ", d->qpos[i]);
-    mjapp_util::strcat_arr(clipboard, buf);
+    mju::sprintf_arr(buf, i == m->nq - 1 ? "%g" : "%g ", d->qpos[i]);
+    mju::strcat_arr(clipboard, buf);
   }
-  mjapp_util::strcat_arr(clipboard, "'/>");
+  mju::strcat_arr(clipboard, "'/>");
 
   // copy to clipboard
   sim->platform_ui->SetClipboardString(clipboard);
@@ -1155,8 +1187,8 @@ void CopyPose(mjapp::SimulateBase* sim, const mjModel* m, const mjData* d) {
 
 // millisecond timer, for MuJoCo built-in profiler
 mjtNum Timer() {
-  static auto start = mjapp::SimulateBase::Clock::now();
-  auto elapsed = Milliseconds(mjapp::SimulateBase::Clock::now() - start);
+  static auto start = mjpc::SimulateBase::Clock::now();
+  auto elapsed = Milliseconds(mjpc::SimulateBase::Clock::now() - start);
   return elapsed.count();
 }
 
@@ -1169,7 +1201,7 @@ void ClearTimers(mjData* d) {
 }
 
 // copy current camera to clipboard as MJCF specification
-void CopyCamera(mjapp::SimulateBase* sim) {
+void CopyCamera(mjpc::SimulateBase* sim) {
   mjvGLCamera* camera = sim->scn.camera;
 
   char clipboard[500];
@@ -1183,20 +1215,20 @@ void CopyCamera(mjapp::SimulateBase* sim) {
   mju_cross(cam_right, cam_forward, cam_up);
 
   // make MJCF camera spec
-  mjapp_util::sprintf_arr(clipboard,
-                          "<camera pos=\"%.3f %.3f %.3f\" xyaxes=\"%.3f %.3f %.3f %.3f %.3f %.3f\"/>\n",
-                          (camera[0].pos[0] + camera[1].pos[0]) / 2,
-                          (camera[0].pos[1] + camera[1].pos[1]) / 2,
-                          (camera[0].pos[2] + camera[1].pos[2]) / 2,
-                          cam_right[0], cam_right[1], cam_right[2],
-                          camera[0].up[0], camera[0].up[1], camera[0].up[2]);
+  mju::sprintf_arr(clipboard,
+                   "<camera pos=\"%.3f %.3f %.3f\" xyaxes=\"%.3f %.3f %.3f %.3f %.3f %.3f\"/>\n",
+                   (camera[0].pos[0] + camera[1].pos[0]) / 2,
+                   (camera[0].pos[1] + camera[1].pos[1]) / 2,
+                   (camera[0].pos[2] + camera[1].pos[2]) / 2,
+                   cam_right[0], cam_right[1], cam_right[2],
+                   camera[0].up[0], camera[0].up[1], camera[0].up[2]);
 
   // copy spec into clipboard
   sim->platform_ui->SetClipboardString(clipboard);
 }
 
 // update UI 0 when MuJoCo structures change (except for joint sliders)
-void UpdateSettings(mjapp::SimulateBase* sim, const mjModel* m) {
+void UpdateSettings(mjpc::SimulateBase* sim, const mjModel* m) {
   // physics flags
   for (int i = 0; i < mjNDISABLE; i++) {
     int new_value = ((m->opt.disableflags & (1 << i)) != 0);
@@ -1236,7 +1268,7 @@ void UpdateSettings(mjapp::SimulateBase* sim, const mjModel* m) {
 }
 
 // Compute suitable font scale.
-int ComputeFontScale(const mjapp::PlatformUIAdapter& platform_ui) {
+int ComputeFontScale(const mujoco::PlatformUIAdapter& platform_ui) {
   // compute framebuffer-to-window ratio
   auto [buf_width, buf_height] = platform_ui.GetFramebufferSize();
   auto [win_width, win_height] = platform_ui.GetWindowSize();
@@ -1265,7 +1297,7 @@ int ComputeFontScale(const mjapp::PlatformUIAdapter& platform_ui) {
 
 // determine enable/disable item state given category
 int UiPredicate(int category, void* userdata) {
-  mjapp::SimulateBase* sim = static_cast<mjapp::SimulateBase*>(userdata);
+  mjpc::SimulateBase* sim = static_cast<mjpc::SimulateBase*>(userdata);
 
   switch (category) {
     case 2: // require model
@@ -1287,7 +1319,7 @@ int UiPredicate(int category, void* userdata) {
 
 // set window layout
 void UiLayout(mjuiState* state) {
-  mjapp::SimulateBase* sim = static_cast<mjapp::SimulateBase*>(state->userdata);
+  mjpc::SimulateBase* sim = static_cast<mjpc::SimulateBase*>(state->userdata);
   mjrRect* rect = state->rect;
 
   // set number of rectangles
@@ -1334,7 +1366,7 @@ void UiModify(mjUI* ui, mjuiState* state, mjrContext* con) {
 
 // handle UI event
 void UiEvent(mjuiState* state) {
-  mjapp::SimulateBase* sim = static_cast<mjapp::SimulateBase*>(state->userdata);
+  mjpc::SimulateBase* sim = static_cast<mjpc::SimulateBase*>(state->userdata);
 
   // call UI 0 if event is directed to it
   if ((state->dragrect == sim->ui0.rectid) ||
@@ -1429,6 +1461,27 @@ void UiEvent(mjuiState* state) {
       }
     }
 
+    // task section
+    else if (it && it->sectionid == SECT_TASK) {
+      if (sim->agent) {
+        sim->agent->TaskEvent(it, sim->d_, sim->uiloadrequest, sim->run);
+      }
+    }
+
+    // agent section
+    else if (it && it->sectionid == SECT_AGENT) {
+      if (sim->agent) {
+        sim->agent->AgentEvent(it, sim->d_, sim->uiloadrequest, sim->run);
+      }
+    }
+
+    // estimator section
+    else if (it && it->sectionid == SECT_ESTIMATOR) {
+      if (sim->agent) {
+        sim->agent->EstimatorEvent(it, sim->d_, sim->uiloadrequest, sim->run);
+      }
+    }
+
     // physics section
     else if (it && it->sectionid == SECT_PHYSICS && sim->m_) {
       mjOption* opt = sim->is_passive_ ? &sim->scnstate_.model.opt : &sim->m_->opt;
@@ -1497,7 +1550,7 @@ void UiEvent(mjuiState* state) {
 
     // visualization section
     else if (it && it->sectionid == SECT_VISUALIZATION) {
-      if (!mjapp_util::strcmp_arr(it->name, "Align")) {
+      if (!mju::strcmp_arr(it->name, "Align")) {
         sim->pending_.align = true;
       }
     }
@@ -1507,7 +1560,7 @@ void UiEvent(mjuiState* state) {
       // remake joint section if joint group changed
       if (it->name[0] == 'J' && it->name[1] == 'o') {
         sim->ui1.nsect = SECT_JOINT;
-        MakeJointSection(sim);
+        MakeJointSection(sim, sim->ui1.sect[SECT_JOINT].state);
         sim->ui1.nsect = NSECT1;
         UiModify(&sim->ui1, state, &sim->platform_ui->mjr_context());
       }
@@ -1679,6 +1732,19 @@ void UiEvent(mjuiState* state) {
         }
         break;
 
+      // agent keys
+      case mjKEY_ENTER:
+        sim->agent->plan_enabled = !sim->agent->plan_enabled;
+        break;
+
+      case '\\':
+        sim->agent->action_enabled = !sim->agent->action_enabled;
+        break;
+
+      case '9':
+        sim->agent->visualize_enabled = !sim->agent->visualize_enabled;
+        break;
+
       case mjKEY_TAB: // toggle left/right UI
         if (!state->shift) {
           // toggle left UI
@@ -1786,7 +1852,7 @@ void UiEvent(mjuiState* state) {
   if (state->type == mjEVENT_FILESDROP && state->dropcount > 0 && !sim->is_passive_) {
     while (sim->droploadrequest.load()) {
     }
-    mjapp_util::strcpy_arr(sim->dropfilename, state->droppaths[0]);
+    mju::strcpy_arr(sim->dropfilename, state->droppaths[0]);
     sim->droploadrequest.store(true);
     return;
   }
@@ -1797,20 +1863,18 @@ void UiEvent(mjuiState* state) {
     return;
   }
 }
-} // namespace mjapp
 
-namespace mjapp {
-namespace mjapp_util = ::mjapp::sample_util;
-
-SimulateBase::SimulateBase(std::unique_ptr<PlatformUIAdapter> platform_ui,
+SimulateBase::SimulateBase(std::unique_ptr<mujoco::PlatformUIAdapter> platform_ui,
                            mjvCamera* cam, mjvOption* opt, mjvPerturb* pert,
+                           std::shared_ptr<Agent> in_agent,
                            bool is_passive)
   : is_passive_(is_passive),
     cam(*cam),
     opt(*opt),
     pert(*pert),
     platform_ui(std::move(platform_ui)),
-    uistate(this->platform_ui->state()) {
+    uistate(this->platform_ui->state()),
+    agent(std::move(in_agent)) {
   mjv_defaultScene(&scn);
   mjv_defaultSceneState(&scnstate_);
 }
@@ -2139,8 +2203,31 @@ void SimulateBase::Sync() {
   if (this->info) {
     UpdateInfoText(this, m_, d_, this->info_title, this->info_content);
   }
+
+  // update control
+  if (this->ui1_enable && this->ui1.sect[SECT_CONTROL].state) {
+    mjui_update(SECT_CONTROL, -1, &this->ui1, &this->uistate, &this->platform_ui->mjr_context());
+  }
+
   if (update_profiler) { UpdateProfiler(this, m_, d_); }
   if (update_sensor) { UpdateSensor(this, m_, d_); }
+
+  // update task
+  if (this->ui0_enable && this->ui0.sect[SECT_TASK].state) {
+    if (this->agent && !this->agent->allocate_enabled && this->uiloadrequest.load() == 0) {
+      mjui_update(SECT_TASK, -1, &this->ui0, &this->uistate, &this->platform_ui->mjr_context());
+    }
+  }
+
+  // update agent
+  if (this->ui0_enable && this->ui0.sect[SECT_AGENT].state) {
+    mjui_update(SECT_AGENT, -1, &this->ui0, &this->uistate, &this->platform_ui->mjr_context());
+  }
+
+  // update agent profiler
+  if (this->agent && this->agent->plot_enabled && this->uiloadrequest.load() == 0) {
+    this->agent->Plots(this->d_, this->run);
+  }
 
   // clear timers once profiler info has been copied
   ClearTimers(d_);
@@ -2157,7 +2244,7 @@ void SimulateBase::Sync() {
 
 //------------------------- Tell the render thread to load a file and wait -------------------------
 void SimulateBase::LoadMessage(const char* displayed_filename) {
-  mjapp_util::strcpy_arr(this->filename, displayed_filename);
+  mju::strcpy_arr(this->filename, displayed_filename);
 
   {
     MutexLock lock(mtx);
@@ -2165,13 +2252,14 @@ void SimulateBase::LoadMessage(const char* displayed_filename) {
   }
 }
 
-void SimulateBase::Load(mjModel* m, mjData* d, const char* displayed_filename) {
+void SimulateBase::Load(mjModel* m, mjData* d, const char* displayed_filename, bool delete_old_m_d) {
   this->mnew_ = m;
   this->dnew_ = d;
+  this->delete_old_m_d_ = delete_old_m_d;
   Init(m, d);
 
   if (displayed_filename) {
-    mjapp_util::strcpy_arr(this->filename, displayed_filename);
+    mju::strcpy_arr(this->filename, displayed_filename);
   }
 
   {
@@ -2195,6 +2283,12 @@ void SimulateBase::LoadMessageClear(void) {
 
 //------------------------------------- load mjb or xml model --------------------------------------
 void SimulateBase::LoadOnRenderThread() {
+  if (this->delete_old_m_d_) {
+    // delete old model if requested (already null-checked here-in)!
+    mj_deleteData(d_);
+    mj_deleteModel(m_);
+  }
+
   this->m_ = this->mnew_;
   this->d_ = this->dnew_;
 
@@ -2318,9 +2412,9 @@ void SimulateBase::LoadOnRenderThread() {
 
   // align and scale view unless reloading the same file
   if (this->filename[0] &&
-      mjapp_util::strcmp_arr(this->filename, this->previous_filename)) {
+      mju::strcmp_arr(this->filename, this->previous_filename)) {
     AlignAndScaleView(this, this->m_);
-    mjapp_util::strcpy_arr(this->previous_filename, this->filename);
+    mju::strcpy_arr(this->previous_filename, this->filename);
   }
 
   // update scene
@@ -2334,8 +2428,8 @@ void SimulateBase::LoadOnRenderThread() {
   // set window title to model name
   if (this->m_->names) {
     char title[200] = "MuJoCo - ";
-    mjapp_util::strcat_arr(title, mj_versionString());
-    mjapp_util::strcat_arr(title, this->m_->names);
+    mju::strcat_arr(title, mj_versionString());
+    mju::strcat_arr(title, this->m_->names);
     platform_ui->SetWindowTitle(title);
   }
 
@@ -2405,8 +2499,8 @@ void SimulateBase::Render() {
                   &this->platform_ui->mjr_context());
     } else {
       char intro_message[SimulateBase::kMaxFilenameLength];
-      mjapp_util::sprintf_arr(intro_message,
-                              "MuJoCo version %s\nDrag-and-drop model file here", mj_versionString());
+      mju::sprintf_arr(intro_message,
+                       "MuJoCo version %s\nDrag-and-drop model file here", mj_versionString());
       mjr_overlay(mjFONT_NORMAL, mjGRID_TOPLEFT, rect, intro_message, 0,
                   &this->platform_ui->mjr_context());
     }
@@ -2492,7 +2586,7 @@ void SimulateBase::Render() {
   if (pending_.ui_remake_ctrl) {
     if (this->ui1_enable && this->ui1.sect[SECT_CONTROL].state) {
       this->ui1.nsect = SECT_CONTROL;
-      MakeControlSection(this);
+      MakeControlSection(this, this->ui1.sect[SECT_CONTROL].state);
       this->ui1.nsect = NSECT1;
       UiModify(&this->ui1, &this->uistate, &this->platform_ui->mjr_context());
     }
@@ -2509,6 +2603,15 @@ void SimulateBase::Render() {
   // visualization
   if (this->uiloadrequest.load() == 0) {
     ModifyVisualScene(&this->scn, m_, d_);
+
+    if (this->agent) {
+      // task-specific
+      if (this->agent->ActiveTask()->visualize) {
+        this->agent->ActiveTask()->ModifyScene(this->m_, this->d_, &this->scn);
+      }
+      // common to all tasks
+      this->agent->ModifyScene(&this->scn);
+    }
   }
 
   // render scene
@@ -2628,17 +2731,19 @@ void SimulateBase::Render() {
   this->platform_ui->SwapBuffers();
 }
 
-
-void SimulateBase::RenderLoop() {
+void SimulateBase::InitializeRenderLoop() {
   // Set timer callback (milliseconds)
   mjcb_time = Timer;
 
   // init abstract visualization
   mjv_defaultCamera(&this->cam);
   mjv_defaultOption(&this->opt);
+  // Configure visualization
+  for (auto i = 0; i < mjNGROUP; ++i) {
+    opt.sitegroup[i] = true;
+  }
   InitializeProfiler(this);
   InitializeSensor(this);
-
   // make empty scene
   if (!is_passive_) {
     mjv_defaultScene(&this->scn);
@@ -2700,8 +2805,14 @@ void SimulateBase::RenderLoop() {
   // set VSync to initial value
   this->platform_ui->SetVSync(this->vsync);
 
+  // Notify Physics thread, so it can move on
+  cond_loadrequest.notify_all();
+  printf("Rendering initialized!\n");
+}
+
+void SimulateBase::RenderLoop() {
   frames_ = 0;
-  last_fps_update_ = mjapp::SimulateBase::Clock::now();
+  last_fps_update_ = mjpc::SimulateBase::Clock::now();
 
   // run event loop
   while (!this->platform_ui->ShouldCloseWindow() && !this->exitrequest.load()) {
@@ -2752,7 +2863,7 @@ void SimulateBase::RenderLoop() {
     this->Render();
 
     // update FPS stat, at most 5 times per second
-    auto now = mjapp::SimulateBase::Clock::now();
+    auto now = mjpc::SimulateBase::Clock::now();
     double interval = Seconds(now - last_fps_update_).count();
     ++frames_;
     if (interval > 0.2) {

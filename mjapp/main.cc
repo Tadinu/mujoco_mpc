@@ -25,10 +25,12 @@
 #include <string>
 #include <thread>
 
+// MuJoCo
 #include <mujoco/mujoco.h>
+#include <glfw_adapter.h>
+#include <array_safety.h>
 
-#include "mjapp/array_safety.h"
-#include "mjapp/glfw_adapter.h"
+// mjapp
 #include "mjapp/sim.h"
 
 #define MUJOCO_PLUGIN_DIR "mujoco_plugin"
@@ -46,7 +48,7 @@ extern "C" {
 }
 
 namespace mjapp {
-namespace mjapp_util = ::mjapp::sample_util;
+namespace mju = ::mujoco::sample_util;
 // constants
 const double syncMisalign = 0.1; // maximum mis-alignment before re-sync (simulation seconds)
 const double simRefreshFraction = 0.7; // fraction of refresh available for simulation
@@ -206,9 +208,9 @@ const char* Diverged(int disableflags, const mjData* d) {
 }
 
 mjModel* LoadModel(const char* file, mjapp::Simulate& sim) {
-  // this copy is needed so that the mjapp_util::strlen call below compiles
+  // this copy is needed so that the mju::strlen call below compiles
   char filename[mjapp::Simulate::kMaxFilenameLength];
-  mjapp_util::strcpy_arr(filename, file);
+  mju::strcpy_arr(filename, file);
 
   // make sure filename is not empty
   if (!filename[0]) {
@@ -219,19 +221,19 @@ mjModel* LoadModel(const char* file, mjapp::Simulate& sim) {
   char loadError[kErrorLength] = "";
   mjModel* mnew = 0;
   auto load_start = mjapp::Simulate::Clock::now();
-  if (mjapp_util::strlen_arr(filename) > 4 &&
-      !std::strncmp(filename + mjapp_util::strlen_arr(filename) - 4, ".mjb",
-                    mjapp_util::sizeof_arr(filename) - mjapp_util::strlen_arr(filename) + 4)) {
+  if (mju::strlen_arr(filename) > 4 &&
+      !std::strncmp(filename + mju::strlen_arr(filename) - 4, ".mjb",
+                    mju::sizeof_arr(filename) - mju::strlen_arr(filename) + 4)) {
     mnew = mj_loadModel(filename, nullptr);
     if (!mnew) {
-      mjapp_util::strcpy_arr(loadError, "could not load binary model");
+      mju::strcpy_arr(loadError, "could not load binary model");
     }
   } else {
     mnew = mj_loadXML(filename, nullptr, loadError, kErrorLength);
 
     // remove trailing newline character from loadError
     if (loadError[0]) {
-      int error_length = mjapp_util::strlen_arr(loadError);
+      int error_length = mju::strlen_arr(loadError);
       if (loadError[error_length - 1] == '\n') {
         loadError[error_length - 1] = '\0';
       }
@@ -242,7 +244,7 @@ mjModel* LoadModel(const char* file, mjapp::Simulate& sim) {
 
   if (!mnew) {
     std::printf("%s\n", loadError);
-    mjapp_util::strcpy_arr(sim.load_error, loadError);
+    mju::strcpy_arr(sim.load_error, loadError);
     return nullptr;
   }
 
@@ -255,10 +257,10 @@ mjModel* LoadModel(const char* file, mjapp::Simulate& sim) {
 
   // if no error and load took more than 1/4 seconds, report load time
   if (!loadError[0] && load_seconds > 0.25) {
-    mjapp_util::sprintf_arr(loadError, "Model loaded in %.2g seconds", load_seconds);
+    mju::sprintf_arr(loadError, "Model loaded in %.2g seconds", load_seconds);
   }
 
-  mjapp_util::strcpy_arr(sim.load_error, loadError);
+  mju::strcpy_arr(sim.load_error, loadError);
   return mnew;
 }
 
@@ -378,7 +380,7 @@ void PhysicsLoop(mjapp::Simulate& sim) {
             const char* message = Diverged(m->opt.disableflags, d);
             if (message) {
               sim.run = 0;
-              mjapp_util::strcpy_arr(sim.load_error, message);
+              mju::strcpy_arr(sim.load_error, message);
             } else {
               stepped = true;
             }
@@ -410,7 +412,7 @@ void PhysicsLoop(mjapp::Simulate& sim) {
               const char* message = Diverged(m->opt.disableflags, d);
               if (message) {
                 sim.run = 0;
-                mjapp_util::strcpy_arr(sim.load_error, message);
+                mju::strcpy_arr(sim.load_error, message);
               } else {
                 stepped = true;
               }
@@ -528,7 +530,7 @@ int main(int argc, char** argv) {
   mjv_defaultPerturb(&pert);
 
   // simulate object encapsulates the UI
-  mjapp::gbSim = std::make_unique<mjapp::Simulate>(std::make_unique<mjapp::GlfwAdapter>(), &cam, &opt, &pert,
+  mjapp::gbSim = std::make_unique<mjapp::Simulate>(std::make_unique<mujoco::GlfwAdapter>(), &cam, &opt, &pert,
                                                    /* is_passive = */ false);
   // set control callback
   mjcb_control = mjapp::controller;
@@ -547,6 +549,7 @@ int main(int argc, char** argv) {
   std::thread physicsthreadhandle(&mjapp::PhysicsThread, mjapp::gbSim.get(), filename);
 
   // start simulation UI loop (blocking call)
+  mjapp::gbSim->InitializeRenderLoop();
   mjapp::gbSim->RenderLoop();
   physicsthreadhandle.join();
 

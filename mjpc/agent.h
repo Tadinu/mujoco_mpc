@@ -72,7 +72,7 @@ public:
   void PlanIteration(ThreadPool* pool);
 
   // call planner to update nominal policy
-  void Plan(std::atomic<bool>& exitrequest, std::atomic<int>& uiloadrequest);
+  void Plan(std::atomic<int>& exitrequest, std::atomic<int>& uiloadrequest);
 
   using StepJob = absl::AnyInvocable<void(Agent*, const mjModel*, mjData*)>;
 

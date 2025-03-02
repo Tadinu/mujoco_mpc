@@ -9,7 +9,6 @@
 // abseil
 #include "absl/strings/ascii.h"
 #include "absl/types/any.h"
-#include "absl/types/bad_any_cast.h"
 
 // urdf_parser
 #include "mjpc/urdf_parser/include/joint.h"

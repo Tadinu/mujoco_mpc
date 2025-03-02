@@ -10,10 +10,11 @@
 
 // MuJoCo
 #include <mujoco/mujoco.h>
-
+#include <array_safety.h>
 #include <fmt/format.h>
 
 // mjpc
+#include "mjpc/sim_base.h"
 #include "mjpc/utils/mjpc_ctrl_util.h"
 #include "mjpc/utilities.h"
 #include "mjpc/planners/lsqp/lsqp_planner.h"
@@ -21,19 +22,17 @@
 #include "mjpc/tasks/lsqp/lsqp.h"
 
 // mjapp
-#include "mjapp/sim_base.h"
 #include "mjapp/robot_model.h"
-#include "mjapp/array_safety.h"
 
 namespace mjapp {
-namespace mjapp_util = ::mjapp::sample_util;
+namespace mju = ::mujoco::sample_util;
 
 // Simulate states not contained in MuJoCo structures
-class Simulate : public SimulateBase {
+class Simulate : public mjpc::SimulateBase {
 public:
-  Simulate(std::unique_ptr<PlatformUIAdapter> platform_ui_adapter,
+  Simulate(std::unique_ptr<mujoco::PlatformUIAdapter> platform_ui_adapter,
            mjvCamera* cam, mjvOption* opt, mjvPerturb* pert, bool is_passive) :
-    SimulateBase(std::move(platform_ui_adapter), cam, opt, pert, is_passive)
+    mjpc::SimulateBase(std::move(platform_ui_adapter), cam, opt, pert, nullptr, is_passive)
 #if MJPC_PLANNER_LSQP_DIFFIK_ENABLED
     ,robot_models_({{MAIN_ROBOT_MODEL_NAME, std::make_shared<RobotModel>(
                         MAIN_ROBOT_MODEL_NAME, MAIN_ROBOT_MODEL_PATH, MAIN_ROBOT_BASE_LINK_NAME,

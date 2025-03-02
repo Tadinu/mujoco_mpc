@@ -30,6 +30,7 @@ target_link_libraries(
 target_include_directories(threadpool PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 set(LIB_MJPC_HEADERS
+        sim_base.h
         states/state.h
         agent.h
         trajectory.h
@@ -182,10 +183,12 @@ set(LIB_MJPC_HEADERS
         norm.h
         spline/spline.h
         direct/model_parameters.h
+        $<TARGET_OBJECTS:mujoco::platform_ui_adapter>
 )
 
 add_library(
         libmjpc STATIC
+        sim_base.cc
         states/state.cc
         agent.cc
         trajectory.cc
@@ -301,6 +304,7 @@ target_link_libraries(
         lodepng
         Eigen3::Eigen
         mujoco::mujoco
+        mujoco::platform_ui_adapter
         threadpool
         Threads::Threads
         OpenMP::OpenMP_CXX
@@ -340,7 +344,6 @@ add_executable(
         app.h
         simulate.cc
         simulate.h
-        $<TARGET_OBJECTS:mujoco::platform_ui_adapter>
 )
 target_link_libraries(
         mjpc
@@ -350,7 +353,6 @@ target_link_libraries(
         absl::strings
         libmjpc
         mujoco::mujoco
-        mujoco::platform_ui_adapter
         threadpool
         Threads::Threads
 )

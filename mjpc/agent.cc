@@ -367,7 +367,7 @@ void Agent::PlanIteration(ThreadPool* pool) {
 }
 
 // call planner to update nominal policy
-void Agent::Plan(std::atomic<bool>& exitrequest, std::atomic<int>& uiloadrequest) {
+void Agent::Plan(std::atomic<int>& exitrequest, std::atomic<int>& uiloadrequest) {
   // instantiate thread pool
   ThreadPool pool(planner_threads_);
 

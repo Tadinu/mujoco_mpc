@@ -35,7 +35,7 @@ void LsqpPlanner::Initialize(mjModel* model, const Task& task) {
         while (solver_list.size() < new_size) {
           auto solver = std::make_shared<LsqpSolver>(model, lsqp_task_, MjOwnerAppType::MJPC);
           solver->Init(data_list[solver_list.size()].get(), action_dim_);
-          solver_list.push_back(solver);
+          solver_list.emplace_back(std::move(solver));
         }
       });
 

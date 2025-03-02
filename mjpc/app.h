@@ -23,7 +23,7 @@
 
 namespace mjpc {
 class MjpcApp {
- public:
+public:
   MjpcApp(std::vector<std::shared_ptr<mjpc::Task>> tasks, int task_id = 0);
   MjpcApp(const MjpcApp&) = delete;
   MjpcApp& operator=(const MjpcApp&) = delete;
@@ -31,12 +31,11 @@ class MjpcApp {
 
   void Start();
 
-  ::mujoco::Simulate* Sim();
+  mjpc::Simulate* Sim();
 };
 
 void InitParallelEigen();
 void StartApp(std::vector<std::shared_ptr<mjpc::Task>> tasks, int task_id = 0);
-
-}  // namespace mjpc
+} // namespace mjpc
 
 #endif  // MJPC_APP_H_

@@ -19,7 +19,7 @@
 
 namespace mjpc {
 static const std::string MUJOCO_DIR =
-#if 1
+#if 0
     "/home/tad/1_MUJOCO";
 #else
     "/media/ducthan/376b23a1-5a02-4960-b3ca-24b2fcef8f891/MUJOCO";

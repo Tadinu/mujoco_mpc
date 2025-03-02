@@ -29,21 +29,19 @@
 #include <Eigen/Core>
 
 // MuJoCo
-#include <mujoco/mjui.h>
 #include <mujoco/mujoco.h>
+#include <platform_ui_adapter.h>
 
 // mjpc
+#include "mjpc/agent.h"
 #include "mjpc/utils/mjpc_core_util.h"
 #include "mjpc/utils/mjpc_ctrl_util.h"
 #include "mjpc/utilities.h"
 
-// mjapp
-#include "platform_ui_adapter.h"
-
 #define MJAPP_VISUAL_DEBUG (1)
 #define MJAPP_ACTUATOR_UI_DISABLED (1)
 
-namespace mjapp {
+namespace mjpc {
 // The viewer itself doesn't require a reentrant mutex, however we use it in
 // order to provide a Python sync API that doesn't require separate locking
 // (since sync is by far the most common operation), but that also won't
@@ -64,9 +62,13 @@ public:
 
   // create object and initialize the simulate ui
   SimulateBase(
-      std::unique_ptr<PlatformUIAdapter> platform_ui_adapter,
-      mjvCamera* cam, mjvOption* opt, mjvPerturb* pert, bool is_passive);
+      std::unique_ptr<mujoco::PlatformUIAdapter> platform_ui_adapter,
+      mjvCamera* cam, mjvOption* opt, mjvPerturb* pert, std::shared_ptr<Agent> in_agent,
+      bool is_passive);
   virtual ~SimulateBase() = default;
+
+  // agent
+  std::shared_ptr<mjpc::Agent> agent;
 
   virtual void Init(mjModel* model, mjData* data) {
   }
@@ -90,7 +92,8 @@ public:
   void LoadMessage(const char* displayed_filename);
 
   // Request that the Simulate UI thread render a new model
-  void Load(mjModel* m, mjData* d, const char* displayed_filename);
+  // optionally delete the old model and data when done
+  void Load(mjModel* m, mjData* d, const char* displayed_filename, bool delete_old_m_d = false);
 
   // Clear the loading message
   // Can be called instead of Load to clear the message without
@@ -102,7 +105,9 @@ public:
   void LoadOnRenderThread();
 
   // render the ui to the window
-  void Render();
+  virtual void Render();
+
+  void InitializeRenderLoop();
 
   // loop to render the UI (must be called from main thread because of MacOS)
   void RenderLoop();
@@ -128,6 +133,7 @@ public:
 
   mjModel* m_ = nullptr;
   mjData* d_ = nullptr;
+  bool delete_old_m_d_ = false;
 
   int ncam_ = 0;
   int nkey_ = 0;
@@ -197,10 +203,10 @@ public:
   int spacing = 0;
   int color = 0;
   int font = 0;
-  int ui0_enable = 1;
-  int ui1_enable = 1;
+  int ui0_enable = 1; // Left UI
+  int ui1_enable = 0; // Right UI
   int help = 0;
-  int info = 0;
+  int info = 1;
   int profiler = 0;
   int sensor = 0;
   int pause_update = 1;
@@ -283,14 +289,14 @@ public:
   int refresh_rate = 60;
   int window_pos[2] = {0};
   int window_size[2] = {0};
-  std::unique_ptr<PlatformUIAdapter> platform_ui;
+  std::unique_ptr<mujoco::PlatformUIAdapter> platform_ui;
   mjuiState& uistate;
   mjUI ui0 = {};
   mjUI ui1 = {};
 
   // Constant arrays needed for the option section of UI and the UI interface
   // TODO setting the size here is not ideal
-  const mjuiDef def_option[13] = {
+  const mjuiDef def_option[15] = {
       {mjITEM_SECTION, "Option", mjPRESERVE, nullptr, "AO"},
       {mjITEM_CHECKINT, "Help", 2, &this->help, " #290"},
       {mjITEM_CHECKINT, "Info", 2, &this->info, " #291"},
@@ -307,6 +313,8 @@ public:
       {mjITEM_SELECT, "Spacing", 1, &this->spacing, "Tight\nWide"},
       {mjITEM_SELECT, "Color", 1, &this->color, "Default\nOrange\nWhite\nBlack"},
       {mjITEM_SELECT, "Font", 1, &this->font, "50 %\n100 %\n150 %\n200 %\n250 %\n300 %"},
+      {mjITEM_CHECKINT, "Left UI (Tab)", 1, &this->ui0_enable, " #258"},
+      {mjITEM_CHECKINT, "Right UI", 1, &this->ui1_enable, "S#258"},
       {mjITEM_END}
   };
 

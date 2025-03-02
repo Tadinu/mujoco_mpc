@@ -37,6 +37,9 @@ if(APPLE)
 endif()
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
+# SimulateDependencies (platform_ui_adapter, etc.)
+include(SimulateDependencies)
+
 # ISPC
 include(AddISPCSrc)
 
@@ -129,7 +132,7 @@ findorfetch(
   GIT_REPO
   https://github.com/google/googletest.git
   GIT_TAG
-  ${MUJOCO_DEP_VERSION_gtest}
+  main
   TARGETS
   gtest
   gmock
