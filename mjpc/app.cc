@@ -14,11 +14,6 @@
 
 #include "mjpc/app.h"
 
-#include <absl/flags/flag.h>
-#include <mujoco/mujoco.h>
-#include <array_safety.h>
-
-#include <Eigen/Core>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -32,10 +27,11 @@
 #include <thread>
 #include <utility>
 #include <vector>
-#include <glfw_adapter.h>
 
-// mjpc
-#include "mjpc/sim_base.h"
+#include <absl/flags/flag.h>
+#include <mujoco/mujoco.h>
+#include <glfw_adapter.h>
+#include "mjpc/array_safety.h"
 #include "mjpc/agent.h"
 #include "mjpc/estimators/estimator.h"
 #include "mjpc/simulate.h"  // mjpc fork
@@ -43,19 +39,25 @@
 #include "mjpc/threadpool.h"
 #include "mjpc/utilities.h"
 
-
-ABSL_FLAG(bool, planner_enabled, false, "If true, the planner will run on startup");
-ABSL_FLAG(bool, tuner_enabled, false, "If true, the parameter tuner will run on startup");
+ABSL_FLAG(bool, planner_enabled, false,
+          "If true, the planner will run on startup");
+ABSL_FLAG(bool, tuner_enabled, false,
+          "If true, the tuning will run on startup");
 ABSL_FLAG(float, sim_percent_realtime, 100,
           "The realtime percentage at which the simulation will be launched.");
-ABSL_FLAG(bool, estimator_enabled, false, "If true, estimator loop will run on startup");
-ABSL_FLAG(bool, show_left_ui, true, "If true, the left UI (ui0) will be visible on startup");
-ABSL_FLAG(bool, show_plot, true, "If true, the plots will be visible on startup");
-ABSL_FLAG(bool, show_info, true, "If true, the infotext panel will be visible on startup");
+ABSL_FLAG(bool, estimator_enabled, false,
+          "If true, estimator loop will run on startup");
+ABSL_FLAG(bool, show_left_ui, true,
+          "If true, the left UI (ui0) will be visible on startup");
+ABSL_FLAG(bool, show_plot, true,
+          "If true, the plots will be visible on startup");
+ABSL_FLAG(bool, show_info, true,
+          "If true, the infotext panel will be visible on startup");
+
 
 namespace mjpc {
 namespace mj = ::mujoco;
-namespace mju = ::mujoco::sample_util;
+namespace mju = ::mujoco::util_mjpc;
 
 // maximum mis-alignment before re-sync (simulation seconds)
 const double syncMisalign = 0.1;
@@ -73,7 +75,7 @@ mjtNum* ctrlnoise = nullptr;
 using Seconds = std::chrono::duration<double>;
 
 // --------------------------------- callbacks ---------------------------------
-std::unique_ptr<mjpc::Simulate> sim;
+std::unique_ptr<Simulate> sim;
 
 // controller
 extern "C" {
@@ -88,12 +90,14 @@ void controller(const mjModel* m, mjData* data) {
   }
   // if simulation:
   if (sim->agent->action_enabled) {
-    sim->agent->ActivePlanner().ActionFromPolicy(data->ctrl, &sim->agent->state.state()[0],
-                                                 sim->agent->state.time());
+    sim->agent->ActivePlanner().ActionFromPolicy(
+        data->ctrl, &sim->agent->state.state()[0],
+        sim->agent->state.time());
   }
   // if noise
-  if (!sim->agent->allocate_enabled && sim->uiloadrequest.load() == 0 && sim->ctrl_noise_std) {
-    for (int j = 0; j < sim->m_->nu; j++) {
+  if (!sim->agent->allocate_enabled && sim->uiloadrequest.load() == 0 &&
+      sim->ctrl_noise_std) {
+    for (int j = 0; j < sim->m->nu; j++) {
       data->ctrl[j] += ctrlnoise[j];
     }
   }
@@ -127,18 +131,7 @@ void sensor(const mjModel* model, mjData* data, int stage) {
 
 //--------------------------------- simulation ---------------------------------
 
-const char* Diverged(int disableflags, const mjData* d) {
-  if (disableflags & mjDSBL_AUTORESET) {
-    for (mjtWarning w : {mjWARN_BADQACC, mjWARN_BADQVEL, mjWARN_BADQPOS}) {
-      if (d->warning[w].number > 0) {
-        return mju_warningText(w, d->warning[w].lastinfo);
-      }
-    }
-  }
-  return nullptr;
-}
-
-mjModel* LoadModel(const mjpc::Agent* agent, mjpc::Simulate& sim) {
+mjModel* LoadModel(const mjpc::Agent* agent, Simulate& sim) {
   // Set sim.agent's [model_override_] from task if available
   sim.agent->OverrideModel(sim.agent->GuiTask()->ComposeOverrideModel());
   // Then load the model
@@ -153,7 +146,8 @@ mjModel* LoadModel(const mjpc::Agent* agent, mjpc::Simulate& sim) {
 
   // compiler warning: print and pause
   if (!load_model.error.empty()) {
-    std::cout << "Model compiled, but simulation warning (paused):\n  " << load_model.error << "\n";
+    std::cout << "Model compiled, but simulation warning (paused):\n  "
+        << load_model.error << "\n";
     sim.run = 0;
   }
 
@@ -161,7 +155,7 @@ mjModel* LoadModel(const mjpc::Agent* agent, mjpc::Simulate& sim) {
 }
 
 // estimator in background thread
-void EstimatorLoop(mjpc::Simulate& sim) {
+void EstimatorLoop(Simulate& sim) {
   // run until asked to exit
   while (!sim.exitrequest.load()) {
     if (sim.uiloadrequest.load() == 0) {
@@ -182,7 +176,7 @@ void EstimatorLoop(mjpc::Simulate& sim) {
 
         // get simulation state (lock physics thread)
         {
-          const std::lock_guard<mjpc::SimulateMutex> lock(sim.mtx);
+          const std::lock_guard<std::mutex> lock(sim.mtx);
           // copy simulation ctrl
           mju_copy(sim.agent->ctrl.data(), d->ctrl, m->nu);
 
@@ -205,12 +199,13 @@ void EstimatorLoop(mjpc::Simulate& sim) {
 
         // estimator state to planner
         double* state = estimator->State();
-        sim.agent->state.Set(m, state, state + m->nq, state + m->nq + m->nv, d->mocap_pos, d->mocap_quat,
-                             d->userdata, d->time);
+        sim.agent->state.Set(m, state, state + m->nq, state + m->nq + m->nv,
+                             d->mocap_pos, d->mocap_quat, d->userdata, d->time);
 
         // wait (us)
         // TODO(taylor): confirm valid for slowdown
-        while (mjpc::GetDuration(start) < 1.0e6 * estimator->Model()->opt.timestep) {
+        while (mjpc::GetDuration(start) <
+               1.0e6 * estimator->Model()->opt.timestep) {
         }
       }
     }
@@ -218,9 +213,9 @@ void EstimatorLoop(mjpc::Simulate& sim) {
 }
 
 // simulate in background thread (while rendering in main thread)
-void PhysicsLoop(mjpc::Simulate& sim) {
+void PhysicsLoop(Simulate& sim) {
   // cpu-sim synchronization point
-  std::chrono::time_point<mjpc::SimulateBase::Clock> syncCPU;
+  std::chrono::time_point<Simulate::Clock> syncCPU;
   mjtNum syncSim = 0;
 
   // run until asked to exit
@@ -230,11 +225,9 @@ void PhysicsLoop(mjpc::Simulate& sim) {
     }
 
     // ----- task reload ----- //
-    if (sim.uiloadrequest.load()) {
+    if (sim.uiloadrequest.load() == 1) {
       // get new model + task
-      const std::string filename = sim.agent->GetTaskXmlPath(sim.agent->gui_task_id);
-      mju::strcpy_arr(sim.filename, filename.c_str());
-      sim.LoadMessage(sim.filename);
+      sim.filename = sim.agent->GetTaskXmlPath(sim.agent->gui_task_id);
 
       mjModel* mnew = LoadModel(sim.agent.get(), sim);
       mjData* dnew = nullptr;
@@ -256,14 +249,7 @@ void PhysicsLoop(mjpc::Simulate& sim) {
         }
         sim.agent->PlotInitialize();
 
-        sim.Load(mnew, dnew, sim.filename, false);
-
-        // lock the sim mutex
-        const std::unique_lock<std::recursive_mutex> lock(sim.mtx);
-
-        mj_deleteData(d);
-        mj_deleteModel(m);
-
+        sim.Load(mnew, dnew, sim.filename, true);
         m = mnew;
         d = dnew;
         mj_forward(m, d);
@@ -272,17 +258,15 @@ void PhysicsLoop(mjpc::Simulate& sim) {
         free(ctrlnoise);
         ctrlnoise = static_cast<mjtNum*>(malloc(sizeof(mjtNum) * m->nu));
         mju_zero(ctrlnoise, m->nu);
-      } else {
-        sim.LoadMessageClear();
       }
 
       // decrement counter
       sim.uiloadrequest.fetch_sub(1);
-    } // end UI-load request
+    }
 
     // reload GUI
-    else if (sim.uiloadrequest.load() == -1) {
-      sim.Load(sim.m_, sim.d_, sim.filename, false);
+    if (sim.uiloadrequest.load() == -1) {
+      sim.Load(sim.m, sim.d, sim.filename.c_str(), false);
       sim.uiloadrequest.fetch_add(1);
     }
     // ----------------------- //
@@ -298,7 +282,7 @@ void PhysicsLoop(mjpc::Simulate& sim) {
 
     {
       // lock the sim mutex
-      const std::lock_guard<mjpc::SimulateMutex> lock(sim.mtx);
+      const std::lock_guard<std::mutex> lock(sim.mtx);
 
       if (m) {
         // run only if model is present
@@ -306,11 +290,8 @@ void PhysicsLoop(mjpc::Simulate& sim) {
 
         // running
         if (sim.run) {
-          // Run
-          bool stepped = false;
-
           // record cpu time at start of iteration
-          const auto startCPU = mjpc::Simulate::Clock::now();
+          const auto startCPU = Simulate::Clock::now();
 
           // elapsed CPU and simulation time since last sync
           const auto elapsedCPU = startCPU - syncCPU;
@@ -324,7 +305,8 @@ void PhysicsLoop(mjpc::Simulate& sim) {
 
             for (int i = 0; i < m->nu; i++) {
               // update noise
-              ctrlnoise[i] = rate * ctrlnoise[i] + scale * mju_standardNormal(nullptr);
+              ctrlnoise[i] =
+                  rate * ctrlnoise[i] + scale * mju_standardNormal(nullptr);
 
               // noise added in controller callback
             }
@@ -335,11 +317,13 @@ void PhysicsLoop(mjpc::Simulate& sim) {
 
           // misalignment condition: distance from target sim time is bigger
           // than maximum misalignment `syncMisalign`
-          bool misaligned = mju_abs(Seconds(elapsedCPU).count() / slowdown - elapsedSim) > syncMisalign;
+          bool misaligned = mju_abs(Seconds(elapsedCPU).count() / slowdown -
+                                    elapsedSim) > syncMisalign;
 
           // out-of-sync (for any reason): reset sync times, step
-          if (elapsedSim < 0 || elapsedCPU.count() < 0 || syncCPU.time_since_epoch().count() == 0 ||
-              misaligned || sim.speed_changed) {
+          if (elapsedSim < 0 || elapsedCPU.count() < 0 ||
+              syncCPU.time_since_epoch().count() == 0 || misaligned ||
+              sim.speed_changed) {
             // re-sync
             syncCPU = startCPU;
             syncSim = d->time;
@@ -353,13 +337,6 @@ void PhysicsLoop(mjpc::Simulate& sim) {
             // run single step, let next iteration deal with timing
             sim.agent->ExecuteAllRunBeforeStepJobs(m, d);
             mj_step(m, d);
-            const char* message = Diverged(m->opt.disableflags, d);
-            if (message) {
-              sim.run = 0;
-              mju::strcpy_arr(sim.load_error, message);
-            } else {
-              stepped = true;
-            }
           } else {
             // in-sync: step until ahead of cpu
             bool measured = false;
@@ -367,11 +344,15 @@ void PhysicsLoop(mjpc::Simulate& sim) {
             double refreshTime = simRefreshFraction / sim.refresh_rate;
 
             // step while sim lags behind cpu and within refreshTime
-            while (Seconds((d->time - syncSim) * slowdown) < mjpc::Simulate::Clock::now() - syncCPU &&
-                   mjpc::Simulate::Clock::now() - startCPU < Seconds(refreshTime)) {
+            while (Seconds((d->time - syncSim) * slowdown) <
+                   Simulate::Clock::now() - syncCPU &&
+                   Simulate::Clock::now() - startCPU <
+                   Seconds(refreshTime)) {
               // measure slowdown before first step
               if (!measured && elapsedSim) {
-                sim.measured_slowdown = std::chrono::duration<double>(elapsedCPU).count() / elapsedSim;
+                sim.measured_slowdown =
+                    std::chrono::duration<double>(elapsedCPU).count() /
+                    elapsedSim;
                 measured = true;
               }
 
@@ -389,11 +370,6 @@ void PhysicsLoop(mjpc::Simulate& sim) {
                 break;
               }
             }
-          }
-
-          // save current state to history buffer
-          if (stepped) {
-            sim.AddToHistory();
           }
         } else {
           // paused
@@ -419,7 +395,7 @@ void PhysicsLoop(mjpc::Simulate& sim) {
     }
   }
 }
-} // namespace mjpc
+} // namespace
 
 // ------------------------------- main ----------------------------------------
 
@@ -441,25 +417,14 @@ MjpcApp::MjpcApp(std::vector<std::shared_ptr<mjpc::Task>> tasks, int task_id) {
     mju_error("Multiple instances of MjpcApp created.");
     return;
   }
-  mjvCamera cam;
-  mjv_defaultCamera(&cam);
-
-  mjvOption opt;
-  mjv_defaultOption(&opt);
-
-  mjvPerturb pert;
-  mjv_defaultPerturb(&pert);
-  sim = std::make_unique<mjpc::Simulate>(std::make_unique<mujoco::GlfwAdapter>(),
-                                         &cam, &opt, &pert,
-                                         std::make_shared<Agent>(),
-                                         /* is_passive = */ false);
+  sim = std::make_unique<Simulate>(
+      std::make_unique<mujoco::GlfwAdapter>(),
+      std::make_shared<Agent>());
 
   sim->agent->SetTaskList(std::move(tasks));
   sim->agent->gui_task_id = task_id;
 
-  const std::string filename = sim->agent->GetTaskXmlPath(sim->agent->gui_task_id);
-  mju::strcpy_arr(sim->filename, filename.c_str());
-
+  sim->filename = sim->agent->GetTaskXmlPath(sim->agent->gui_task_id);
   m = LoadModel(sim->agent.get(), *sim);
   if (m) d = mj_makeData(m);
   sim->agent->SetState(d);
@@ -468,8 +433,8 @@ MjpcApp::MjpcApp(std::vector<std::shared_ptr<mjpc::Task>> tasks, int task_id) {
   int home_id = mj_name2id(m, mjOBJ_KEY, "home");
   if (home_id >= 0) mj_resetDataKeyframe(m, d, home_id);
 
-  sim->mnew_ = m;
-  sim->dnew_ = d;
+  sim->mnew = m;
+  sim->dnew = d;
 
   // control noise
   free(ctrlnoise);
@@ -489,15 +454,22 @@ MjpcApp::MjpcApp(std::vector<std::shared_ptr<mjpc::Task>> tasks, int task_id) {
   float desired_percent = absl::GetFlag(FLAGS_sim_percent_realtime);
   auto closest = std::min_element(
       std::begin(sim->percentRealTime), std::end(sim->percentRealTime),
-      [&](float a, float b) { return std::abs(a - desired_percent) < std::abs(b - desired_percent); });
-  sim->real_time_index = std::distance(std::begin(sim->percentRealTime), closest);
+      [&](float a, float b) {
+        return std::abs(a - desired_percent) < std::abs(b - desired_percent);
+      });
+  sim->real_time_index =
+      std::distance(std::begin(sim->percentRealTime), closest);
+
+  sim->delete_old_m_d = true;
   sim->loadrequest = 2;
 
   sim->ui0_enable = absl::GetFlag(FLAGS_show_left_ui);
   sim->info = absl::GetFlag(FLAGS_show_info);
 }
 
-MjpcApp::~MjpcApp() { sim.reset(); }
+MjpcApp::~MjpcApp() {
+  sim.reset();
+}
 
 // run event loop
 void MjpcApp::Start() {
@@ -515,6 +487,9 @@ void MjpcApp::Start() {
   // set sensor callback
   mjcb_sensor = sensor;
 
+  // one-off preparation:
+  sim->InitializeRenderLoop();
+
   // start physics thread
   mjpc::ThreadPool physics_pool(1);
   physics_pool.Schedule([]() { PhysicsLoop(*sim); });
@@ -528,16 +503,19 @@ void MjpcApp::Start() {
   {
     // start plan thread
     mjpc::ThreadPool plan_pool(1);
-    plan_pool.Schedule([]() { sim->agent->Plan(sim->exitrequest, sim->uiloadrequest); });
+    plan_pool.Schedule(
+        []() { sim->agent->Plan(sim->exitrequest, sim->uiloadrequest); });
 
     // now that planning was forked, the main thread can render
+
     // start simulation UI loop (blocking call)
-    sim->InitializeRenderLoop();
     sim->RenderLoop();
   }
 }
 
-mjpc::Simulate* MjpcApp::Sim() { return sim.get(); }
+Simulate* MjpcApp::Sim() {
+  return sim.get();
+}
 
 void InitParallelEigen() {
   if (MJPC_OPENMP_ENABLED) {
