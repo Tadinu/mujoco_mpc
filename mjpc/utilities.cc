@@ -56,6 +56,18 @@ extern "C" {
 }
 
 namespace mjpc {
+// MUJOCO UTILS --
+//
+int QueryDofIdFromBody(const mjModel* model, const char* body_name) {
+  // NOTE: There is no such [name_dofadr], so mj_name2id(model, mjOBJ_DOF, dof_name) does not work!
+  if (model) {
+    return QueryDofIdFromBody(model, QueryBodyId(model, body_name));
+  }
+  return -1;
+}
+
+// MJPC UTILS --
+//
 // make model differentiable by setting solimp[0] to zero
 void MakeDifferentiable(mjModel* model) {
   // joints
@@ -388,7 +400,7 @@ double FiniteDifferenceSlope(double x, const std::vector<double>& xs, const doub
   } else {
     return 0.5 * (ys[dim * bounds[1] + i] - ys[dim * bounds[0] + i]) / (xs[bounds[1]] - xs[bounds[0]]) +
            0.5 * (ys[dim * bounds[0] + i] - ys[dim * (bounds[0] - 1) + i]) /
-               (xs[bounds[0]] - xs[bounds[0] - 1]);
+           (xs[bounds[0]] - xs[bounds[0] - 1]);
   }
 }
 
@@ -485,7 +497,7 @@ std::string GetExecutableDir() {
     std::uint32_t buf_size = 128;
     bool success = false;
     while (!success) {
-      realpath.reset(new (std::nothrow) char[buf_size]);
+      realpath.reset(new(std::nothrow) char[buf_size]);
       if (!realpath) {
         std::cerr << "cannot allocate memory to store executable path\n";
         return "";
@@ -560,17 +572,18 @@ void StateDiff(const mjModel* m, mjtNum* ds, const mjtNum* s1, const mjtNum* s2,
 
 // return global height of nearest group 0 geom under given position
 mjtNum Ground(const mjModel* model, const mjData* data, const mjtNum pos[3], const mjtByte* geomgroup) {
-  mjtNum down[3] = {0, 0, -1};      // aim ray straight down
-  const mjtNum height_offset = .5;  // add some height in case of penetration
-  const mjtByte flg_static = 1;     // include static geoms
-  const int bodyexclude = -1;       // don't exclude any bodies
-  int geomid;                       // id of intersecting geom
+  mjtNum down[3] = {0, 0, -1}; // aim ray straight down
+  const mjtNum height_offset = .5; // add some height in case of penetration
+  const mjtByte flg_static = 1; // include static geoms
+  const int bodyexclude = -1; // don't exclude any bodies
+  int geomid; // id of intersecting geom
   mjtNum query[3] = {pos[0], pos[1], pos[2] + height_offset};
   const mjtByte default_geomgroup[6] = {1, 0, 0, 0, 0, 0};
   const mjtByte* query_geomgroup = geomgroup ? geomgroup : default_geomgroup;
   mjtNum dist = mj_ray(model, data, query, down, query_geomgroup, flg_static, bodyexclude, &geomid);
 
-  if (dist < 0) {  // SHOULD NOT OCCUR
+  if (dist < 0) {
+    // SHOULD NOT OCCUR
     mju_error("no group 0 geom detected by raycast");
   }
 
@@ -818,7 +831,8 @@ void LogScale(double* values, double max_value, double min_value, int steps) {
 // ============== 2d convex hull ==============
 
 // note: written in MuJoCo-style C for possible future inclusion
-namespace {  // private functions in an anonymous namespace
+namespace {
+// private functions in an anonymous namespace
 
 // 2d vector dot-product
 mjtNum mju_dot2(const mjtNum vec1[2], const mjtNum vec2[2]) { return vec1[0] * vec2[0] + vec1[1] * vec2[1]; }
@@ -862,14 +876,13 @@ void ProjectToSegment2D(mjtNum res[2], const mjtNum query[2], const mjtNum v0[2]
   res[0] = center[0] + t * axis[0];
   res[1] = center[1] + t * axis[1];
 }
-
-}  // namespace
+} // namespace
 
 // returns point in 2D convex hull that is nearest to query
 void NearestInHull(mjtNum res[2], const mjtNum query[2], const mjtNum* points, const int* hull,
                    int num_hull) {
-  int outside = 0;      // assume query point is inside the hull
-  mjtNum best_sqrdist;  // smallest squared distance so far
+  int outside = 0; // assume query point is inside the hull
+  mjtNum best_sqrdist; // smallest squared distance so far
   for (int i = 0; i < num_hull; i++) {
     const mjtNum* v0 = points + 2 * hull[i];
     const mjtNum* v1 = points + 2 * hull[(i + 1) % num_hull];
@@ -1073,7 +1086,8 @@ void FiniteDifferenceHessian::Compute(std::function<double(const double* x)> fun
 
   // centered finite-difference
   for (int i = 0; i < dim; i++) {
-    for (int j = i; j < dim; j++) {  // skip bottom triangle
+    for (int j = i; j < dim; j++) {
+      // skip bottom triangle
       // workspace 1
       workspace1_[i] += epsilon;
       workspace1_[j] += epsilon;
@@ -1208,7 +1222,7 @@ void DifferentiateDifferentiatePos(double* jac1, double* jac2, const mjModel* mo
         vadr += 3;
         padr += 3;
 
-        // continute with rotations
+      // continute with rotations
         [[fallthrough]];
 
       case mjJNT_BALL:
@@ -1442,8 +1456,8 @@ void PrincipalEigenVector4(double* res, const double* mat, double eigenvalue_ini
   double Z[3] = {mat[3], mat[7], mat[11]};
 
   // S = mat[0:3, 0:3] + mat[3, 3] * I
-  double S[9] = {mat[0] + mat[15], mat[1], mat[2], mat[4],           mat[5] + mat[15],
-                 mat[6],           mat[8], mat[9], mat[10] + mat[15]};
+  double S[9] = {mat[0] + mat[15], mat[1], mat[2], mat[4], mat[5] + mat[15],
+                 mat[6], mat[8], mat[9], mat[10] + mat[15]};
 
   // delta = det(S)
   double delta = Determinant3(S);
@@ -1545,5 +1559,4 @@ void SetBlockInBand(double* band, const double* block, double scale, int ntotal,
     }
   }
 }
-
-}  // namespace mjpc
+} // namespace mjpc

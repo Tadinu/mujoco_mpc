@@ -30,6 +30,9 @@
 #include <glfw_adapter.h>
 #include <array_safety.h>
 
+// mjpc
+#include "mjpc/tasks/lsqp/lsqp.h"
+
 // mjapp
 #include "mjapp/sim.h"
 
@@ -277,7 +280,9 @@ void PostLoadModel(mjapp::Simulate& sim, mjModel* m, mjData* d) {
 
   // 2- Then init control
   sim.InitControl(m, d);
-  //mj_forward(m, d);
+
+  // 3- Init scene (eg: moving mocaps to init pose)
+  sim.PosLoadInit(m, d);
 }
 
 // simulate in background thread (while rendering in main thread)
@@ -299,7 +304,7 @@ void PhysicsLoop(mjapp::Simulate& sim) {
         sim.Load(mnew, dnew, sim.dropfilename);
 
         // lock the sim mutex
-        const std::unique_lock<std::recursive_mutex> lock(sim.mtx);
+        const mjpc::MutexLock lock(sim.mtx);
 
         mj_deleteData(d);
         mj_deleteModel(m);
@@ -322,7 +327,7 @@ void PhysicsLoop(mjapp::Simulate& sim) {
         sim.Load(mnew, dnew, sim.filename);
 
         // lock the sim mutex
-        const std::unique_lock<std::recursive_mutex> lock(sim.mtx);
+        const mjpc::MutexLock lock(sim.mtx);
 
         mj_deleteData(d);
         mj_deleteModel(m);
@@ -345,7 +350,7 @@ void PhysicsLoop(mjapp::Simulate& sim) {
 
     {
       // lock the sim mutex
-      const std::unique_lock<std::recursive_mutex> lock(sim.mtx);
+      const mjpc::MutexLock lock(sim.mtx);
 
       // run only if model is present
       if (m) {
@@ -402,7 +407,7 @@ void PhysicsLoop(mjapp::Simulate& sim) {
                 measured = true;
               }
 
-#if !MJAPP_ACTUATOR_UI_DISABLED
+#if !MJPC_ACTUATOR_UI_DISABLED
               // inject noise
               sim.InjectNoise();
 #endif
@@ -449,7 +454,16 @@ void controller(const mjModel* m, mjData* d);
 
 // controller callback
 void controller(const mjModel* m, mjData* d) {
+  // NOTE: This happens when multiple XML loading or direct model compilation are done, creating multiple [m,d],
+  // while there is only a single [mjcb_control]
+  if (d != mjapp::d) {
+    return;
+  }
+#if MJPC_LSQP_OSC_ENABLED
+  gbSim->ControlOSC(m, d);
+#else
   gbSim->Control(m, d);
+#endif
 }
 
 //-------------------------------------- physics_thread --------------------------------------------
@@ -467,7 +481,7 @@ void PhysicsThread(mjapp::Simulate* sim, const char* filename) {
   // Create [d] from loaded/constructed [m]
   if (m) {
     // lock the sim mutex
-    const std::unique_lock<std::recursive_mutex> lock(sim->mtx);
+    const mjpc::MutexLock lock(sim->mtx);
     d = mj_makeData(m);
   }
 
@@ -476,7 +490,7 @@ void PhysicsThread(mjapp::Simulate* sim, const char* filename) {
     sim->Load(m, d, filename);
 
     // lock the sim mutex
-    const std::unique_lock<std::recursive_mutex> lock(sim->mtx);
+    const mjpc::MutexLock lock(sim->mtx);
     PostLoadModel(*sim, m, d);
   } else {
     sim->LoadMessageClear();
@@ -511,6 +525,8 @@ int main(int argc, char** argv) {
   }
 #endif
 
+  assert(std::ifstream(mjpc::MUJOCO_DIR.c_str()).good());
+
   // print version, check compatibility
   std::printf("MuJoCo version %s\n", mj_versionString());
   if (mjVERSION_HEADER != mj_version()) {
@@ -536,8 +552,8 @@ int main(int argc, char** argv) {
   mjcb_control = mjapp::controller;
 
   const char* filename =
-#if MJPC_PLANNER_LSQP_DIFFIK_ENABLED
-      mjapp::MAIN_SCENE_XML_PATH.c_str();
+#if MJPC_LSQP_MANUAL_MODE
+      mjpc::MAIN_SCENE_XML_PATH.c_str();
 #else
       nullptr;
 #endif

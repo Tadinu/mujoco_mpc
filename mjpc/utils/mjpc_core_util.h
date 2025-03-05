@@ -26,7 +26,10 @@
 #include <dqrobotics/utils/DQ_LinearAlgebra.h>
 
 // MJPC
+#include <array>
+
 #include "mjpc/core/mjpc_common.h"
+#include "mjpc/json/json.hpp"
 #include "mjpc/planners/bimanual/dq_franka_robot.h"
 
 namespace mjpc {
@@ -35,8 +38,9 @@ namespace mjpc {
 #define MJPC_PRINT(...) mjpc::print(__VA_ARGS__)
 #define MJPC_PRINTDB(...) mjpc::printdb(__VA_ARGS__)
 
-template <typename... TArgs>
+template <typename... TArgs> // Parameter pack
 static void print(const TArgs&... var) {
+  // Folding expression
   ((std::cout << var << " "), ...) << std::endl;
 }
 
@@ -193,6 +197,23 @@ static MjpcNamedAnyMap get_named_any_map(const MjpcNamedMap<TArgs...>& vars) {
 
 // COLLECTION ------------------------------------------------------------------------------------------------
 //
+template <typename T, std::size_t N>
+constexpr std::size_t static CArraySize(const T (&)[N]) {
+  return N;
+}
+
+template <typename T, typename TCollection = std::vector<T>, std::size_t N>
+static TCollection CollectionFromCArray(const T (&array)[N]) {
+  return TCollection(std::begin(array), std::end(array));
+};
+
+template <typename T, typename TCollection = std::vector<T>, typename... TCollections>
+static TCollection ChainCollections(const TCollections&... collection) {
+  TCollection res;
+  (res.insert(res.end(), collection.begin(), collection.end()), ...);
+  return res;
+}
+
 template <typename TMap>
 static std::vector<std::string> get_map_keys(const TMap& variants) {
 #if 1
@@ -326,6 +347,10 @@ static std::vector<T> tokenize(const std::string& text, const std::string& delim
 // CONVERSION UTILS ---------
 // EIGEN
 //
+template <int rows = Eigen::Dynamic, int cols = Eigen::Dynamic>
+using MatrixRowMajorD = Eigen::Matrix<double, rows, cols, Eigen::RowMajor>;
+using MatrixRowMajorXd = MatrixRowMajorD<Eigen::Dynamic, Eigen::Dynamic>;
+
 static void SetEigenVector(Eigen::VectorXd& vec, const std::vector<int>& indices,
                            const std::vector<double>& values) {
   assert(indices.size() == values.size());
@@ -344,8 +369,17 @@ static void ResetEigenVector(Eigen::VectorXd& vec, const std::vector<int>& indic
 #endif
 }
 
-static Eigen::VectorXd PosToEigen(const mjtNum* pos, int n = 3) {
-  return Eigen::Map<const Eigen::VectorXd>(pos, n);
+template <const size_t N = 3>
+static Eigen::Matrix<double, N, 1> StaticArrayToEigen(const mjtNum* array) {
+  return Eigen::Map<const Eigen::Matrix<double, N, 1>>(array);
+}
+
+static Eigen::VectorXd ArrayToEigen(const mjtNum* array, size_t n = 3) {
+  return Eigen::Map<const Eigen::VectorXd>(array, n);
+}
+
+static Eigen::VectorXd PosToEigen(const mjtNum* pos, size_t n = 3) {
+  return ArrayToEigen(pos, n);
 }
 
 static const mjtNum* PosFromEigen(const Eigen::VectorXd& pos) {
@@ -368,6 +402,22 @@ static mjtNum* QuatFromEigen(const Eigen::Quaterniond& equat) {
   quat[2] = equat.y();
   quat[3] = equat.z();
   return quat;
+}
+
+// https://eigen.tuxfamily.org/dox/TopicPitfalls.html
+static Eigen::MatrixXd ArrayToEigenMatrix(const mjtNum* array, int rows, int cols) {
+  return Eigen::Map<const MatrixRowMajorXd>(array, rows, cols);
+}
+
+template <const int rows, typename T = const MatrixRowMajorD<rows>>
+static T ArrayToEigenMatrix(const mjtNum* array, int cols) {
+  //mjpc::print(M.RowsAtCompileTime, M.ColsAtCompileTime, M.SizeAtCompileTime);
+  return Eigen::Map<T>(array, rows, cols);
+}
+
+template <const int rows, const int cols, typename T = const MatrixRowMajorD<rows, cols>>
+static T StaticArrayToEigenMatrix(const mjtNum* array, bool copied = false) {
+  return Eigen::Map<T>(array, rows, cols);
 }
 
 static Eigen::MatrixXd StackEigenMatrices(const std::vector<Eigen::MatrixXd>& matrices, bool horizontally) {
@@ -402,263 +452,5 @@ static Eigen::VectorXd JoinEigenVectors(const std::vector<Eigen::VectorXd>& vect
     offset += num;
   }
   return stacked;
-}
-
-// MATH ---------------------
-//
-// Ref: mju_quatZ2Vec() calculates quaternion from Z-vector to a vector
-static void mjpc_quatFromVectors(mjtNum quat[4], const mjtNum vec1[3], const mjtNum vec2[3]) {
-  mjtNum axis[3], a, vec2n[3] = {vec2[0], vec2[1], vec2[2]};
-
-  // set default result to no-rotation quaternion
-  quat[0] = 1;
-  mju_zero3(quat + 1);
-
-  // normalize vector; if too small, no rotation
-  if (mju_normalize3(vec2n) < mjMINVAL) {
-    return;
-  }
-
-  // compute angle and axis
-  mju_cross(axis, vec1, vec2);
-  a = mju_normalize3(axis);
-
-  // almost parallel
-  if (mju_abs(a) < mjMINVAL) {
-    // opposite: 180 deg rotation around x axis
-    if (mju_dot3(vec2, vec1) < 0) {
-      quat[0] = 0;
-      quat[1] = 1;
-    }
-
-    return;
-  }
-
-  // make quaternion from angle and axis
-  a = mju_atan2(a, mju_dot3(vec2, vec1));
-  mju_axisAngle2Quat(quat, axis, a);
-}
-
-// Ref: https://github.com/google-deepmind/mujoco/blob/main/src/user/user_util.h
-// convert global to local axis relative to given frame
-static void mjpc_localaxis(double* al, const double* ag, const double* quat) {
-  double mat[9];
-  double qneg[4] = {quat[0], -quat[1], -quat[2], -quat[3]};
-  mju_quat2Mat(mat, qneg);
-  mju_mulMatVec3(al, ag, mat);
-}
-
-// Ref: mj_local2Global()
-// convert global to local position relative to given frame
-static void mjpc_localpos(double* pl, const double* pg, const double* pos, const double* quat) {
-  double a[3] = {pg[0] - pos[0], pg[1] - pos[1], pg[2] - pos[2]};
-  mjpc_localaxis(pl, a, quat);
-}
-
-// compute quaternion rotation from parent to child
-static void mjpc_localquat(double* local, const double* child, const double* parent) {
-  double pneg[4] = {parent[0], -parent[1], -parent[2], -parent[3]};
-  mju_mulQuat(local, pneg, child);
-}
-
-// Ref: mj_fullM
-// Convert sparse inertia matrix M into full (i.e. dense) matrix.
-static void mjpc_fullMatrix(const mjModel* m, mjtNum* dst, const mjtNum* M /* inertial matrix: qM*/,
-                            int start_idx, int size) {
-  int adr = 0;
-  mju_zero(dst, size * size);
-
-  for (int i = start_idx; i < start_idx + size; ++i) {
-    int _i = i - start_idx;
-    int j = i;
-    while (j >= 0) {
-      int _j = j - start_idx;
-      dst[_i * size + _j] = M[adr];
-      dst[_j * size + _i] = M[adr];
-      j = m->dof_parentid[j];
-      adr++;
-    }
-  }
-}
-
-// Ref: [engine_support.h] - mj_bodyChain()
-static int mjpc_bodyChain(const mjModel* m, int* chain, int body, int base_body = 0) {
-  // simple body
-  if (m->body_simple[body]) {
-    int dofnum = m->body_dofnum[body];
-    for (int i = 0; i < dofnum; i++) {
-      chain[i] = m->body_dofadr[body] + i;
-    }
-    return dofnum;
-  }
-
-  // general case
-  else {
-    // skip fixed bodies
-    while (body && !m->body_dofnum[body]) {
-      body = m->body_parentid[body];
-    }
-
-    // not movable: empty chain
-    if (body == base_body) {
-      return 0;
-    }
-
-    // intialize last dof
-    int da = m->body_dofadr[body] + m->body_dofnum[body] - 1;
-    int NV = 0;
-
-    // construct chain from child to parent
-    while (da >= base_body) {
-      chain[NV++] = da;
-      da = m->dof_parentid[da];
-    }
-
-    // reverse order of chain: make it increasing
-    for (int i = 0; i < NV / 2; i++) {
-      int tmp = chain[i];
-      chain[i] = chain[NV - i - 1];
-      chain[NV - i - 1] = tmp;
-    }
-
-    return NV;
-  }
-}
-
-
-// Ref: [engine_support.h] - mj_jacSparse()
-static void mjpc_jacSparse(const mjModel* m, const mjData* d,
-                           mjtNum* jacp, mjtNum* jacr, const mjtNum* point, int body,
-                           int NV, const int* chain) {
-  int da, ci;
-  mjtNum offset[3], tmp[3], *cdof = d->cdof;
-
-  // clear jacobians
-  if (jacp) {
-    mju_zero(jacp, 3 * NV);
-  }
-  if (jacr) {
-    mju_zero(jacr, 3 * NV);
-  }
-
-  // compute point-com offset
-  mju_sub3(offset, point, d->subtree_com + 3 * m->body_rootid[body]);
-
-  // skip fixed bodies
-  while (body && !m->body_dofnum[body]) {
-    body = m->body_parentid[body];
-  }
-
-  // no movable body found: nothing to do
-  if (!body) {
-    return;
-  }
-
-  // get last dof that affects this (as well as the original) body
-  da = m->body_dofadr[body] + m->body_dofnum[body] - 1;
-
-  // start and the end of the chain (chain is in increasing order)
-  ci = NV - 1;
-
-  // backward pass over dof ancestor chain
-  while (da >= 0) {
-    // find chain index for this dof
-    while (ci >= 0 && chain[ci] > da) {
-      ci--;
-    }
-
-    // make sure we found it; SHOULD NOT OCCUR
-    if (chain[ci] != da) {
-      print("dof index %d not found in chain", da);
-    }
-
-    // construct rotation jacobian
-    if (jacr) {
-      jacr[ci] = cdof[6 * da];
-      jacr[ci + NV] = cdof[6 * da + 1];
-      jacr[ci + 2 * NV] = cdof[6 * da + 2];
-    }
-
-    // construct translation jacobian (correct for rotation)
-    if (jacp) {
-      mju_cross(tmp, cdof + 6 * da, offset);
-
-      jacp[ci] = cdof[6 * da + 3] + tmp[0];
-      jacp[ci + NV] = cdof[6 * da + 4] + tmp[1];
-      jacp[ci + 2 * NV] = cdof[6 * da + 5] + tmp[2];
-    }
-
-    // advance to parent dof
-    da = m->dof_parentid[da];
-  }
-}
-
-// https://eigen.tuxfamily.org/dox/group__DenseDecompositionBenchmark.html
-#define MJPC_USE_QR_INVERSE_MATRIX (1)
-/* https://www.naukri.com/code360/library/understanding-svd-decomposition
- * JacobiSVD: For small matrices, two-sided Jacobi iterations are quickly implemented, but for bigger matrices, they take a very long time.
- * BDCSVD: Applying an upper-bidiagonalization that is still quick for large problems on top of a recursive divide-and-conquer approach.
- * -> Divide-and-conquer diagonalizes the input matrix after first reducing it to bi-diagonal form using class UpperBidiagonalization.
- */
-#define MJPC_USE_JACOBI_SVD_INVERSE_MATRIX (0)
-#define MJPC_USE_BDC_SVD_INVERSE_MATRIX (!MJPC_USE_QR_INVERSE_MATRIX && !MJPC_USE_JACOBI_SVD_INVERSE_MATRIX)
-
-#if MJPC_USE_QR_INVERSE_MATRIX
-/// Convenience method for pseudo-inverse
-template <int i, int j, typename TMatrix = Eigen::Matrix<double, i, j>>
-static inline TMatrix pinv(const Eigen::Matrix<double, i, j>& M) {
-  return (M.completeOrthogonalDecomposition().pseudoInverse());
-}
-#elif MJPC_USE_JACOBI_SVD_INVERSE_MATRIX
-  // https://eigen.tuxfamily.org/dox/group__LeastSquares.html
-  // https://gist.github.com/javidcf/25066cf85e71105d57b6
-  template<int i, int j, typename TMatrix = Eigen::Matrix<double, i, j>>
-  static inline TMatrix pinv(const Eigen::Matrix<double, i, j> &M,
-                             double epsilon = std::numeric_limits<double>::epsilon()) {
-#if 1
-    Eigen::JacobiSVD<TMatrix> svd(M, Eigen::ComputeFullU | Eigen::ComputeFullV);
-    // For a non-square matrix
-    // Eigen::JacobiSVD<TMatrix> svd(M, Eigen::ComputeThinU | Eigen::ComputeThinV);
-    double tolerance = epsilon * std::max(M.cols(), M.rows()) * svd.singularValues().array().abs()(0);
-    return svd.matrixV() * (svd.singularValues().array().abs() > tolerance).select(svd.singularValues().array().inverse(), 0).matrix().asDiagonal() * svd.matrixU().adjoint();
-#else
-    // Ref: https://github.com/dqrobotics/cpp/blob/master/src/utils/DQ_LinearAlgebra.cpp
-    auto svd = M.jacobiSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
-    const auto &singularValues = svd.singularValues();
-    TMatrix singularValuesInv(M.cols(), M.rows());
-    singularValuesInv.setZero();
-    double tolerance = epsilon * std::max(M.cols(), M.rows()) * singularValues.array().abs()(0);
-    for (unsigned int k = 0; k < singularValues.size(); ++k) {
-      if (singularValues(k) > tolerance)
-      {
-        singularValuesInv(k, k) = 1.0 / singularValues(k);
-      }
-      else
-      {
-        singularValuesInv(k, k) = 0.0;
-      }
-    }
-    return svd.matrixV() * singularValuesInv * svd.matrixU().adjoint();
-#endif
-  }
-#elif MJPC_USE_BDC_SVD_INVERSE_MATRIX
-  // https://gist.github.com/pshriwise/67c2ae78e5db3831da38390a8b2a209f
-  template<int i, int j, typename TMatrix = Eigen::Matrix<double, i, j>>
-  static inline TMatrix pinv(const Eigen::Matrix<double, i, j> &M,
-                             double epsilon = std::numeric_limits<double>::epsilon())
-  {
-    Eigen::BDCSVD<TMatrix> svd(M, Eigen::ComputeFullU | Eigen::ComputeFullV);
-    svd.setThreshold(epsilon*std::max(M.cols(), M.rows()));
-    Eigen::Index rank = svd.rank();
-    TMatrix tmp = svd.matrixU().leftCols(rank).adjoint();
-    tmp = svd.singularValues().head(rank).asDiagonal().inverse() * tmp;
-    return svd.matrixV().leftCols(rank) * tmp;
-  }
-#endif
-
-static inline Eigen::MatrixXd robust_inv(const Eigen::MatrixXd& M, const double alpha = 0.001) {
-  auto Mt = M;
-  Mt.transposeInPlace();
-  return Mt * DQ_robotics::pinv(M * Mt + alpha * Eigen::MatrixXd::Identity(M.rows(), M.rows()));
 }
 } // namespace mjpc

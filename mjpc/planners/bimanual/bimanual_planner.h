@@ -199,12 +199,13 @@ public:
       }
       static Vector14d vel = Vector14d::Zero();
       const double integration_dt = model_->opt.timestep;
-      vel.head<7>() = mjpc::ControlDiff(model_, data_, "torso", "panda0_end_effector", "target",
+      const auto key_qpos = mjpc::QueryKeyJointPositions(model_, "home");
+      vel.head<7>() = mjpc::ControlDiff(model_, data_, "panda0_end_effector", "target",
                                         data_->qpos,
-                                        integration_dt, true);
-      vel.tail<7>() = mjpc::ControlDiff(model_, data_, "torso", "panda1_end_effector", "target",
+                                        integration_dt, key_qpos.data(), "torso");
+      vel.tail<7>() = mjpc::ControlDiff(model_, data_, "panda1_end_effector", "target",
                                         data_->qpos + 7,
-                                        integration_dt, true);
+                                        integration_dt, key_qpos.data(), "torso");
       mju_copy(action_.data(), data_->qpos, NV);
       mju_addToScl(action_.data(), vel.data(), 1, NV);
       //print(action_);

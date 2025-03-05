@@ -1584,7 +1584,7 @@ void UiEvent(mjuiState* state) {
     // process UI event
     mjuiItem* it = mjui_event(&sim->ui1, state, &sim->platform_ui->mjr_context());
 
-#if !MJAPP_ACTUATOR_UI_DISABLED
+#if !MJPC_ACTUATOR_UI_DISABLED
     // control section
     if (it && it->sectionid == SECT_CONTROL) {
       // clear controls
@@ -1905,7 +1905,7 @@ void SimulateBase::Sync() {
     }
   }
 
-#if !MJAPP_ACTUATOR_UI_DISABLED
+#if !MJPC_ACTUATOR_UI_DISABLED
   for (int i = 0; i < m_->nu; ++i) {
     std::optional<std::pair<mjtNum, mjtNum>> range;
     if (m_->actuator_ctrllimited[i]) {
@@ -1918,7 +1918,7 @@ void SimulateBase::Sync() {
   }
 #endif
 
-#if MJAPP_ACTUATOR_UI_DISABLED
+#if MJPC_ACTUATOR_UI_DISABLED
   for (int i = 0; i < m_->nq; ++i) {
     qpos_[i] = d_->qpos[i];
     if (qpos_prev_[i] != qpos_[i]) {
@@ -1940,7 +1940,7 @@ void SimulateBase::Sync() {
   }
 #endif
 
-#if MJAPP_ACTUATOR_UI_DISABLED
+#if MJPC_ACTUATOR_UI_DISABLED
   for (int i = 0; i < m_->nu; ++i) {
     ctrl_[i] = d_->ctrl[i];
     if (ctrl_prev_[i] != ctrl_[i]) {
@@ -2077,7 +2077,7 @@ void SimulateBase::Sync() {
     pending_.save_key = false;
   }
 
-#if !MJAPP_ACTUATOR_UI_DISABLED
+#if !MJPC_ACTUATOR_UI_DISABLED
   if (pending_.zero_ctrl) {
     mju_zero(d_->ctrl, m_->nu);
     pending_.zero_ctrl = false;
@@ -2256,7 +2256,6 @@ void SimulateBase::Load(mjModel* m, mjData* d, const char* displayed_filename, b
   this->mnew_ = m;
   this->dnew_ = d;
   this->delete_old_m_d_ = delete_old_m_d;
-  Init(m, d);
 
   if (displayed_filename) {
     mju::strcpy_arr(this->filename, displayed_filename);
@@ -2264,6 +2263,7 @@ void SimulateBase::Load(mjModel* m, mjData* d, const char* displayed_filename, b
 
   {
     MutexLock lock(mtx);
+    InitInThread(m, d);
     this->loadrequest = 2;
 
     // Wait for the render thread to be done loading
@@ -2739,9 +2739,11 @@ void SimulateBase::InitializeRenderLoop() {
   mjv_defaultCamera(&this->cam);
   mjv_defaultOption(&this->opt);
   // Configure visualization
+#if MJPC_ALL_SITES_ENABLED
   for (auto i = 0; i < mjNGROUP; ++i) {
     opt.sitegroup[i] = true;
   }
+#endif
   InitializeProfiler(this);
   InitializeSensor(this);
   // make empty scene
@@ -2896,7 +2898,7 @@ void SimulateBase::AddToHistory() {
   mj_getState(m_, d_, state, mjSTATE_INTEGRATION);
 }
 
-#if !MJAPP_ACTUATOR_UI_DISABLED
+#if !MJPC_ACTUATOR_UI_DISABLED
 // inject Brownian noise
 void SimulateBase::InjectNoise() {
   // no noise, return

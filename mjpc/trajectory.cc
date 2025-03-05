@@ -23,7 +23,7 @@
 #include <iostream>
 
 #include "mjpc/utilities.h"
-#include "planners/lsqp/lsqp_solver.h"
+#include "mjpc/planners/planner.h"
 
 namespace mjpc {
 namespace {
@@ -143,7 +143,17 @@ void Trajectory::NoisyRollout(std::function<void(double* action, const double* s
     // set action
     policy(DataAt(actions, t * nu), DataAt(states, t * dim_state), data->time);
     double* act = DataAt(actions, t * nu);
-    mju_copy(data->ctrl, control_cb ? control_cb(act, data, solver).data() : act, nu);
+
+    if (control_cb) {
+      const std::vector<mjtNum> ctrl = control_cb(act, data, solver);
+      if (Planner::AreInvalidControls(ctrl)) {
+        data->warning[mjWARN_BADCTRL].number++;
+      } else {
+        mju_copy(data->ctrl, ctrl.data(), nu);
+      }
+    } else {
+      mju_copy(data->ctrl, act, nu);
+    }
 
     // apply perturbation
     if (xfrc_std > 0) {

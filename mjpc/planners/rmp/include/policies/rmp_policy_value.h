@@ -22,7 +22,7 @@
 
 #include <Eigen/Dense>
 
-#include "mjpc/utils/mjpc_core_util.h"
+#include "mjpc/utils/mjpc_math_util.h"
 
 namespace rmp {
 /**
@@ -44,7 +44,7 @@ public:
    */
   PolicyValue operator+(PolicyValue& other) {
     Matrix A_combined = this->A_ + other.A_;
-    Vector f_combined = mjpc::pinv(A_combined) * (this->A_ * this->f_ + other.A_ * other.f_);
+    Vector f_combined = mjpc::Pinv(A_combined) * (this->A_ * this->f_ + other.A_ * other.f_);
 
     return PolicyValue(f_combined, A_combined);
   }
@@ -62,7 +62,7 @@ public:
       sum_ai_fi += rmpBase.A_ * rmpBase.f_;
     }
 
-    auto f_summed = mjpc::pinv(sum_ai) * sum_ai_fi;
+    auto f_summed = mjpc::Pinv(sum_ai) * sum_ai_fi;
     return PolicyValue(f_summed, sum_ai);
   }
 

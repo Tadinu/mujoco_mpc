@@ -94,7 +94,7 @@ public:
       // RMP: f: instantaneous acceleration, A: Riemannian metric as the weight of the policy
       // https://arxiv.org/pdf/1801.02854 - Eq 10, 11
       MatrixQ A = J_.transpose() * policy.A_ * J_; // Pullback metric
-      VectorQ f = mjpc::pinv(A) * J_.transpose() * policy.A_ * policy.f_;
+      VectorQ f = mjpc::Pinv(A) * J_.transpose() * policy.A_ * policy.f_;
       return {f, A};
     }
 

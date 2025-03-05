@@ -38,6 +38,7 @@
 // mujoco
 #include <mujoco/mujoco.h>
 #include "mjpc/utils/mjpc_core_util.h"
+#include "mjpc/utils/mjpc_math_util.h"
 
 #define MJPC_OPENMP_ENABLED (1)
 #define MJPC_OPENMP_THREADS_NUM (1000)
@@ -45,9 +46,6 @@
 namespace mjpc {
 // maximum number of traces that are visualized
 inline constexpr int kMaxTraces = 99;
-inline constexpr mjtNum TRANSLATION_ZERO[3] = {0, 0, 0};
-inline constexpr mjtNum ROTATION_IDENTITY[4] = {1, 0, 0, 0};
-inline constexpr mjtNum POSE_IDENTITY[7] = {0, 0, 0, 1, 0, 0, 0};
 
 // make model differentiable by setting solimp[0] to zero
 void MakeDifferentiable(mjModel* model);
@@ -69,7 +67,70 @@ inline mjsSite* FindSiteSpec(mjSpec* model_spec, const char* site_name) {
   return mjs_asSite(mjs_findElement(model_spec, mjOBJ_SITE, site_name));
 }
 
+// find all child specs of either a spec or a body
+// Ref: https://github.com/google-deepmind/mujoco/blob/main/python/mujoco/specs.cc - FindAllImpl
+template <typename TSpec, typename TChildSpec,
+          typename = std::enable_if<std::is_same_v<TSpec, mjSpec> | std::is_same_v<TSpec, mjsBody>>>
+inline std::vector<TChildSpec*> FindAllChildSpecs(TSpec* base_spec, mjtObj type, int recurse) {
+  if (type == mjOBJ_UNKNOWN) {
+    // this should never happen
+    throw MjpcError(
+        "[FindAllChildSpecs] supports the types: body, frame, geom, site, "
+        "joint, light, camera.");
+  }
+
+  std::vector<TChildSpec*> list;
+  mjsElement* el = nullptr;
+  if constexpr (std::is_same_v<TSpec, mjSpec>) {
+    el = mjs_firstElement(base_spec, type);
+  } else {
+    el = mjs_firstChild(base_spec, type, recurse);
+  }
+
+  const std::string error = mjs_getError(mjs_getSpec(base_spec->element));
+  if (!el && !error.empty()) {
+    throw MjpcError(error);
+  }
+  while (el) {
+    if constexpr (std::is_same_v<TChildSpec, mjsElement>) {
+      list.push_back(el);
+    } else {
+      TChildSpec* child_spec = nullptr;
+      if constexpr (std::is_same_v<TChildSpec, mjsBody>) {
+        child_spec = mjs_asBody(el);
+      } else if constexpr (std::is_same_v<TChildSpec, mjsCamera>) {
+        child_spec = mjs_asCamera(el);
+      } else if constexpr (std::is_same_v<TChildSpec, mjsFrame>) {
+        child_spec = mjs_asFrame(el);
+      } else if constexpr (std::is_same_v<TChildSpec, mjsGeom>) {
+        child_spec = mjs_asGeom(el);
+      } else if constexpr (std::is_same_v<TChildSpec, mjsJoint>) {
+        child_spec = mjs_asJoint(el);
+      } else if constexpr (std::is_same_v<TChildSpec, mjsLight>) {
+        child_spec = mjs_asLight(el);
+      } else if constexpr (std::is_same_v<TChildSpec, mjsSite>) {
+        child_spec = mjs_asSite(el);
+      }
+
+      if (child_spec) {
+        list.push_back(child_spec);
+      }
+    }
+
+    if constexpr (std::is_same_v<TSpec, mjSpec>) {
+      el = mjs_nextElement(base_spec, el);
+    } else {
+      el = mjs_nextChild(base_spec, el, recurse);
+    }
+  }
+  return list;
+}
+
 // Joint
+inline int QueryJointIdFromDof(const mjModel* model, const int dof_id) {
+  return model ? model->dof_jntid[dof_id] : -1;
+}
+
 inline int QueryJointId(const mjModel* model, const char* joint_name) {
   return model ? mj_name2id(model, mjOBJ_JOINT, joint_name) : -1;
 }
@@ -147,10 +208,46 @@ inline void PrintJoints(const mjModel* model, const mjData* data) {
   }
 }
 
-// Dof
-inline int QueryDofId(const mjModel* model, const char* dof_name) {
-  return model ? mj_name2id(model, mjOBJ_DOF, dof_name) : -1;
+inline void PrintDofs(const mjModel* model, const mjData* data) {
+  for (int i = 0; i < model->nv; ++i) {
+    int body_id = model->dof_bodyid[i];
+    int name_bodyadr = model->name_bodyadr[body_id];
+    int jnt_id = model->dof_jntid[i];
+    int name_jntadr = model->name_jntadr[jnt_id];
+    mjpc::print(std::string(model->names + name_bodyadr), std::string(model->names + name_jntadr),
+                mjpc::QuerySingleJointPos(model, data, jnt_id));
+  }
 }
+
+// Dof
+// Return joint's first dof_id
+inline int QueryDofId(const mjModel* model, const char* jnt_name) {
+  // NOTE: There is no such [name_dofadr], so mj_name2id(model, mjOBJ_DOF, dof_name) does not work!
+  if (model) {
+#if 1
+    const int jnt_id = mj_name2id(model, mjOBJ_JOINT, jnt_name);
+    return (jnt_id >= 0) ? model->jnt_dofadr[jnt_id] : -1;
+#else
+    for (int i = 0; i < model->nv; ++i) {
+      if (std::string(mj_id2name(model, mjOBJ_JOINT, model->dof_jntid[i])) == jnt_name) {
+        return i;
+      }
+    }
+#endif
+  }
+  return -1;
+}
+
+inline int QueryDofId(const mjModel* model, int jnt_id) {
+  return QueryDofId(model, mj_id2name(model, mjOBJ_JOINT, jnt_id));
+}
+
+// Return body's first dof_id
+inline int QueryDofIdFromBody(const mjModel* model, int body_id) {
+  return (model && (body_id >= 0)) ? model->body_dofadr[body_id] : -1;
+}
+
+inline int QueryDofIdFromBody(const mjModel* model, const char* body_name);
 
 // Actuator
 inline int QueryActuatorId(const mjModel* model, const char* actuator_name) {
@@ -252,9 +349,9 @@ inline std::pair<Eigen::Vector3d, Eigen::Quaterniond> QueryBodyPoseEigen(
                   child_body_id, model->body_sameframe[child_body_id]);
 #endif
 
-  mjpc_localpos(&rel_pose[0], QueryBodyPos(data, child_body_id), &parent_pose[0],
-                &parent_pose[3]);
-  mjpc_localquat(&rel_pose[3], QueryBodyQuat(data, child_body_id), &parent_pose[3]);
+  MjuLocalPos(&rel_pose[0], QueryBodyPos(data, child_body_id), &parent_pose[0],
+              &parent_pose[3]);
+  MjuLocalQuat(&rel_pose[3], QueryBodyQuat(data, child_body_id), &parent_pose[3]);
 
   mju_copy3(res.first.data(), &rel_pose[0]);
   res.second = mjpc::QuatToEigen(&rel_pose[3]);
@@ -289,6 +386,27 @@ inline mjtNum* QueryBodyAcc(const mjData* data, int body_id, bool linear = true)
     return &lacc[0];
   }
   return nullptr;
+}
+
+// Recursive function to set collision properties for a body and its descendants
+inline void SetBodyTreeCollisionEnabled(mjsBody* base_body_spec, bool enabled) {
+  for (const auto& geom_spec : FindAllChildSpecs<mjsBody, mjsGeom>(base_body_spec, mjOBJ_GEOM, true)) {
+    geom_spec->contype = enabled;
+    geom_spec->conaffinity = enabled;
+  }
+  for (const auto& child_body_spec : FindAllChildSpecs<
+         mjsBody, mjsBody>(base_body_spec, mjOBJ_BODY, true)) {
+    SetBodyTreeCollisionEnabled(child_body_spec, enabled);
+  }
+}
+
+// Recursive function to set gravity compensation properties for a body and its descendants
+inline void SetBodyTreeGravityCompensationEnabled(mjsBody* base_body_spec, bool enabled) {
+  base_body_spec->gravcomp = enabled;
+  for (const auto& child_body_spec : FindAllChildSpecs<
+         mjsBody, mjsBody>(base_body_spec, mjOBJ_BODY, true)) {
+    SetBodyTreeGravityCompensationEnabled(child_body_spec, enabled);
+  }
 }
 
 // Body mocap
@@ -426,6 +544,21 @@ inline void SetGeomColor(const mjvScene* scene, const mjModel* model, uint geom_
 // Site
 inline int QuerySiteId(const mjModel* model, const char* site_name) {
   return model ? mj_name2id(model, mjOBJ_SITE, site_name) : -1;
+}
+
+inline int QueryBodyIdFromSite(const mjModel* model, const char* site_name) {
+  const auto site_id = QuerySiteId(model, site_name);
+  if (site_id > -1) {
+    return model->site_bodyid[site_id];
+  }
+  return -1;
+}
+
+inline int QueryBodyIdFromSite(const mjModel* model, int site_id) {
+  if ((site_id > -1) && (site_id < model->nsite)) {
+    return model->site_bodyid[site_id];
+  }
+  return -1;
 }
 
 inline mjtNum* QuerySitePos(const mjData* data, int site_id) {

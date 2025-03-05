@@ -13,78 +13,205 @@
 #include "mjpc/planners/lsqp/lsqp_common.h"
 #include "mjpc/planners/lsqp/lsqp_se3.h"
 
+#define MJPC_HOME_LAP (0)
 #define MJPC_LSQP_PLANAR_ROBOT (0)
 #define MJPC_LSQP_SPAWN_OBJECT (1)
 #define MJPC_LSQP_FINGERS_OSC (1)
 
+#define MJPC_LSQP_DIFFIK_CONTROL_ENABLED (0)
+#define MJPC_LSQP_OSC_ENABLED (1)
+#define MJPC_LSQP_MANUAL_MODE (MJPC_LSQP_DIFFIK_CONTROL_ENABLED | MJPC_LSQP_OSC_ENABLED)
+
 namespace mjpc {
 static const std::string MUJOCO_DIR =
-#if 0
+#if MJPC_HOME_LAP
     "/home/tad/1_MUJOCO";
 #else
     "/media/ducthan/376b23a1-5a02-4960-b3ca-24b2fcef8f891/MUJOCO";
 #endif
 static const std::string MAIN_ROBOT_MODEL_PATH = MUJOCO_DIR +
-#if MJPC_PLANNER_LSQP_DIFFIK_ENABLED
-                                                 //"/mjctrl/franka_emika_panda/panda_nohand.xml";
-                                                 "/mjctrl/universal_robots_ur5e/ur5e.xml";
+#if MJPC_LSQP_DIFFIK_CONTROL_ENABLED
+                                                 //"/mink/examples/franka_emika_panda/panda_nohand.xml";
+                                                 "/mink/examples/universal_robots_ur5e/ur5e.xml";
+#elif MJPC_LSQP_OSC_ENABLED
+                                                 //"/mink/examples/kuka_iiwa_14/iiwa14_osc.xml";
+                                                 "/mink/examples/kuka_iiwa_14_allegro/iiwa14_allegro_osc.xml";
 #else
-                                                 "/mink/examples/arm_hand_iiwa_allegro.xml";
+  "/mink/examples/arm_hand_iiwa_allegro.xml";
 #endif
+
 static const std::string MAIN_ROBOT_MODEL_NAME = std::filesystem::path(MAIN_ROBOT_MODEL_PATH).stem();
 
-static bool RobotHasHand() {
-  return !absl::StrContainsIgnoreCase(MAIN_ROBOT_MODEL_PATH, "nohand");
-}
-
 static bool IsUR5() {
-  return absl::StrContainsIgnoreCase(MAIN_ROBOT_MODEL_PATH, "ur5");
+  return absl::StrContainsIgnoreCase(MAIN_ROBOT_MODEL_NAME, "ur5");
 }
 
-static const std::vector<mjtNum> IIWA14_ALLEGRO_HOME_QPOS = {
-    // iiwa.
-    -0.0759329, 0.153982, 0.104381, -1.8971, 0.245996, 0.34972, -0.239115,
-    // allegro.
-    -0.0694123, 0.0551428, 0.986832, 0.671424,
-    -0.186261, -0.0866821, 1.01374, 0.728192,
-    -0.218949, -0.0318307, 1.25156, 0.840648,
+static bool IsIIWA14() {
+  return absl::StrContainsIgnoreCase(MAIN_ROBOT_MODEL_NAME, "iiwa14");
+}
+
+static bool IsIIWA14Allegro() {
+  return absl::StrContainsIgnoreCase(MAIN_ROBOT_MODEL_NAME, "iiwa14_allegro");
+}
+
+static bool IsPanda() {
+  return absl::StrContainsIgnoreCase(MAIN_ROBOT_MODEL_NAME, "panda");
+}
+
+static bool RobotHasNoHand() {
+  return absl::StrContainsIgnoreCase(MAIN_ROBOT_MODEL_NAME, "nohand") || IsUR5() || IsIIWA14() || IsPanda();
+}
+
+static bool RobotHasHand() {
+  return !RobotHasNoHand();
+}
+
+// NOTE: Consider using std::array<>, to be more explicit with size info, so less error-prone?
+static constexpr mjtNum IIWA14_HOME_QPOS[] = {
+    -0.0759329, 0.153982, 0.104381, -1.8971, 0.245996, 0.34972, -0.239115
+};
+
+static constexpr mjtNum ALLEGRO_RF_HOME_QPOS[] = {
+    -0.0694123, 0.0551428, 0.986832, 0.671424
+};
+static constexpr uint8_t ALLEGRO_SINGLE_FINGER_QPOS_SIZE = sizeof(ALLEGRO_RF_HOME_QPOS) / sizeof(mjtNum);
+
+static constexpr mjtNum ALLEGRO_MF_HOME_QPOS[] = {
+    -0.186261, -0.0866821, 1.01374, 0.728192
+};
+
+static constexpr mjtNum ALLEGRO_FF_HOME_QPOS[] = {
+    -0.218949, -0.0318307, 1.25156, 0.840648
+};
+
+static constexpr mjtNum ALLEGRO_TH_HOME_QPOS[] = {
     1.0593, 0.638801, 0.391599, 0.57284
 };
 
-static std::vector<mjtNum> TARGET_OBJ_QPOS = {0.9, 0, 0.3, 1, 0, 0, 0};
+// NOTE: The order must match ones in [ALLEGRO_EE_NAMES] & [ALLEGRO_ACTUATED_JOINT_NAMES]
+static const std::vector<const mjtNum*> ALLEGRO_HOME_QPOS = {ALLEGRO_RF_HOME_QPOS, ALLEGRO_MF_HOME_QPOS,
+                                                             ALLEGRO_FF_HOME_QPOS, ALLEGRO_TH_HOME_QPOS
+};
+
+static const std::vector<mjtNum> IIWA14_ALLEGRO_HOME_QPOS = []() {
+  std::vector<mjtNum> res = mjpc::CollectionFromCArray(IIWA14_HOME_QPOS);
+  for (const auto& qpos_adr : ALLEGRO_HOME_QPOS) {
+    res = mjpc::ChainCollections<mjtNum>(
+        res, std::vector(qpos_adr, qpos_adr + ALLEGRO_SINGLE_FINGER_QPOS_SIZE));
+  }
+  return res;
+}();
+
+static constexpr mjtNum TARGET_OBJ_QPOS[] = {0.9, 0, 0.3, 1, 0, 0, 0};
 
 static constexpr uint8_t IIWA14_DOF = 7;
 static constexpr uint8_t ALLEGRO_DOF = 16;
 static constexpr uint8_t EE_CEM_PARAMS_DIM = 1; // wrist(XYZ-loc ratio away from goal + theta-rot]
-static constexpr uint8_t FINGERS_CEM_PARAMS_DIM = MJPC_LSQP_FINGERS_OSC
-                                                    ? 4 // Fingertips
-                                                    : ALLEGRO_DOF;
-static constexpr uint8_t CEM_PARAMS_TOTAL_DIM = EE_CEM_PARAMS_DIM + 0; //FINGERS_CEM_PARAMS_DIM;
+static constexpr uint8_t FINGERS_CEM_PARAMS_DIM = 0; //MJPC_LSQP_FINGERS_OSC
+//? 4 // Fingertips
+//: ALLEGRO_DOF;
+static constexpr uint8_t CEM_PARAMS_TOTAL_DIM = EE_CEM_PARAMS_DIM + FINGERS_CEM_PARAMS_DIM;
 static constexpr float CEM_PARAMS_LIMIT_LOWER = 0.;
 static constexpr float CEM_PARAMS_LIMIT_UPPER = 1.;
 
 static const std::string MAIN_SCENE_XML_PATH =
-#if MJPC_PLANNER_LSQP_DIFFIK_ENABLED
-    MUJOCO_DIR + std::string(IsUR5()
-                               ? "/mjctrl/universal_robots_ur5e/scene.xml"
-                               : "/mjctrl/franka_emika_panda/scene.xml");
+#if MJPC_LSQP_DIFFIK_CONTROL_ENABLED
+    MUJOCO_DIR + (IsUR5()
+                    ? "/mjctrl/universal_robots_ur5e/scene.xml"
+                    : "/mjctrl/franka_emika_panda/scene.xml");
+#elif MJPC_LSQP_OSC_ENABLED
+    MUJOCO_DIR + (IsIIWA14Allegro()
+                    ? "/mink/examples/kuka_iiwa_14_allegro/scene_osc_target.xml"
+                    : "/mink/examples/kuka_iiwa_14/scene_osc_target.xml");
 #else
-    {};
+  {};
 #endif
 
-static const std::string MAIN_ROBOT_BASE_LINK_NAME = "link0";
-static const std::vector<std::string> MAIN_ROBOT_EE_NAMES = {
-    IsUR5() ? "wrist_3_link" : RobotHasHand() ? "hand" : "attachment"};
+// NOTE: Empty base body name is considered as world/root body
+static constexpr const char* IIWA14_BASE_DOF_BODY_NAME = "link1"; // Lowest body having dof
+static const std::vector<std::string> IIWA14_EE_NAMES = {"attachment"};
+static const std::vector<std::string> IIWA14_EE_SITE_NAMES = {"attachment_site"};
 
-static const bool MAIN_ROBOT_HAS_NULLSPACE = absl::StrContainsIgnoreCase(MAIN_ROBOT_MODEL_NAME, "panda");
+static const std::vector<std::string> IIWA14_ACTUATED_JOINT_NAMES = {
+    "joint1",
+    "joint2",
+    "joint3",
+    "joint4",
+    "joint5",
+    "joint6",
+    "joint7"
+};
+
+static constexpr const char* ALLEGRO_BASE_DOF_BODY_NAME = "allegro_left/rf_base"; // Lowest body having dof
+static const std::vector<std::string> ALLEGRO_EE_NAMES = {
+    "allegro_left/rf_tip",
+    "allegro_left/mf_tip",
+    "allegro_left/ff_tip",
+    "allegro_left/th_tip"
+};
+static const std::vector<std::string> ALLEGRO_EE_SITE_NAMES = ALLEGRO_EE_NAMES;
+static const std::vector<std::vector<std::string>> ALLEGRO_ACTUATED_JOINT_NAMES = {
+    {
+        "allegro_left/rfj0", "allegro_left/rfj1", "allegro_left/rfj2", "allegro_left/rfj3"
+    },
+    {
+        "allegro_left/mfj0", "allegro_left/mfj1", "allegro_left/mfj2", "allegro_left/mfj3"
+    },
+    {
+        "allegro_left/ffj0", "allegro_left/ffj1", "allegro_left/ffj2", "allegro_left/ffj3"
+    },
+    {
+        "allegro_left/thj0", "allegro_left/thj1", "allegro_left/thj2", "allegro_left/thj3"
+    }
+};
+
+static const std::vector<std::string> UR5_ACTUATED_JOINT_NAMES = {
+    "shoulder_pan",
+    "shoulder_lift",
+    "elbow",
+    "wrist_1",
+    "wrist_2",
+    "wrist_3"
+};
+
+static const std::vector<std::string> PANDA_ACTUATED_JOINT_NAMES = {
+    "joint1",
+    "joint2",
+    "joint3",
+    "joint4",
+    "joint5",
+    "joint6",
+    "joint7"
+};
+
+static const std::string MAIN_ROBOT_BASE_LINK_NAME = IsPanda() ? "link0" : "base";
+static std::vector<std::string> MAIN_ROBOT_EE_NAMES = IsIIWA14Allegro()
+                                                        ? mjpc::ChainCollections<std::string>(
+                                                            IIWA14_EE_NAMES,
+                                                            ALLEGRO_EE_NAMES)
+                                                        : std::vector<std::string>{
+                                                            RobotHasHand()
+                                                              ? "hand"
+                                                              : "attachment"};
+
+static const std::vector<std::string> MAIN_ROBOT_EE_SITE_NAMES = IsIIWA14Allegro()
+                                                                   ? mjpc::ChainCollections<std::string>(
+                                                                       IIWA14_EE_SITE_NAMES,
+                                                                       ALLEGRO_EE_SITE_NAMES)
+                                                                   : std::vector<std::string>{
+                                                                       RobotHasHand()
+                                                                         ? "hand_site"
+                                                                         : "attachment_site"
+                                                                   };
+
+static const bool MAIN_ROBOT_NULLSPACE_CONTROL_ENABLED = IsPanda();
 // NOTE: Not necessarily the same as [model->opt.timestep]
 static const double INTEGRATION_DT =
-#if MJPC_PLANNER_LSQP_DIFFIK_ENABLED
-    MAIN_ROBOT_HAS_NULLSPACE ? 0.1 : 1;
+#if MJPC_LSQP_MANUAL_MODE
+    MAIN_ROBOT_NULLSPACE_CONTROL_ENABLED ? 0.1 : 1;
 #else
     0.01;
 #endif
-
 
 class LsqpPlanner;
 
@@ -100,6 +227,8 @@ public:
   static constexpr const char* PALM_NAME = "palm";
   static const std::vector<std::string> FINGERTIP_NAMES;
   static const std::map<std::string, std::vector<float>> FINGERTIPS_RGBA;
+  static const std::vector<const char*> FINGERS_JOINT_NAMES;
+  static const std::vector<const char*> FINGERS_ACTUATOR_NAMES;
   static constexpr const char* TARGET_OBJ_NAME = "target";
   static constexpr const char* TARGET_OBJ_GOAL_NAME = "target_goal";
 
@@ -107,6 +236,7 @@ public:
   static constexpr const char* TRACE_SENSOR_PREFIX = "trace";
 
   Lsqp() : residual_(this) {
+    assert(std::ifstream(mjpc::MUJOCO_DIR.c_str()).good());
     mj_defaultVFS(vfs_.get());
     for (const auto& [_, spec] : spec_map_) {
       mj_deleteSpec(spec);
@@ -132,6 +262,14 @@ public:
 
   std::string PalmSiteName() const {
     return PalmBodyName();
+  }
+
+  std::string FingerJointName(const std::string& finger_joint_name) const {
+    return attach_prefix_ + finger_joint_name;
+  }
+
+  std::string FingerActuatorName(const std::string& finger_act_name) const {
+    return attach_prefix_ + finger_act_name;
   }
 
   std::string FingertipBodyName(const std::string& fingertip_name) const {
@@ -180,15 +318,20 @@ public:
     // 1- Create [scene_spec]
     auto* scene_spec = CreateSpecFromXML(scene_name, SCENE_XML);
     if (!scene_spec) { return nullptr; }
-    //scene_spec->memory = 10000000000;
+    scene_spec->memory = 15000000000;
     scene_spec->nuserdata = LsqpSE3::PARAMS_DIM; // Storing latest [T_ee] for LsqpPlanner's Diff-IK Control
+    scene_spec->option.noslip_iterations = 5;
+    //scene_spec->option.noslip_tolerance = 1e-06;
+    if (!(scene_spec->option.enableflags & mjENBL_MULTICCD)) {
+      scene_spec->option.enableflags |= mjENBL_MULTICCD;
+    }
 
     // 2- Create [allegro_spec]
     auto* allegro_spec = CreateSpecFromXML(allegro_name, ALLEGRO_HAND_XML);
     if (!allegro_spec) { return nullptr; }
     const auto allegro_model_name = std::string(mjs_getString(allegro_spec->modelname));
     mjsBody* allegro_palm = mjs_findBody(allegro_spec, "palm");
-    mju_copy4(allegro_palm->quat, mjpc::ROTATION_IDENTITY);
+    mju_copy4(allegro_palm->quat, mjpc::QUAT_IDENTITY);
     memcpy(allegro_palm->pos, (mjtNum[]){0.0, 0.0, 0.095}, sizeof(allegro_palm->pos));
 
     // 3- Create agents' numeric data (horizon, timestep)
@@ -201,10 +344,23 @@ public:
     };
     // NOTE: Larger [agent_horizon] may require larger [kMaxTrajectoryHorizon] configured in [trajectory.h]
     fCreateNumeric("agent_horizon", 0.1);
-    fCreateNumeric("agent_timestep", 0.01);
+    fCreateNumeric("agent_timestep", INTEGRATION_DT);
     fCreateNumeric("sampling_trajectories", 10);
 
-    // 4- Customize actuactors
+    // 4- Attach [allegro_palm] -> [scene_spec] through [attach_site]
+    // NOTE: This prefix will be prepended to names of all child elements (bodies, geoms, etc.) in [allegro_model]
+    attach_prefix_ = allegro_model_name + "/";
+    mjsSite* attach_site = mjpc::FindSiteSpec(scene_spec, ATTACHMENT_SITE_NAME);
+    mjs_attach(attach_site->element, allegro_palm->element, attach_prefix_.c_str(), attach_suffix_.c_str());
+
+    // 5- Customize joints
+    for (const auto& jnt_name : FINGERS_JOINT_NAMES) {
+      auto* jnt_spec = mjs_asJoint(mjs_findElement(scene_spec, mjOBJ_JOINT,
+                                                   FingerJointName(jnt_name).c_str()));
+      jnt_spec->armature = 0.05;
+    }
+
+    // 6.1- Customize [IIWA14] actuactors
     if constexpr (SYSTEM_MODEL_ACTUATORS_OSC) {
       // Delete all the default fully-actuated actuators
       for (auto i = 1; i <= IIWA14_DOF; i++) {
@@ -215,11 +371,7 @@ public:
         }
       }
 
-      static std::vector ALLEGRO_ACT_NAMES = {"ffa0", "ffa1", "ffa2", "ffa3",
-                                              "mfa0", "mfa1", "mfa2", "mfa3",
-                                              "rfa0", "rfa1", "rfa2", "rfa3",
-                                              "tha0", "tha1", "tha2", "tha3"};
-      for (const auto& act_name : ALLEGRO_ACT_NAMES) {
+      for (const auto& act_name : FINGERS_ACTUATOR_NAMES) {
         auto* act_spec = mjs_findElement(allegro_spec, mjOBJ_ACTUATOR, act_name);
         if (mjs_asActuator(act_spec)) {
           mjs_delete(act_spec);
@@ -227,52 +379,63 @@ public:
       }
     } else {
       for (auto i = 1; i <= IIWA14_DOF; i++) {
-        auto* act_spec = mjs_findElement(scene_spec, mjOBJ_ACTUATOR,
-                                         ("actuator" + std::to_string(i)).c_str());
-        if (auto* act = mjs_asActuator(act_spec)) {
-          act->trntype = mjTRN_JOINT;
-          act->dyntype = mjDYN_NONE;
-          act->biastype = mjBIAS_AFFINE;
-          act->gaintype = mjGAIN_FIXED;
-          constexpr double kp = 2000;
-          constexpr double kv = 200;
-          if constexpr (POSITION_CTRL_ENABLED) {
-            mju_copy3(act->gainprm, (double[]){kp, 0, 0});
-            mju_copy3(act->biasprm, (double[]){0, -kp, -kv});
-          } else {
-            mju_copy3(act->gainprm, (double[]){kv, 0, 0});
-            mju_copy3(act->biasprm, (double[]){0, 0, -kv});
-          }
+        auto* act = mjs_asActuator(mjs_findElement(scene_spec, mjOBJ_ACTUATOR,
+                                                   ("actuator" + std::to_string(i)).c_str()));
+        act->trntype = mjTRN_JOINT;
+        act->dyntype = mjDYN_NONE;
+        act->biastype = mjBIAS_AFFINE;
+        act->gaintype = mjGAIN_FIXED;
+        constexpr double kp = 2000;
+        constexpr double kv = 200;
+        if constexpr (POSITION_CTRL_ENABLED) {
+          mju_copy3(act->gainprm, (double[]){kp, 0, 0});
+          mju_copy3(act->biasprm, (double[]){0, -kp, -kv});
+        } else {
+          mju_copy3(act->gainprm, (double[]){kv, 0, 0});
+          mju_copy3(act->biasprm, (double[]){0, 0, -kv});
         }
       }
     }
 
-    // 5- Attach [allegro_palm] -> [scene_spec] through [attach_site]
-    // NOTE: This prefix will be prepended to names of all child elements (bodies, geoms, etc.) in [allegro_model]
-    attach_prefix_ = allegro_model_name + "/";
-    mjsSite* attach_site = mjpc::FindSiteSpec(scene_spec, ATTACHMENT_SITE_NAME);
-    mjs_attachToSite(attach_site, allegro_palm, attach_prefix_.c_str(), attach_suffix_.c_str());
+    // 6.2- Customize [ALLEGRO] actuators
+    for (const auto& act_name : FINGERS_ACTUATOR_NAMES) {
+      auto* act = mjs_asActuator(mjs_findElement(scene_spec, mjOBJ_ACTUATOR,
+                                                 FingerActuatorName(act_name).c_str()));
+      act->trntype = mjTRN_JOINT;
+      act->dyntype = mjDYN_NONE;
+      act->biastype = mjBIAS_AFFINE;
+      act->gaintype = mjGAIN_FIXED;
+      constexpr double kp = 10;
+      constexpr double kv = 1;
+      if constexpr (POSITION_CTRL_ENABLED) {
+        mju_copy3(act->gainprm, (double[]){kp, 0, 0});
+        mju_copy3(act->biasprm, (double[]){0, -kp, -kv});
+      } else {
+        mju_copy3(act->gainprm, (double[]){kv, 0, 0});
+        mju_copy3(act->biasprm, (double[]){0, 0, -kv});
+      }
+    }
 
-    // 6- Re-key new assembled robot model [scene_spec]
+    // 7- Re-key new assembled robot model [scene_spec]
     auto* key_home = mjpc::FindKeySpec(scene_spec, "home");
     if (!key_home) {
       key_home = mjs_addKey(scene_spec);
       mjs_setString(key_home->name, "home");
     }
 
-    // 6.1- [iiwa14] - vel actuator: init qpos
-    system_qpos_home = IIWA14_ALLEGRO_HOME_QPOS;
+    // 7.1- Key qpos
 #if MJPC_LSQP_SPAWN_OBJECT
-    system_qpos_home.insert(system_qpos_home.end(), TARGET_OBJ_QPOS.begin(), TARGET_OBJ_QPOS.end());
+    system_qpos_home = mjpc::ChainCollections<mjtNum>(IIWA14_ALLEGRO_HOME_QPOS,
+                                                      mjpc::CollectionFromCArray(TARGET_OBJ_QPOS));
+#else
+    system_qpos_home = IIWA14_ALLEGRO_HOME_QPOS;
 #endif
     mjs_setDouble(key_home->qpos, system_qpos_home.data(), system_qpos_home.size());
 
-    // 6.2- [allegro] - pos actuator: init ctrl
+    // 7.2- Key ctrl
     if constexpr (SYSTEM_MODEL_ACTUATORS_OSC) {
     } else {
-      mjs_setDouble(key_home->ctrl, IIWA14_ALLEGRO_HOME_QPOS.data(),
-                    IIWA14_ALLEGRO_HOME_QPOS.size());
-      mju_zero(key_home->ctrl->data(), IIWA14_ALLEGRO_HOME_QPOS.size() - ALLEGRO_DOF);
+      mjs_setDouble(key_home->ctrl, IIWA14_ALLEGRO_HOME_QPOS.data(), IIWA14_ALLEGRO_HOME_QPOS.size());
     }
 
     // 7- Add mocap bodies
@@ -323,7 +486,8 @@ public:
       mjsGeom* finger_mocap_geom = mjs_addGeom(finger_mocap, nullptr);
       finger_mocap_geom->type = mjGEOM_SPHERE;
       memcpy(finger_mocap_geom->size, (mjtNum[]){0.02, 0.02, 0.02}, sizeof(finger_mocap_geom->size));
-      memcpy(finger_mocap_geom->rgba, FINGERTIPS_RGBA.at(fingertip).data(), sizeof(finger_mocap_geom->rgba));
+      memcpy(finger_mocap_geom->rgba, FINGERTIPS_RGBA.at(fingertip).data(),
+             sizeof(finger_mocap_geom->rgba));
       // Disable collision
       finger_mocap_geom->contype = 0;
       finger_mocap_geom->conaffinity = 0;
@@ -465,16 +629,18 @@ public:
 #if MJPC_LSQP_SPAWN_OBJECT
     // 11- Picked object
     mjsBody* pick_obj = mjs_addBody(world_body, nullptr);
-    mjs_addFreeJoint(pick_obj);
+    mjsJoint* pick_obj_jnt = mjs_addFreeJoint(pick_obj);
+    pick_obj_jnt->armature = 0.1;
+    pick_obj_jnt->damping = 0.5;
     mjs_setString(pick_obj->name, TARGET_OBJ_NAME);
-    memcpy(pick_obj->pos, TARGET_OBJ_QPOS.data(), sizeof(pick_obj->pos));
-    memcpy(pick_obj->quat, TARGET_OBJ_QPOS.data() + 3, sizeof(pick_obj->quat));
+    memcpy(pick_obj->pos, TARGET_OBJ_QPOS, sizeof(pick_obj->pos));
+    memcpy(pick_obj->quat, TARGET_OBJ_QPOS + 3, sizeof(pick_obj->quat));
     pick_obj->mocap = false;
 
     mjsGeom* pick_obj_geom = mjs_addGeom(pick_obj, nullptr);
     pick_obj_geom->type = mjGEOM_BOX;
 #if 1
-    pick_obj_geom->density = 5000;
+    pick_obj_geom->density = 8000;
 #else
     pick_obj->mass = 1;
     memcpy(pick_obj->inertia, (double[]){1., 1., 1.}, sizeof(pick_obj->inertia));
@@ -483,9 +649,9 @@ public:
     memcpy(pick_obj_geom->rgba, (float[]){0.2, 0.5, 0.3, 0.5}, sizeof(pick_obj_geom->rgba));
 
     // 11.1- Picked obj's target goal site (!NOTE: Enable site group for visualization)
-    auto* target_site = fCreateSite(world_body, TARGET_OBJ_GOAL_NAME,
-                                    /*pos*/(mjtNum[]){0.1, 0.5, 0.5},/*quat*/(mjtNum[]){0.7, 0., 0.7, 0},
-                                    mjGEOM_BOX, /*size*/0.03, /*rgba*/(float[]){0.5, 0., 0., 0.5});
+    fCreateSite(world_body, TARGET_OBJ_GOAL_NAME,
+                /*pos*/(mjtNum[]){0.1, 0.5, 0.5},/*quat*/(mjtNum[]){0.7, 0., 0.7, 0},
+                mjGEOM_BOX, /*size*/0.03, /*rgba*/(float[]){0.5, 0., 0., 0.5});
 #endif
 
     // 12- Compile [scene_spec] -> mjModel
@@ -504,7 +670,7 @@ public:
   void ConfigureModel(mjModel* model) override {
     // Configure [model]
     //model->opt.disableactuator |= (1 << 0);
-    model->opt.timestep = 0.01;
+    model->opt.timestep = INTEGRATION_DT;
     // Gravity. NOTE: Enable "gravcomp='1'" in XML for gravity compensation
     model->opt.gravity[2] = KGRAVITY;
 #if 0
@@ -518,10 +684,7 @@ public:
 #endif
   }
 
-  void InitMocaps(bool force_init = false) {
-    if (mocaps_inited_ && !force_init) {
-      return;
-    }
+  void InitMocaps() {
 #if MJPC_LSQP_PLANAR_ROBOT
     MoveBodyMocapToSite("target_mocap", "hand");
 #else
@@ -542,7 +705,6 @@ public:
       mju_normalize3(initial_fingertips_direction[fingertip]);
     }
 #endif
-    mocaps_inited_ = true;
   }
 
   std::vector<double> GetHandCenterPos(const mjData* data) const {
@@ -567,7 +729,6 @@ public:
 
   void ResetLocked(const mjModel* model) override {
     Task::ResetLocked(model);
-    mocaps_inited_ = false;
   }
 
   // Reset the cube into the hand if it's on the floor
@@ -603,10 +764,11 @@ public:
 private:
   LsqpPlanner* lsqp_planner_ = nullptr;
   ResidualFn residual_;
-  bool mocaps_inited_ = false;
   std::unique_ptr<mjVFS> vfs_ = std::make_unique<mjVFS>();
   std::map<std::string, mjSpec*> spec_map_;
   std::string attach_prefix_;
   std::string attach_suffix_;
 };
+
+using LsqpPtr = std::shared_ptr<Lsqp>;
 } // namespace mjpc

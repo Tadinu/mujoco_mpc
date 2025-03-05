@@ -34,12 +34,12 @@
 
 // mjpc
 #include "mjpc/agent.h"
-#include "mjpc/utils/mjpc_core_util.h"
 #include "mjpc/utils/mjpc_ctrl_util.h"
 #include "mjpc/utilities.h"
 
-#define MJAPP_VISUAL_DEBUG (1)
-#define MJAPP_ACTUATOR_UI_DISABLED (1)
+#define MJPC_VISUAL_DEBUG (1)
+#define MJPC_ACTUATOR_UI_DISABLED (1)
+#define MJPC_ALL_SITES_ENABLED (1)
 
 namespace mjpc {
 // The viewer itself doesn't require a reentrant mutex, however we use it in
@@ -70,10 +70,10 @@ public:
   // agent
   std::shared_ptr<mjpc::Agent> agent;
 
-  virtual void Init(mjModel* model, mjData* data) {
+  virtual void InitInThread(mjModel* model, mjData* data) {
   }
 
-  virtual void Control(const mjModel* model, mjData* data) {
+  virtual void Control(const mjModel* model, mjData* data, bool auto_move_target = false) {
   }
 
   virtual void ModifyVisualScene(mjvScene* scn, const mjModel* model, const mjData* data) {
@@ -115,7 +115,7 @@ public:
   // add state to history buffer
   void AddToHistory();
 
-#if !MJAPP_ACTUATOR_UI_DISABLED
+#if !MJPC_ACTUATOR_UI_DISABLED
   // inject control noise
   void InjectNoise();
 #endif

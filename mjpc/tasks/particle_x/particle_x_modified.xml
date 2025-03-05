@@ -9,6 +9,7 @@
   </default>
 
   <worldbody>
+    <!-- How to track mocap's vel: https://github.com/google-deepmind/mujoco/issues/101#issuecomment-1004215473 -->
     <body name="goal_mocap" mocap="true" pos="0.25 0 0.01">
         <geom type="sphere" name="goal_mocap" size=".01" rgba="0 0 0 0"/>
     </body>

@@ -49,7 +49,7 @@ template <int N>
 typename PandaJointImpedanceController<N>::VectorNd PandaJointImpedanceController<N>::control(
     const VectorNd& q_d, const VectorNd& qD_d) {
   std::array<double, N * N> inertia_array{};
-  mjpc_fullMatrix(mj_model_, inertia_array.data(), &mj_data_->qM[mj_model_->dof_Madr[first_dof_id_]],
+  MjuFullMatrix(mj_model_, inertia_array.data(), &mj_data_->qM[mj_model_->dof_Madr[first_dof_id_]],
                   first_dof_id_, N);
   const MatrixNd inertia = Eigen::Map<const MatrixNd>(inertia_array.data(), N, N);
   const VectorNd coriolis = Eigen::Map<const VectorNd>(&mj_data_->qfrc_bias[first_dof_id_], N);

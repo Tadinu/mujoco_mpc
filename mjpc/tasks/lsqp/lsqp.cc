@@ -16,6 +16,20 @@ const std::map<std::string, std::vector<float>> Lsqp::FINGERTIPS_RGBA = {
     {FINGERTIP_NAMES[1], {0.f, 0.9f, 0.f, 1.f}}, // Green
     {FINGERTIP_NAMES[2], {0.f, 0.f, 0.9f, 1.f}}, // Blue
     {FINGERTIP_NAMES[3], {0.9f, 0.9f, 0.9f, 1.f}}}; // White
+const std::vector<const char*> Lsqp::FINGERS_JOINT_NAMES = {
+    "rfj0", "rfj1", "rfj2", "rfj3",
+    "mfj0", "mfj1", "mfj2", "mfj3",
+    "ffj0", "ffj1", "ffj2", "ffj3",
+    "thj0", "thj1", "thj2", "thj3"
+};
+
+const std::vector<const char*> Lsqp::FINGERS_ACTUATOR_NAMES = {
+    "ffa0", "ffa1", "ffa2", "ffa3",
+    "mfa0", "mfa1", "mfa2", "mfa3",
+    "rfa0", "rfa1", "rfa2", "rfa3",
+    "tha0", "tha1", "tha2", "tha3"
+};
+
 
 void Lsqp::SetPlanner(Planner* planner) {
   Task::SetPlanner(planner);
@@ -48,16 +62,18 @@ void Lsqp::TransitionLocked(mjModel* model, mjData* data) {
     norm_type = 0;
   }
 
-  // Init once is already checked here-in
-  InitMocaps();
+  // Init once only, already checked here-in
+  if (lsqp_planner_ && IsLSQPSupported()) {
+    lsqp_planner_->InitTaskLsqp(model, data);
+  }
 
   // Reset target obj if being flung away
-  if (mju_dist3(mjpc::QueryBodyPos(model_, data, Lsqp::TARGET_OBJ_NAME), (double[3]){0, 0, 0}) > 2) {
+  if (mju_dist3(mjpc::QueryBodyPos(model_, data, Lsqp::TARGET_OBJ_NAME), (double[3]){0, 0, 0}) > 1) {
     int obj_id = mj_name2id(model, mjOBJ_BODY, TARGET_OBJ_NAME);
     if (obj_id != -1) {
       int jnt_qposadr = model->jnt_qposadr[model->body_jntadr[obj_id]];
       int jnt_veladr = model->jnt_dofadr[model->body_jntadr[obj_id]];
-      mju_copy(data->qpos + jnt_qposadr, model->qpos0 + jnt_qposadr, 7);
+      mju_copy(data->qpos + jnt_qposadr, model->qpos0 + jnt_qposadr, mjpc::CArraySize(TARGET_OBJ_QPOS));
       mju_zero(data->qvel + jnt_veladr, 6);
     }
     mutex_.unlock(); // step calls sensor that calls Residual.

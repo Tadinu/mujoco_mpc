@@ -46,9 +46,9 @@ public:
       throw std::runtime_error("`target_CoM_` is empty");
     }
 
-    const auto jac = Eigen::MatrixXd(k_, config.nv());
-    mj_jacSubtreeCom(config.MjModel(), data, jac.data(), 1);
-    return jac;
+    std::vector<double> jacBuffer(k_ * config.nv(), 0);
+    mj_jacSubtreeCom(config.MjModel(), data, jacBuffer.data(), 1);
+    return mjpc::ArrayToEigenMatrix(jacBuffer.data(), k_, config.nv(), true);
   }
 
 protected:

@@ -94,19 +94,19 @@ public:
 
     // NOTE: Since [mj_jacBody, mj_jacSite] all use nv() implicitly, ndofs() cannot be used here!
     const int nv = this->nv();
-    std::vector<mjtNum> jacBuffer(6 * nv, 0);
-    auto* jacPtr = jacBuffer.data();
+    std::vector<mjtNum> jacBufferData(6 * nv, 0);
+    auto* jacBuffer = jacBufferData.data();
 
     if (frameType == mjOBJ_BODY) {
-      mj_jacBody(model_, data, jacPtr, jacPtr + 3 * nv, frameId);
+      mj_jacBody(model_, data, jacBuffer, jacBuffer + 3 * nv, frameId);
     } else if (frameType == mjOBJ_SITE) {
-      mj_jacSite(model_, data, jacPtr, jacPtr + 3 * nv, frameId);
+      mj_jacSite(model_, data, jacBuffer, jacBuffer + 3 * nv, frameId);
     } else {
       throw std::invalid_argument("Unsupported frame type");
     }
 
-    // jac(i, j) = jacPtr[i * nv + j] where i: [0->5], j: [0->nv-1]
-    Eigen::Map<Eigen::Matrix<double, 6, Eigen::Dynamic, Eigen::RowMajor>> jac(jacPtr, 6, nv);
+    // jac(i, j) = jacBuffer[i * nv + j] where i: [0->5], j: [0->nv-1]
+    const auto jac = mjpc::ArrayToEigenMatrix<6>(jacBuffer, nv);
 
     // MuJoCo jacobians have a frame of reference centered at the local frame but
     // aligned with the world frame. To obtain a jacobian expressed in the local
@@ -132,7 +132,7 @@ public:
                      ? mjpc::QueryBodyQuat(data, frameId, false)
                      : (frameType == mjOBJ_SITE)
                      ? mjpc::QuerySiteQuat(data, frameId)
-                     : const_cast<mjtNum*>(mjpc::ROTATION_IDENTITY);
+                     : const_cast<mjtNum*>(mjpc::QUAT_IDENTITY);
     return {SO3(quat), pos};
   }
 

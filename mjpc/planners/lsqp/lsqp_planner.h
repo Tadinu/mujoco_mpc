@@ -14,8 +14,6 @@
 #include "mjpc/tasks/lsqp/lsqp.h"
 #include "mjpc/utilities.h"
 
-#define MJPC_PLANNER_LSQP_DIFFIK_ENABLED (0)
-
 namespace mjpc {
 class Lsqp;
 
@@ -31,7 +29,8 @@ public:
 
   // Init task-specific LSQP (configuration, subtasks, etc.)
   void InitTaskLsqp(const mjModel* model, const mjData* data);
-  std::vector<double> LsqpControl(double* policy_action = nullptr, mjData* data = nullptr, const LsqpSolverPtr& solver = nullptr);
+  std::vector<double> LsqpControl(double* policy_action = nullptr, mjData* data = nullptr,
+                                  const LsqpSolverPtr& solver = nullptr);
 
   // =========================================================================================================
   // MJPC-PLANNER IMPL --
@@ -109,7 +108,7 @@ public:
 
 protected:
   // mjpc
-  mutable std::shared_mutex policy_mutex_;
+  mutable std::shared_mutex mutex_;
   LsqpSolverPtr lsqp_solver_ = nullptr;
 };
 

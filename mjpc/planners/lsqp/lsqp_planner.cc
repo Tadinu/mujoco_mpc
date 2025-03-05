@@ -18,11 +18,10 @@ void LsqpPlanner::Initialize(mjModel* model, const Task& task) {
   // Init task Lsqp
   if (task.IsLSQPSupported()) {
     lsqp_task_ = dynamic_cast<Lsqp*>(const_cast<Task*>(&task));
-    InitTaskLsqp(model_, lsqp_task_->data_);
-
-    // Init main solver
-    lsqp_solver_ = std::make_shared<LsqpSolver>(model_, lsqp_task_, owner_type_);
-    lsqp_solver_->Init(lsqp_task_->data_, action_dim_);
+    if (MjOwnerAppType::MJAPP == owner_type_) {
+      InitTaskLsqp(model_, lsqp_task_->data_);
+    }
+    // else: MJPC: Planner running in thread, data updating jobs can only run in locked functions like [Task::TransitionLocked()]
   }
 
   // Init [cem_delegate_]
@@ -31,7 +30,7 @@ void LsqpPlanner::Initialize(mjModel* model, const Task& task) {
       // Init [cem_delegate_]'s solvers
       cem_delegate_->SetPostResizeMjData([this, model]() {
         const auto& data_list = cem_delegate_->RolloutData();
-        auto& solver_list = cem_delegate_->LsqpSolvers();
+        auto& solver_list = cem_delegate_->Solvers();
         const auto new_size = data_list.size();
         solver_list.reserve(new_size);
         while (solver_list.size() < new_size) {
@@ -56,24 +55,31 @@ void LsqpPlanner::Initialize(mjModel* model, const Task& task) {
     cem_delegate_->Initialize(model, task);
 
     // Overwrite [cem_delegate_]'s actions dim & limits
-    cem_delegate_->SetActionDim(CEM_PARAMS_TOTAL_DIM);
-    std::vector<double> limits;
-    for (auto i = 0; i < CEM_PARAMS_TOTAL_DIM; ++i) {
-      limits.push_back(CEM_PARAMS_LIMIT_LOWER);
-      limits.push_back(CEM_PARAMS_LIMIT_UPPER);
+    if (task.IsLSQPSupported()) {
+      cem_delegate_->SetActionDim(CEM_PARAMS_TOTAL_DIM);
+      std::vector<double> limits;
+      for (auto i = 0; i < CEM_PARAMS_TOTAL_DIM; ++i) {
+        limits.push_back(CEM_PARAMS_LIMIT_LOWER);
+        limits.push_back(CEM_PARAMS_LIMIT_UPPER);
+      }
+      cem_delegate_->SetActionLimits(std::move(limits));
     }
-    cem_delegate_->SetActionLimits(std::move(limits));
   }
 }
 
 void LsqpPlanner::InitTaskLsqp(const mjModel* model, const mjData* data) {
-  assert(lsqp_task_);
+  // Already inited, pass
+  if (lsqp_solver_) {
+    return;
+  }
+
+  // Init [lsqp_solver_]
+  lsqp_solver_ = std::make_shared<LsqpSolver>(model_, lsqp_task_, owner_type_);
+  lsqp_solver_->Init(lsqp_task_->data_, action_dim_);
 
   // Init mocaps
-  if (MjOwnerAppType::MJAPP == owner_type_) {
-    lsqp_task_->InitMocaps();
-  }
-  // else: MJPC: Init is possible only in [TransitionLocked()] due to threading issue
+  assert(lsqp_task_);
+  lsqp_task_->InitMocaps();
 }
 
 void LsqpPlanner::Allocate() {
@@ -88,13 +94,14 @@ void LsqpPlanner::Allocate() {
 // thread-safe. without dynamic allocation
 std::vector<double>
 LsqpPlanner::LsqpControl(double* policy_action, mjData* data, const LsqpSolverPtr& solver) {
-  if (((MjOwnerAppType::MJPC == owner_type_) && !planning_on_) || (nullptr == lsqp_task_)) {
-    return std::vector(action_dim_, 0.);
+  // NOTE: !data -> invoked by [ActionFromPolicy()], else invoked by rollout thread
+  if ((nullptr == lsqp_task_) || ((MjOwnerAppType::MJPC == owner_type_) && !data && !planning_on_)) {
+    return InvalidControls();
   }
 
   // Use [lsqp_task_]'s data if not running in worker thread in MPC rollouts
-  const bool rolllout_threaded_data = (nullptr != data);
-  if (!rolllout_threaded_data) {
+  const bool is_rollout_thread_data = (nullptr != data);
+  if (!is_rollout_thread_data) {
     data = lsqp_task_->data_;
   }
 
@@ -107,7 +114,7 @@ LsqpPlanner::LsqpControl(double* policy_action, mjData* data, const LsqpSolverPt
   const auto dist_to_target_obj = mju_dist3(target_obj_pos,
                                             mjpc::QuerySitePos(model_, data,
                                                                lsqp_task_->EETargetSiteName().data()));
-  const bool has_reached_target_obj = (dist_to_target_obj <= 0.1);
+  const bool has_reached_target_obj = (dist_to_target_obj <= 0.2);
 
   // APPLY [policy_action], if outputted from the delegate planner (eg: [cem_delegate_])
   if (policy_action) {
@@ -122,27 +129,27 @@ LsqpPlanner::LsqpControl(double* policy_action, mjData* data, const LsqpSolverPt
     const auto eetarget_mocap_name = lsqp_task_->EETargetMocapName();
     mjtNum new_ee_target_pos[3];
     mju_add3(new_ee_target_pos, mjpc::QueryBodyPos(model_, data, mjpc::Lsqp::TARGET_OBJ_NAME),
-             (double [3]){0, 0, 0.07 + 0.1 * policy_action[0]}); // + 0.1 * policy_action[0]
+             (double [3]){0.065, 0, 0.02 + 0.1 * std::abs(policy_action[0])}); // + 0.1 * policy_action[0]
     mjpc::SetBodyMocapPos(model_, data, eetarget_mocap_name.data(), new_ee_target_pos);
-    if (!rolllout_threaded_data) {
-      const MjpcSharedMutexLock lock(policy_mutex_);
+    if (!is_rollout_thread_data) {
+      const MjpcSharedMutexLock lock(mutex_);
       mju_copy3(visual_policy_ee_target_pos_, new_ee_target_pos);
     }
 
     // [EE-mocap quat]
-#if 0
-      // Rot around Y 90
-      mjtNum new_ee_target_quat[4];
-      mju_axisAngle2Quat(new_ee_target_quat, mjpc::UNIT_Y, M_PI_2);
-      mjtNum delta_ee_target_quat_Z[4];
-      mju_axisAngle2Quat(delta_ee_target_quat_Z, mjpc::UNIT_Z,
-                         M_PI * (1 + policy_action[1]));
-      //mjtNum delta_ee_target_quat_X[4];
-      //mju_axisAngle2Quat(delta_ee_target_quat_X, mjpc::UNIT_X,
-      //                  M_PI * (1 + policy_action[1]));
-      mju_mulQuat(new_ee_target_quat, new_ee_target_quat, delta_ee_target_quat_Z);
-      //mju_mulQuat(new_ee_target_quat, new_ee_target_quat, delta_ee_target_quat_X);
-      mjpc::SetBodyMocapQuat(model_, data, lsqp_task_->EETargetMocapName().data(), new_ee_target_quat);
+#if (EE_CEM_PARAMS_DIM > 1)
+    // Rot around Y 90
+    mjtNum new_ee_target_quat[4];
+    mju_axisAngle2Quat(new_ee_target_quat, mjpc::UNIT_Y, M_PI_2);
+    mjtNum delta_ee_target_quat_Z[4];
+    mju_axisAngle2Quat(delta_ee_target_quat_Z, mjpc::UNIT_Z,
+                       M_PI * (1 + policy_action[1]));
+    //mjtNum delta_ee_target_quat_X[4];
+    //mju_axisAngle2Quat(delta_ee_target_quat_X, mjpc::UNIT_X,
+    //                  M_PI * (1 + policy_action[1]));
+    mju_mulQuat(new_ee_target_quat, new_ee_target_quat, delta_ee_target_quat_Z);
+    //mju_mulQuat(new_ee_target_quat, new_ee_target_quat, delta_ee_target_quat_X);
+    mjpc::SetBodyMocapQuat(model_, data, lsqp_task_->EETargetMocapName().data(), new_ee_target_quat);
 #else
     mjpc::SetBodyMocapQuat(model_, data, eetarget_mocap_name.data(), mjpc::Lsqp::EE_TARGET_PREGRASP_QUAT);
 #endif
@@ -156,7 +163,7 @@ LsqpPlanner::LsqpControl(double* policy_action, mjData* data, const LsqpSolverPt
     // Rotate [ee_target_mocap] once having reach [target_obj]
     if (has_reached_target_obj) {
       mjtNum new_ee_target_mocap_quat[3];
-      mjpc::mjpc_quatFromVectors(new_ee_target_mocap_quat, visual_ee_direction_, mjpc::UNIT_X);
+      mjpc::MjuQuatFromVectors(new_ee_target_mocap_quat, visual_ee_direction_, mjpc::UNIT_X);
       mjpc::SetBodyMocapQuat(model_, data, lsqp_task_->EETargetMocapName().data(),
                              new_ee_target_mocap_quat);
     }
@@ -165,13 +172,15 @@ LsqpPlanner::LsqpControl(double* policy_action, mjData* data, const LsqpSolverPt
   // [Fingertip-mocaps] perturbation
 #if MJPC_LSQP_FINGERS_OSC
   if (has_reached_target_obj) {
-    //uint8_t i = 0;
+    uint8_t i = 0;
     for (const auto& fingertip : Lsqp::FINGERTIP_NAMES) {
-      if (false) {
-        //mjtNum new_finger_target_pos[3];
-        //mju_addScl3(new_finger_target_pos, ee_target_pos,
-        //            lsqp_task_->initial_fingertips_direction[fingertip],
-        //           0.1 * policy_action[EE_CEM_PARAMS_DIM + (++i)]);
+      if constexpr (FINGERS_CEM_PARAMS_DIM > 0) {
+        mjtNum new_finger_target_pos[3];
+        mju_addScl3(new_finger_target_pos, target_obj_pos,
+                    lsqp_task_->initial_fingertips_direction[fingertip],
+                    0.1 * policy_action[EE_CEM_PARAMS_DIM + (i++)]);
+        mjpc::SetBodyMocapPos(model_, data, lsqp_task_->FingertipTargetMocapName(fingertip).c_str(),
+                              new_finger_target_pos);
       } else {
         mjpc::SetBodyMocapPos(model_, data, lsqp_task_->FingertipTargetMocapName(fingertip).c_str(),
                               target_obj_pos);
@@ -184,11 +193,11 @@ LsqpPlanner::LsqpControl(double* policy_action, mjData* data, const LsqpSolverPt
   // NOTE: This is made instance created per [LsqpControl()] to avoid dynamic allocation in threads,
   // which would cause sporadic crashes.
   std::vector<double> ctrl;
-  if (rolllout_threaded_data) {
+  if (is_rollout_thread_data) {
     assert(solver);
     ctrl = solver->Solve(data);
   } else {
-    ctrl = lsqp_solver_->Solve(data);
+    ctrl = lsqp_solver_ ? lsqp_solver_->Solve(data) : InvalidControls();
   }
 #if !MJPC_LSQP_FINGERS_OSC
     for (uint8_t i = IIWA14_DOF; i < IIWA14_DOF + ALLEGRO_DOF; ++i) {
@@ -201,8 +210,12 @@ LsqpPlanner::LsqpControl(double* policy_action, mjData* data, const LsqpSolverPt
     }
 #endif
 
-  if ((MjOwnerAppType::MJAPP == owner_type_)
-    /* &&lsqp_solver.config().CheckJointValues(ctrl.data(), ctrl.size(), 0.1)*/) {
+  if (!has_reached_target_obj) {
+    mju_zero(ctrl.data() + IIWA14_DOF, ALLEGRO_DOF);
+  }
+
+  if ((MjOwnerAppType::MJAPP == owner_type_) && !AreInvalidControls(ctrl)
+    /*&& lsqp_solver_->Config().CheckJointValues(ctrl.data(), ctrl.size(), 0.1)*/) {
     mju_copy(data->ctrl, ctrl.data(), ctrl.size());
   }
   mjpc::print(ctrl);
@@ -265,18 +278,21 @@ void LsqpPlanner::Traces(mjvScene* scn) {
 }
 
 void LsqpPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
-  const MjpcSharedMutexLock lock(policy_mutex_);
+  const MjpcSharedMutexLock lock(mutex_);
   if (cem_delegate_) {
     cem_delegate_->OptimizePolicy(horizon, pool);
   }
 }
 
 void LsqpPlanner::ActionFromPolicy(double* action, const double* state, double time, bool use_previous) {
-  const MjpcSharedMutexLock lock(policy_mutex_);
+  const MjpcSharedMutexLock lock(mutex_);
   if (cem_delegate_) {
     cem_delegate_->ActionFromPolicy(action, state, time, use_previous);
     // Convert [action] from [cem_delegate_]'s output space to control (data->ctrl) space
-    mju_copy(action, LsqpControl(action).data(), action_dim_);
+    auto ctrl = LsqpControl(action);
+    if (!AreInvalidControls(ctrl)) {
+      mju_copy(action, ctrl.data(), action_dim_);
+    }
   }
 }
 }

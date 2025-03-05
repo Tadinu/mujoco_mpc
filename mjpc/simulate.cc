@@ -33,6 +33,7 @@
 #include "mjpc/array_safety.h"
 #include "mjpc/agent.h"
 #include "mjpc/utilities.h"
+#include "mjpc/sim_base.h"
 
 // When launched via an App Bundle on macOS, the working directory is the path
 // to the App Bundle's resource directory. This causes files to be saved into
@@ -1977,6 +1978,12 @@ void Simulate::InitializeRenderLoop() {
   // init abstract visualization
   mjv_defaultCamera(&this->cam);
   mjv_defaultOption(&this->opt);
+  // Configure visualization
+#if MJPC_ALL_SITES_ENABLED
+  for (auto i = 0; i < mjNGROUP; ++i) {
+    opt.sitegroup[i] = true;
+  }
+#endif
   InitializeProfiler(this);
   InitializeSensor(this);
 

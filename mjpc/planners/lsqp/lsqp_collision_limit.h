@@ -107,7 +107,8 @@ protected:
         jacobian_buffer_map(jac_buffer.data(), 3, model_->nv);
 
     // Compute the Jacobian for the point in geom2, and project it into the
-    // normal. Eigen's noalias is necessary to prevent dynamic memory allocation.
+    // normal.
+    // NOTE: Eigen's noalias is necessary to prevent dynamic memory allocation.
     mj_jac(model_, data, jacobian_buffer_map.data(), nullptr,
            geom2_contact_pos.data(), geom2_body);
     jacobian.noalias() = contact.normal().transpose() * jacobian_buffer_map;

@@ -126,7 +126,21 @@ public:
     control_cb_ = cb;
   }
 
-  std::vector<BaseSolverPtr>& LsqpSolvers() {
+  std::vector<mjtNum> InvalidControls() const {
+    return InvalidControls(action_dim_);
+  }
+
+  static std::vector<mjtNum> InvalidControls(int nu) {
+    return std::vector(nu, mjMAXVAL + 1);
+  }
+
+  static bool AreInvalidControls(const std::vector<mjtNum>& ctrl) {
+    return std::any_of(ctrl.begin(), ctrl.end(), [&](const mjtNum val) {
+      return mju_isBad(val);
+    });
+  }
+
+  std::vector<BaseSolverPtr>& Solvers() {
     return solvers_;
   }
 

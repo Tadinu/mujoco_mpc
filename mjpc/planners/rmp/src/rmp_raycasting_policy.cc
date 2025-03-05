@@ -258,7 +258,7 @@ rmp::RaycastingPolicy<rmp::CylindricalSpace>::PValue rmp::RaycastingPolicy<rmp::
   last_evaluated_state_.pos_ = agent_state.pos_;
   last_evaluated_state_.vel_ = agent_state.vel_;
 
-  return {mjpc::pinv(sum) * sumv /*f*/, sum};
+  return {mjpc::Pinv(sum) * sumv /*f*/, sum};
 }
 
 /**

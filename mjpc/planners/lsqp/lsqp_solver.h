@@ -30,7 +30,7 @@ public:
     return std::vector(config_.ndofs(), 0.);
   }
 
-  LsqpConfig config() const {
+  LsqpConfig Config() const {
     return config_;
   }
 
