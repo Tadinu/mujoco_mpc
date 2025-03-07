@@ -1,6 +1,8 @@
 #include "mjpc/planners/lsqp/lsqp_planner.h"
-#include "mjpc/planners/lsqp/lsqp_solver.h"
+
+#include "mjpc/utils/mjpc_math_util.h"
 #include "mjpc/tasks/lsqp/lsqp.h"
+#include "mjpc/planners/lsqp/lsqp_solver.h"
 #include "mjpc/planners/lsqp/lsqp_collision_limit.h"
 
 namespace mjpc {
@@ -195,7 +197,7 @@ LsqpPlanner::LsqpControl(double* policy_action, mjData* data, const LsqpSolverPt
       const double high_lim = model_->jnt_range[2 * jnt_id + 1];
       ctrl[i] = low_lim + (policy_action
                              ? std::abs(policy_action[EE_CEM_PARAMS_DIM + (i - IIWA14_DOF)])
-                             : FabRandom::rand()) * (high_lim - low_lim);
+                             : mjpc::Random::rand()) * (high_lim - low_lim);
     }
 #endif
 

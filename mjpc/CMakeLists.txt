@@ -38,6 +38,7 @@ set(LIB_MJPC_HEADERS
         core/mjpc_common.h
         utils/mjpc_core_util.h
         utils/mjpc_ctrl_util.h
+        utils/mjpc_math_util.h
         mjcf/mjcf_model.h
         optimizers/base_optimizer.h
         optimizers/second_order_optimizer.h

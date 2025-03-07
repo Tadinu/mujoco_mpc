@@ -3,11 +3,11 @@
 #include <random>
 
 #include "mjpc/optuna/optuna.h"
-#include "mjpc/planners/fabrics/include/fab_config.h"
+#include "mjpc/task.h"
+#include "mjpc/utils/mjpc_math_util.h"
 #include "mjpc/planners/fabrics/include/fab_math_util.h"
 #include "mjpc/planners/fabrics/include/fab_planner.h"
 #include "mjpc/planners/fabrics/include/fab_robot.h"
-#include "mjpc/task.h"
 
 using FabSearchSpaceData = std::map<const char*, FabParamWeightDict>;
 
@@ -15,6 +15,7 @@ class FabParamTuner {
 public:
   FabParamTuner() { initialize(); }
   virtual ~FabParamTuner() = default;
+
   explicit FabParamTuner(FabParamWeightDict param_weights) : param_weights_(std::move(param_weights)) {
     initialize();
   }
@@ -41,50 +42,52 @@ public:
   }
 
   static FabParamDict get_default_parameters() {
-    static const FabParamDict default_params = {// Base energy
-                                                {"base_inertia", 0.20},
+    static const FabParamDict default_params = {
+        // Base energy
+        {"base_inertia", 0.20},
 
-                                                // Obstacles
-                                                {"exp_geo_obst_leaf", 5},
-                                                {"k_geo_obst_leaf", 0.5},
-                                                {"exp_fin_obst_leaf", 1},
-                                                {"k_fin_obst_leaf", 0.1},
-                                                {"exp_geo_self_leaf", 1},
-                                                {"k_geo_self_leaf", 0.5},
-                                                {"exp_fin_self_leaf", 1},
-                                                {"k_fin_self_leaf", -0.1},
-                                                {"exp_geo_limit_leaf", 1},
-                                                {"k_geo_limit_leaf", 0.1},
-                                                {"exp_fin_limit_leaf", 1},
-                                                {"k_fin_limit_leaf", 0.1},
+        // Obstacles
+        {"exp_geo_obst_leaf", 5},
+        {"k_geo_obst_leaf", 0.5},
+        {"exp_fin_obst_leaf", 1},
+        {"k_fin_obst_leaf", 0.1},
+        {"exp_geo_self_leaf", 1},
+        {"k_geo_self_leaf", 0.5},
+        {"exp_fin_self_leaf", 1},
+        {"k_fin_self_leaf", -0.1},
+        {"exp_geo_limit_leaf", 1},
+        {"k_geo_limit_leaf", 0.1},
+        {"exp_fin_limit_leaf", 1},
+        {"k_fin_limit_leaf", 0.1},
 
-                                                // Plane constraint
-                                                {"k_plane_geo", 0.5},
-                                                {"exp_plane_geo", 5},
-                                                {"k_plane_fin", 0.1},
-                                                {"exp_plane_fin", 1},
+        // Plane constraint
+        {"k_plane_geo", 0.5},
+        {"exp_plane_geo", 5},
+        {"k_plane_fin", 0.1},
+        {"exp_plane_fin", 1},
 
-                                                // Attractor
-                                                {"attractor_alpha", 10},
-                                                {"attractor_weight", 5},
-                                                {"attractor_metric_alpha", 2},
-                                                {"attractor_metric_beta", 0.3},
-                                                {"attractor_metric_scale", 0.3},
+        // Attractor
+        {"attractor_alpha", 10},
+        {"attractor_weight", 5},
+        {"attractor_metric_alpha", 2},
+        {"attractor_metric_beta", 0.3},
+        {"attractor_metric_scale", 0.3},
 
-                                                // Damper
-                                                {"alpha_beta_damper", 0.5},
-                                                {"beta_distant_damper", 0.01},
-                                                {"beta_close_damper", 6.5},
-                                                {"radius_shift_damper", 0.05},
-                                                {"alpha_eta_damper", 0.9},
-                                                {"alpha_shift_damper", 0.5},
-                                                {"ex_factor_damper", 0.5}};
+        // Damper
+        {"alpha_beta_damper", 0.5},
+        {"beta_distant_damper", 0.01},
+        {"beta_close_damper", 6.5},
+        {"radius_shift_damper", 0.05},
+        {"alpha_eta_damper", 0.9},
+        {"alpha_shift_damper", 0.5},
+        {"ex_factor_damper", 0.5}};
     return default_params;
   }
 
   static FabParamDict get_best_parameters() { return best_params_; }
 
   static const std::string DEFAULT_STUDY_DB_PATH;
+
   void init_study(const std::string& study_name = "fab_param_tuner_study",
                   const std::string& study_file_path = DEFAULT_STUDY_DB_PATH) {
     bool storage_exists = !study_file_path.empty() &&
@@ -98,7 +101,7 @@ public:
       // TODO: tbd
     } else {
       MJPC_PRINT("[FabParamTuner] Create new study with backend:",
-                study_file_path.empty() ? "in-memory" : study_file_path);
+                 study_file_path.empty() ? "in-memory" : study_file_path);
       study_ = std::make_shared<optuna::Study>(study_name, study_file_path, optuna::MINIMIZE, true);
     }
   }
@@ -168,17 +171,18 @@ public:
     FabParamWeightDict parameters;
     for (const auto& [param_name, param_space] : search_space_data_) {
       if (param_space.at("int") > 0) {
-        parameters[param_name] = FabRandom::rand<int>(static_cast<int>(param_space.at("low")),
-                                                      static_cast<int>(param_space.at("high")));
+        parameters[param_name] = mjpc::Random::rand<int>(static_cast<int>(param_space.at("low")),
+                                                         static_cast<int>(param_space.at("high")));
       } else {
         parameters[param_name] =
-            param_space.at("low") + FabRandom::rand() * (param_space.at("high") - param_space.at("low"));
+            param_space.at("low") + mjpc::Random::rand() * (param_space.at("high") - param_space.at("low"));
       }
     }
     return parameters;
   }
 
-  virtual void shuffle_env() {}
+  virtual void shuffle_env() {
+  }
 
   void tune(bool restart_tuning = false) {
     if (restart_tuning) {
@@ -301,10 +305,10 @@ protected:
   FabParamWeightDict get_trial_result() const {
     return {{"path_length_", path_length_ / 10},
             {"pace_to_goal", std::reduce(distances_to_goal_0_.begin(), distances_to_goal_0_.end()) /
-                                 int(distances_to_goal_0_.size())},
+                             int(distances_to_goal_0_.size())},
             {"obstacles", 1 - *std::min_element(distances_to_closest_obstacle_.begin(),
                                                 distances_to_closest_obstacle_.end()) /
-                                  initial_distance_to_obstacles_}};
+                          initial_distance_to_obstacles_}};
   }
 
   bool is_valid_trial_idx(int trial_idx) const { return (trial_idx >= 0 && trial_idx < trials_.size()); }

@@ -16,9 +16,9 @@
 // mjpc
 #include "mjpc/sim_base.h"
 #include "mjpc/utils/mjpc_ctrl_util.h"
+#include "mjpc/utils/mjpc_math_util.h"
 #include "mjpc/utilities.h"
 #include "mjpc/planners/lsqp/lsqp_planner.h"
-#include "mjpc/planners/fabrics/include/fab_math_util.h"
 #include "mjpc/tasks/lsqp/lsqp.h"
 
 // mjapp
@@ -171,7 +171,7 @@ public:
     lsqp_planner_->LsqpControl(interactive
                                  ? nullptr
                                  : std::vector<double>(mjpc::CEM_PARAMS_TOTAL_DIM,
-                                                       FabRandom::rand(-1., 1.)).data());
+                                                       mjpc::Random::rand(-1., 1.)).data());
 #endif
   }
 

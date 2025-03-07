@@ -7,9 +7,10 @@
 #include <sstream>
 #include <string>
 
+#include "mjpc/task.h"
+#include "mjpc/utils/mjpc_math_util.h"
 #include "mjpc/planners/fabrics/include/fab_goal.h"
 #include "mjpc/planners/fabrics/include/fab_math_util.h"
-#include "mjpc/task.h"
 
 // NOTE: Dynamic goal is not yet working for [Particle]
 #define FAB_PARTICLE_DYNAMIC_GOAL_SUPPORTED (1)
@@ -28,28 +29,35 @@ public:
     actuator_kv = 1.f;
     first_joint_name_ = "root_x";
   }
-  static double rand_val() { return FabRandom::rand<double>(-0.2, 0.2); }
+
+  static double rand_val() { return mjpc::Random::rand<double>(-0.2, 0.2); }
 
   std::string Name() const override;
   std::string XmlPath() const override;
   std::string RobotModelPath() const override;
+
   std::string GetBaseBodyName() const override {
     static std::string name = "world";
     return name;
   }
+
   std::vector<std::string> GetEndtipNames() const override {
     static std::vector<std::string> names = {"base_link"};
     return names;
   }
+
   std::vector<std::string> GetCollisionLinkNames() const override {
     static std::vector<std::string> names = {"base_link"};
     return names;
   }
+
   FabLinkCollisionProps GetCollisionLinkProps() const override {
     static FabLinkCollisionProps props = {{GetCollisionLinkNames()[0], {0.01}}};
     return props;
   }
+
   int GetActionDim() const override { return 3; }
+
   std::vector<FabSubGoalPtr> GetSubGoals() const override {
     // NOTE: Due to base_link's fk having Z-translation as constant
     static const std::vector<int> indices = std::vector{0, 1};
@@ -75,9 +83,9 @@ public:
       const auto& pos = subgoal0_desired_state.pose.pos;
       const auto& vel = subgoal0_desired_state.linear_vel;
       const auto& acc = subgoal0_desired_state.linear_acc;
-      subgoal0_desired_state.pose.pos = {pos[0], pos[1]};    // EXCLUDING pos[2]
-      subgoal0_desired_state.linear_vel = {vel[0], vel[1]};  // EXCLUDING vel[2]
-      subgoal0_desired_state.linear_acc = {acc[0], acc[1]};  // EXCLUDING vel[2]
+      subgoal0_desired_state.pose.pos = {pos[0], pos[1]}; // EXCLUDING pos[2]
+      subgoal0_desired_state.linear_vel = {vel[0], vel[1]}; // EXCLUDING vel[2]
+      subgoal0_desired_state.linear_acc = {acc[0], acc[1]}; // EXCLUDING vel[2]
     }
 #else
     const auto* goal_pos = GetGoalPos();
@@ -112,7 +120,8 @@ public:
   class ResidualFn : public mjpc::BaseResidualFn {
   public:
     explicit ResidualFn(const ParticleX* task)
-        : mjpc::BaseResidualFn(task), particle_task(dynamic_cast<const ParticleX*>(task_)) {}
+      : mjpc::BaseResidualFn(task), particle_task(dynamic_cast<const ParticleX*>(task_)) {
+    }
 
     // -------- Residuals for particle task -------
     //   Number of residuals: 3
@@ -187,9 +196,11 @@ public:
     static_obstacles_num = 10;
     dynamic_obstacles_num = 0;
   }
+
   std::string Name() const override;
 
   bool IsGoalFixed() const override { return true; }
+
   std::vector<FabSubGoalPtr> GetSubGoals() const override {
     static const std::vector<int> indices = {0, 1};
     // [Particle] & [ParticleFixed] can be toggled by users at runtime
@@ -204,7 +215,7 @@ public:
                                                             .child_link_name = GetEndtipNames()[0]})};
     const auto* goal_pos = GetGoalPos();
     if (goal_pos) {
-      subgoals[0]->cfg_.desired_state.pose.pos = {goal_pos[0], goal_pos[1]};  // EXCLUDING goal_pos[2]
+      subgoals[0]->cfg_.desired_state.pose.pos = {goal_pos[0], goal_pos[1]}; // EXCLUDING goal_pos[2]
     }
     subgoals[0]->cfg_.desired_state.pose_offset = FabPose{.pos = {0., 0., 0.}, .rot = {0., 0., 0.}};
     return subgoals;
@@ -213,7 +224,8 @@ public:
   class FixedResidualFn : public mjpc::BaseResidualFn {
   public:
     explicit FixedResidualFn(const ParticleXFixed* task)
-        : mjpc::BaseResidualFn(task), particle_fixed_task(dynamic_cast<const ParticleXFixed*>(task_)) {}
+      : mjpc::BaseResidualFn(task), particle_fixed_task(dynamic_cast<const ParticleXFixed*>(task_)) {
+    }
 
     // -------- Residuals for particle task -------
     //   Number of residuals: 3
@@ -237,4 +249,4 @@ protected:
 private:
   FixedResidualFn residual_;
 };
-}  // namespace mjpc
+} // namespace mjpc

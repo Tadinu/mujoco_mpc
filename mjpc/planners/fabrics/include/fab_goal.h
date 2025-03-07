@@ -2,9 +2,10 @@
 
 #include <memory>
 
+#include "mjpc/utils/mjpc_core_util.h"
+#include "mjpc/utils/mjpc_math_util.h"
 #include "mjpc/planners/fabrics/include/fab_common.h"
 #include "mjpc/planners/fabrics/include/fab_math_util.h"
-#include "mjpc/utils/mjpc_core_util.h"
 
 enum class FabSubGoalType : uint8_t { STATIC, STATIC_JOINT_SPACE, DYNAMIC /* Analytic, Spline, etc.*/ };
 
@@ -12,7 +13,7 @@ enum class FabSubGoalTrajectoryType : uint8_t { ANALYTIC, SPLINE };
 
 struct FabPose {
   std::vector<double> pos;
-  std::vector<double> rot;  // rpy
+  std::vector<double> rot; // rpy
   bool empty() const { return pos.empty() && rot.empty(); }
   static FabPose zeros(int n) { return {.pos = std::vector(n, 0.), .rot = std::vector(n, 0.)}; }
 };
@@ -26,10 +27,12 @@ struct FabDynamicsState {
   std::vector<double> angular_vel;
   std::vector<double> linear_acc;
   std::vector<double> angular_acc;
+
   void reset() {
     pose.pos = pose_offset.pos = linear_vel = linear_acc = default_lin;
     pose.rot = pose_offset.rot = angular_vel = angular_acc = default_ang;
   }
+
   bool valid() const { return (!pose.empty()); }
 };
 
@@ -49,6 +52,7 @@ struct FabSubGoalConfig {
   FabSubGoalTrajectoryType traj_type = FabSubGoalTrajectoryType::ANALYTIC;
 
   size_t dimension() const { return indices.size(); }
+
   std::vector<double> default_values(const double default_val) const {
     return std::vector<double>(dimension(), default_val);
   }
@@ -58,7 +62,10 @@ struct FabSubGoalConfig {
 
 struct FabSubGoal {
   FabSubGoal() = default;
-  explicit FabSubGoal(FabSubGoalConfig config) : cfg_(std::move(config)) {}
+
+  explicit FabSubGoal(FabSubGoalConfig config) : cfg_(std::move(config)) {
+  }
+
   virtual ~FabSubGoal() = default;
   FabSubGoalConfig cfg_;
 
@@ -74,6 +81,7 @@ struct FabSubGoal {
   std::vector<double> limit_low_pos() const {
     return cfg_.lower_pos.empty() ? cfg_.default_values(-1.) : cfg_.lower_pos;
   }
+
   std::vector<double> limit_high_pos() const {
     return cfg_.upper_pos.empty() ? cfg_.default_values(1.) : cfg_.upper_pos;
   }
@@ -82,15 +90,16 @@ struct FabSubGoal {
 
   CaSX desired_pose(bool position_only = false) const {
     const auto& pose = cfg_.desired_state.pose;
-    return position_only ? CaSX(pose.pos)
-                         : fab_math::transform(urdf::Vector3(pose.pos), urdf::Vector3(pose.rot));
+    return position_only
+             ? CaSX(pose.pos)
+             : fab_math::transform(urdf::Vector3(pose.pos), urdf::Vector3(pose.rot));
   }
 
   CaSX desired_pose_offset(bool position_only = false) const {
     const auto& pose_offset = cfg_.desired_state.pose_offset;
     return position_only
-               ? CaSX(pose_offset.pos)
-               : fab_math::transform(urdf::Vector3(pose_offset.pos), urdf::Vector3(pose_offset.rot));
+             ? CaSX(pose_offset.pos)
+             : fab_math::transform(urdf::Vector3(pose_offset.pos), urdf::Vector3(pose_offset.rot));
   }
 
   virtual void verify() const {
@@ -112,24 +121,29 @@ struct FabSubGoal {
   }
 
   void reset() { cfg_.clear(); }
+
   virtual void shuffle_pos() {
     verify();
     reset();
   }
 };
+
 using FabSubGoalPtr = std::shared_ptr<FabSubGoal>;
 using FabSubGoalPtrArray = std::vector<FabSubGoalPtr>;
 
 struct FabStaticSubGoal : public FabSubGoal {
   FabStaticSubGoal() = default;
-  explicit FabStaticSubGoal(FabSubGoalConfig config) : FabSubGoal(std::move(config)) {}
+
+  explicit FabStaticSubGoal(FabSubGoalConfig config) : FabSubGoal(std::move(config)) {
+  }
+
   void shuffle_pos() override {
     FabSubGoal::shuffle_pos();
     const auto limit_lows = limit_low_pos();
     const auto limit_highs = limit_high_pos();
     const auto low_limit_size = limit_lows.size();
     for (auto i = 0; i < low_limit_size; ++i) {
-      cfg_.desired_state.pose.pos[i] = FabRandom::rand<double>(limit_lows[i], limit_highs[i]);
+      cfg_.desired_state.pose.pos[i] = mjpc::Random::rand<double>(limit_lows[i], limit_highs[i]);
     }
   }
 
@@ -143,18 +157,25 @@ struct FabStaticSubGoal : public FabSubGoal {
     }
   }
 };
+
 using FabStaticSubGoalPtr = std::shared_ptr<FabStaticSubGoal>;
 
 struct FabDynamicSubGoal : public FabSubGoal {
   FabDynamicSubGoal() = default;
-  explicit FabDynamicSubGoal(FabSubGoalConfig config) : FabSubGoal(std::move(config)) {}
+
+  explicit FabDynamicSubGoal(FabSubGoalConfig config) : FabSubGoal(std::move(config)) {
+  }
 };
+
 using FabDynamicSubGoalPtr = std::shared_ptr<FabDynamicSubGoal>;
 
 struct FabStaticJointSpaceSubGoal : public FabStaticSubGoal {
   FabStaticJointSpaceSubGoal() = default;
-  explicit FabStaticJointSpaceSubGoal(FabSubGoalConfig config) : FabStaticSubGoal(std::move(config)) {}
+
+  explicit FabStaticJointSpaceSubGoal(FabSubGoalConfig config) : FabStaticSubGoal(std::move(config)) {
+  }
 };
+
 using FabStaticJointSpaceSubGoalPtr = std::shared_ptr<FabStaticJointSpaceSubGoal>;
 
 // ===========================================================================================================
@@ -171,14 +192,17 @@ public:
   }
 
   FabGoalComposition() = default;
+
   FabGoalComposition(std::string name, const FabGoalConfig& config) : name_(std::move(name)) {
     for (const auto& [sub_goal_name, subgoal_config_map] : config) {
       const auto type_text = mjpc::get_variant_value<std::string>(subgoal_config_map.at("type"));
       auto sub_goal = std::make_shared<FabStaticSubGoal>(FabSubGoalConfig{
           .name = sub_goal_name,
-          .type = (type_text == "static")               ? FabSubGoalType::STATIC
-                  : (type_text == "static_joint_space") ? FabSubGoalType::STATIC_JOINT_SPACE
-                                                        : FabSubGoalType::DYNAMIC,
+          .type = (type_text == "static")
+                    ? FabSubGoalType::STATIC
+                    : (type_text == "static_joint_space")
+                    ? FabSubGoalType::STATIC_JOINT_SPACE
+                    : FabSubGoalType::DYNAMIC,
           .is_primary_goal = mjpc::get_variant_value<bool>(subgoal_config_map.at("is_primary_goal")),
           .epsilon = mjpc::get_variant_value<double>(subgoal_config_map.at("epsilon")),
           .indices = mjpc::get_variant_value<std::vector<int>>(subgoal_config_map.at("indices")),
