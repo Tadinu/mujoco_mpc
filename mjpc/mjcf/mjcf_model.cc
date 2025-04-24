@@ -105,7 +105,9 @@ void MjcfModel::FillDataStructure() {
     // LINKS --
     //
     auto link = std::make_shared<urdf::Link>();
-    link->name = mj_id2name(model, mjOBJ_BODY, i);
+    if (auto* link_name = mj_id2name(model, mjOBJ_BODY, i)) {
+      link->name = link_name;
+    }
     link->origin = urdf::Transform{.position = urdf::Vector3(&model->body_pos[3 * i]),
                                    .rotation = urdf::Rotation(&model->body_quat[4 * i])};
 
@@ -189,7 +191,8 @@ void MjcfModel::FillDataStructure() {
     //
     const int jnt_adr = model->body_jntadr[i];
     const int jnt_num = model->body_jntnum[i];
-    const std::string parent_link_name = mj_id2name(model, mjOBJ_BODY, model->body_parentid[i]);
+    const auto* parent_name = mj_id2name(model, mjOBJ_BODY, model->body_parentid[i]);
+    const std::string parent_link_name = parent_name ? parent_name : "";
 
     // Fixed joint
     if (jnt_num == 0) {

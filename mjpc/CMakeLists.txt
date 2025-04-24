@@ -55,6 +55,7 @@ set(LIB_MJPC_HEADERS
         tasks/bimanual/cobring/cobring.h
         tasks/cartpole/cartpole.h
         tasks/fingers/fingers.h
+        tasks/garmi/garmi.h
         tasks/grippers/grippers.h
         tasks/humanoid/stand/stand.h
         tasks/humanoid/tracking/tracking.h
@@ -67,6 +68,7 @@ set(LIB_MJPC_HEADERS
         tasks/mpl/mpl_cost.h
         tasks/mpl/mpl_grasp_cost.h
         tasks/lsqp/lsqp.h
+        tasks/lsqp/iiwa14_allegro.h
         tasks/op3/stand.h
         tasks/panda/panda.h
         tasks/particle/particle.h
@@ -211,6 +213,7 @@ add_library(
         tasks/bimanual/cobring/cobring.cc
         tasks/cartpole/cartpole.cc
         tasks/fingers/fingers.cc
+        tasks/garmi/garmi.cc
         tasks/grippers/grippers.cc
   tasks/humanoid/interact/interact.cc
   tasks/humanoid/interact/interact.h
@@ -225,6 +228,7 @@ add_library(
         tasks/manipulation_x/manipulation_x.cc
         tasks/mpl/mpl.cc
         tasks/lsqp/lsqp.cc
+        tasks/lsqp/iiwa14_allegro.cc
         tasks/op3/stand.cc
         tasks/panda/panda.cc
         tasks/particle/particle.cc
@@ -318,7 +322,6 @@ target_link_libraries(
         ${DM_ROBOTICS_BUILD_DIR}/mujoco/libdmr_mujoco.so
         ${DM_ROBOTICS_BUILD_DIR}/least_squares_qp/core/libdmr_lsqp_core.so
         ${DM_ROBOTICS_BUILD_DIR}/least_squares_qp/common/libdmr_lsqp_common.so
-        qp_solver_collection::QpSolverCollection
         ${QP_SOLVER_3RD_LIBS}
 )
 message("MCMC_DIR  ${MCMC_DIR}")

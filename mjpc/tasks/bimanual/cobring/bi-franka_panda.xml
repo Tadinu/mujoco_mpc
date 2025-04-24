@@ -37,5 +37,4 @@
 
     <include file='assets/actuator0.xml'/>
     <include file='assets/actuator1.xml'/>
-
 </mujoco>

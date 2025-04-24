@@ -18,19 +18,29 @@
 #include "mjpc/planners/lsqp/lsqp_se3.h"
 #include "mjpc/utilities.h"
 
+#define MJPC_LSQP_USE_QP_SOLVER_COLLECTION (1)
+#define MJPC_LSQP_USE_DAQP_SOLVER (!MJPC_LSQP_USE_QP_SOLVER_COLLECTION)
+#define MJPC_LSQP_KINEMATICS_ONLY (1)
+
 namespace mjpc {
 class LsqpConfig {
 public:
   LsqpConfig() = default;
 
-  LsqpConfig(const mjModel* model, int ndofs,
-             const QpSolverCollection::QpSolverType qp_solver_type =
-                 QpSolverCollection::QpSolverType::QuadProg)
-    : model_(model), ndofs_(ndofs),
-      qp_solver_(QpSolverCollection::allocateQpSolver(qp_solver_type)) {
-    if (ndofs != model->nu) {
-      throw MjpcError::customized("Currently only supporting [ndofs == model->nu]",
-                                  "ndofs: " + std::to_string(ndofs) + "# model->nu: "
+  LsqpConfig(const mjModel* model, int ndofs
+#if MJPC_LSQP_USE_QP_SOLVER_COLLECTION
+             , const QpSolverCollection::QpSolverType qp_solver_type =
+                 QpSolverCollection::QpSolverType::QuadProg
+#endif
+      )
+    : model_(model), ndofs_(ndofs)
+#if MJPC_LSQP_USE_QP_SOLVER_COLLECTION
+      , qp_solver_(QpSolverCollection::allocateQpSolver(qp_solver_type))
+#endif
+  {
+    if (ndofs != model->nv) {
+      throw MjpcError::customized("Currently only supporting [ndofs == model->nv]",
+                                  "ndofs: " + std::to_string(ndofs) + "# model->nv: "
                                   + std::to_string(model->nu));
     }
   }
@@ -40,13 +50,15 @@ public:
   int nq() const { return model_->nq; }
   int ndofs() const { return ndofs_; }
 
+#if MJPC_LSQP_USE_QP_SOLVER_COLLECTION
   std::shared_ptr<QpSolverCollection::QpSolver> QpSolver() const {
     return qp_solver_;
   }
+#endif
 
-  bool CheckJointValues(const double* q, size_t jnts_num, double tol = 1e-2) {
-    assert(model_->njnt >= jnts_num);
-    for (int jnt_id = 0; jnt_id < jnts_num; ++jnt_id) {
+  bool CheckJointValues(const double* q, const std::vector<std::string>& jnt_names, double tol = 1e-2) const {
+    for (const auto& jnt_name : jnt_names) {
+      const int jnt_id = mjpc::QueryJointId(model_, jnt_name.c_str());
       if (model_->jnt_type[jnt_id] == mjJNT_FREE || !model_->jnt_limited[jnt_id]) {
         continue;
       }
@@ -107,6 +119,7 @@ public:
 
     // jac(i, j) = jacBuffer[i * nv + j] where i: [0->5], j: [0->nv-1]
     const auto jac = mjpc::ArrayToEigenMatrix<6>(jacBuffer, nv);
+    //mjpc::print(jac);
 
     // MuJoCo jacobians have a frame of reference centered at the local frame but
     // aligned with the world frame. To obtain a jacobian expressed in the local
@@ -151,7 +164,9 @@ private:
 
   // Active dofs, typically ones of robots only, excluding dynamic objs that also have dofs
   int ndofs_ = 0;
+#if MJPC_LSQP_USE_QP_SOLVER_COLLECTION
   std::shared_ptr<QpSolverCollection::QpSolver> qp_solver_ = nullptr;
+#endif
 };
 
 struct LsqpConstraint {

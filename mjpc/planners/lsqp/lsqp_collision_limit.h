@@ -58,7 +58,7 @@ public:
     max_num_contacts_ = geom_id_pairs_.size();
   }
 
-  LsqpConstraint ComputeQPInequalities(mjData* data, const LsqpConfig& config, double dt = 1.0) const {
+  LsqpConstraint ComputeQPInequalities(const mjData* data, const LsqpConfig& config, double dt = 1.0) const {
     Eigen::VectorXd upper_bound = Eigen::VectorXd::Constant(max_num_contacts_,
                                                             std::numeric_limits<double>::infinity());
     Eigen::MatrixXd coefficient_matrix = Eigen::MatrixXd::Zero(max_num_contacts_, ndofs_);

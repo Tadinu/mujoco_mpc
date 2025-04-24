@@ -31,7 +31,7 @@ public:
     SetTarget(mjpc::PosToEigen(&data->subtree_com[1], k_));
   }
 
-  Eigen::VectorXd ComputeError(mjData* data, const LsqpConfig& config) const override {
+  Eigen::VectorXd ComputeError(const mjData* data, const LsqpConfig& config) const override {
     if (Empty()) {
       throw std::runtime_error("`target_CoM_` is empty");
     }
@@ -41,7 +41,7 @@ public:
     return mjpc::PosToEigen(res.data(), k_);
   }
 
-  Eigen::MatrixXd ComputeJac(mjData* data, const LsqpConfig& config) const override {
+  Eigen::MatrixXd ComputeJac(const mjData* data, const LsqpConfig& config) const override {
     if (Empty()) {
       throw std::runtime_error("`target_CoM_` is empty");
     }

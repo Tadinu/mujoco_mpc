@@ -405,6 +405,11 @@ static mjtNum* QuatFromEigen(const Eigen::Quaterniond& equat) {
 }
 
 // https://eigen.tuxfamily.org/dox/TopicPitfalls.html
+static void ArrayFromEigenMatrix(const Eigen::MatrixXd& mat, double* out_mat) {
+  // https://stackoverflow.com/questions/48645837/how-to-create-a-row-major-c-array-from-an-eigen-matrix-with-run-time-dimensions
+  MatrixRowMajorXd::Map(out_mat, mat.rows(), mat.cols()) = mat;
+}
+
 static Eigen::MatrixXd ArrayToEigenMatrix(const mjtNum* array, int rows, int cols) {
   return Eigen::Map<const MatrixRowMajorXd>(array, rows, cols);
 }

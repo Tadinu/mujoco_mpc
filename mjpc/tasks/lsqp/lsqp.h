@@ -16,11 +16,15 @@
 #define MJPC_HOME_LAP (0)
 #define MJPC_LSQP_PLANAR_ROBOT (0)
 #define MJPC_LSQP_SPAWN_OBJECT (1)
-#define MJPC_LSQP_FINGERS_OSC (1)
 
-#define MJPC_LSQP_DIFFIK_CONTROL_ENABLED (0)
-#define MJPC_LSQP_OSC_ENABLED (1)
-#define MJPC_LSQP_MANUAL_MODE (MJPC_LSQP_DIFFIK_CONTROL_ENABLED | MJPC_LSQP_OSC_ENABLED)
+// MANUAL CONTROL USING DIFFIK or OSC
+#define MJPC_LSQP_MANUAL_MODE (0)
+#define MJPC_LSQP_MANUAL_DIFFIK_ENABLED (MJPC_LSQP_MANUAL_MODE && 0)
+#define MJPC_LSQP_MANUAL_OSC_ENABLED (MJPC_LSQP_MANUAL_MODE && !MJPC_LSQP_MANUAL_DIFFIK_ENABLED)
+#define MJPC_LSQP_FINGERS_OSC (MJPC_LSQP_MANUAL_OSC_ENABLED & 1)
+
+// AUTO CONTROL USING LSQP PLANNER [SOLVER]
+#define MJPC_LSQP_AUTO_MODE (!MJPC_LSQP_MANUAL_MODE)
 
 namespace mjpc {
 static const std::string MUJOCO_DIR =
@@ -30,14 +34,16 @@ static const std::string MUJOCO_DIR =
     "/media/ducthan/376b23a1-5a02-4960-b3ca-24b2fcef8f891/MUJOCO";
 #endif
 static const std::string MAIN_ROBOT_MODEL_PATH = MUJOCO_DIR +
-#if MJPC_LSQP_DIFFIK_CONTROL_ENABLED
+#if MJPC_LSQP_MANUAL_DIFFIK_ENABLED
                                                  //"/mink/examples/franka_emika_panda/panda_nohand.xml";
-                                                 "/mink/examples/universal_robots_ur5e/ur5e.xml";
-#elif MJPC_LSQP_OSC_ENABLED
+                                                 //"/mink/examples/universal_robots_ur5e/ur5e.xml";
+                                                 //"/mujoco_mpc/mjpc/tasks/bimanual/cobring/bi-franka_panda.xml";
+                                                 "/mujoco_mpc/mjpc/tasks/garmi/garmi.xml";
+#elif MJPC_LSQP_MANUAL_OSC_ENABLED
                                                  //"/mink/examples/kuka_iiwa_14/iiwa14_osc.xml";
                                                  "/mink/examples/kuka_iiwa_14_allegro/iiwa14_allegro_osc.xml";
 #else
-  "/mink/examples/arm_hand_iiwa_allegro.xml";
+                                                 "/mink/examples/arm_hand_iiwa_allegro.xml";
 #endif
 
 static const std::string MAIN_ROBOT_MODEL_NAME = std::filesystem::path(MAIN_ROBOT_MODEL_PATH).stem();
@@ -54,8 +60,20 @@ static bool IsIIWA14Allegro() {
   return absl::StrContainsIgnoreCase(MAIN_ROBOT_MODEL_NAME, "iiwa14_allegro");
 }
 
+static bool IsGarmi() {
+  return absl::StrContainsIgnoreCase(MAIN_ROBOT_MODEL_NAME, "garmi");
+}
+
 static bool IsPanda() {
   return absl::StrContainsIgnoreCase(MAIN_ROBOT_MODEL_NAME, "panda");
+}
+
+static bool IsBiFrankaPanda() {
+  return absl::StrContainsIgnoreCase(MAIN_ROBOT_MODEL_NAME, "bi-franka_panda");
+}
+
+static bool IsDualPanda() {
+  return IsGarmi() || IsBiFrankaPanda();
 }
 
 static bool RobotHasNoHand() {
@@ -115,16 +133,22 @@ static constexpr float CEM_PARAMS_LIMIT_LOWER = 0.;
 static constexpr float CEM_PARAMS_LIMIT_UPPER = 1.;
 
 static const std::string MAIN_SCENE_XML_PATH =
-#if MJPC_LSQP_DIFFIK_CONTROL_ENABLED
+#if MJPC_LSQP_MANUAL_DIFFIK_ENABLED
     MUJOCO_DIR + (IsUR5()
                     ? "/mjctrl/universal_robots_ur5e/scene.xml"
-                    : "/mjctrl/franka_emika_panda/scene.xml");
-#elif MJPC_LSQP_OSC_ENABLED
+                    : IsBiFrankaPanda()
+                    ? "/mujoco_mpc/mjpc/tasks/bimanual/cobring/task.xml"
+                    : IsPanda()
+                    ? "/mjctrl/franka_emika_panda/scene.xml"
+                    : IsGarmi()
+                    ? "/mujoco_mpc/mjpc/tasks/garmi/garmi_scene.xml"
+                    : "");
+#elif MJPC_LSQP_MANUAL_OSC_ENABLED
     MUJOCO_DIR + (IsIIWA14Allegro()
                     ? "/mink/examples/kuka_iiwa_14_allegro/scene_osc_target.xml"
                     : "/mink/examples/kuka_iiwa_14/scene_osc_target.xml");
 #else
-  {};
+    {};
 #endif
 
 // NOTE: Empty base body name is considered as world/root body
@@ -184,11 +208,93 @@ static const std::vector<std::string> PANDA_ACTUATED_JOINT_NAMES = {
     "joint7"
 };
 
-static const std::string MAIN_ROBOT_BASE_LINK_NAME = IsPanda() ? "link0" : "base";
+static const std::vector<std::string> BIFRANKA_ACTUATED_JOINT_NAMES = {
+    "panda0_joint1",
+    "panda0_joint2",
+    "panda0_joint3",
+    "panda0_joint4",
+    "panda0_joint5",
+    "panda0_joint6",
+    "panda0_joint7",
+    "panda0_joint1",
+    "panda1_joint2",
+    "panda1_joint3",
+    "panda1_joint4",
+    "panda1_joint5",
+    "panda1_joint6",
+    "panda1_joint7"
+};
+
+static const std::vector<std::string> BIFRANKA_EE_NAMES = {"panda0_end_effector", "panda1_end_effector"};
+static const std::vector<std::string> BIFRANKA_EE_SITE_NAMES = BIFRANKA_EE_NAMES;
+
+static const std::vector<std::string> GARMI_ACTUATED_JOINT_NAMES = {
+    "left_joint1",
+    "left_joint2",
+    "left_joint3",
+    "left_joint4",
+    "left_joint5",
+    "left_joint6",
+    "left_joint7",
+    "right_joint1",
+    "right_joint2",
+    "right_joint3",
+    "right_joint4",
+    "right_joint5",
+    "right_joint6",
+    "right_joint7"
+};
+
+static const std::vector<std::string> GARMI_ACTUATOR_NAMES = {
+#if 0
+    "left_joint1",
+    "left_joint2",
+    "left_joint3",
+    "left_joint4",
+    "left_joint5",
+    "left_joint6",
+    "left_joint7",
+    "right_joint1",
+    "right_joint2",
+    "right_joint3",
+    "right_joint4",
+    "right_joint5",
+    "right_joint6",
+    "right_joint7"
+#else
+    "left_act_pos1",
+    "left_act_pos2",
+    "left_act_pos3",
+    "left_act_pos4",
+    "left_act_pos5",
+    "left_act_pos6",
+    "left_act_pos7",
+    "right_act_pos1",
+    "right_act_pos2",
+    "right_act_pos3",
+    "right_act_pos4",
+    "right_act_pos5",
+    "right_act_pos6",
+    "right_act_pos7"
+#endif
+};
+
+static const std::vector<std::string> GARMI_EE_NAMES = {"left_hand", "right_hand"};
+static const std::vector<std::string> GARMI_EE_SITE_NAMES = {"left_ee_site", "right_ee_site"};
+
+static const std::string MAIN_ROBOT_BASE_LINK_NAME = IsDualPanda()
+                                                       ? "torso"
+                                                       : IsPanda()
+                                                       ? "link0"
+                                                       : "base";
 static std::vector<std::string> MAIN_ROBOT_EE_NAMES = IsIIWA14Allegro()
                                                         ? mjpc::ChainCollections<std::string>(
                                                             IIWA14_EE_NAMES,
                                                             ALLEGRO_EE_NAMES)
+                                                        : IsBiFrankaPanda()
+                                                        ? BIFRANKA_EE_NAMES
+                                                        : IsGarmi()
+                                                        ? GARMI_EE_NAMES
                                                         : std::vector<std::string>{
                                                             RobotHasHand()
                                                               ? "hand"
@@ -198,44 +304,54 @@ static const std::vector<std::string> MAIN_ROBOT_EE_SITE_NAMES = IsIIWA14Allegro
                                                                    ? mjpc::ChainCollections<std::string>(
                                                                        IIWA14_EE_SITE_NAMES,
                                                                        ALLEGRO_EE_SITE_NAMES)
+                                                                   : IsBiFrankaPanda()
+                                                                   ? BIFRANKA_EE_SITE_NAMES
+                                                                   : IsGarmi()
+                                                                   ? GARMI_EE_SITE_NAMES
                                                                    : std::vector<std::string>{
                                                                        RobotHasHand()
                                                                          ? "hand_site"
                                                                          : "attachment_site"
                                                                    };
 
-static const bool MAIN_ROBOT_NULLSPACE_CONTROL_ENABLED = IsPanda();
+static const std::vector<std::string> MAIN_ACTUATED_JOINT_NAMES = mjpc::IsIIWA14()
+                                                                    ? mjpc::IIWA14_ACTUATED_JOINT_NAMES
+                                                                    : mjpc::IsUR5()
+                                                                    ? mjpc::UR5_ACTUATED_JOINT_NAMES
+                                                                    : mjpc::IsBiFrankaPanda()
+                                                                    ? mjpc::BIFRANKA_ACTUATED_JOINT_NAMES
+                                                                    : mjpc::IsGarmi()
+                                                                    ? mjpc::GARMI_ACTUATED_JOINT_NAMES
+                                                                    : mjpc::IsPanda()
+                                                                    ? mjpc::PANDA_ACTUATED_JOINT_NAMES
+                                                                    : std::vector<std::string>{};
+static const std::vector<std::string> MAIN_ACTUATOR_NAMES = mjpc::IsGarmi()
+                                                              ? mjpc::GARMI_ACTUATOR_NAMES
+                                                              : std::vector<std::string>{};
+
+static const bool MAIN_ROBOT_NULLSPACE_CONTROL_ENABLED = false; // IsPanda() || IsDualPanda();
 // NOTE: Not necessarily the same as [model->opt.timestep]
 static const double INTEGRATION_DT =
 #if MJPC_LSQP_MANUAL_MODE
     MAIN_ROBOT_NULLSPACE_CONTROL_ENABLED ? 0.1 : 1;
 #else
-    0.01;
+    0.005;
 #endif
 
 class LsqpPlanner;
+class LsqpSolver;
 
 class Lsqp : public Task {
 public:
+  using LsqpSolverPtr = std::shared_ptr<LsqpSolver>;
   static constexpr float KGRAVITY = -9.81f;
   static constexpr bool SYSTEM_MODEL_ACTUATORS_OSC = false;
   static constexpr bool POSITION_CTRL_ENABLED = true;
 
-  static constexpr const char* EE_TARGET_NAME = "ee_target";
-  static constexpr double EE_TARGET_PREGRASP_QUAT[4] = {0.644963, -0.112683, 0.75546, 0.0246038};
-  static constexpr const char* ATTACHMENT_SITE_NAME = "attachment_site";
-  static constexpr const char* PALM_NAME = "palm";
-  static const std::vector<std::string> FINGERTIP_NAMES;
-  static const std::map<std::string, std::vector<float>> FINGERTIPS_RGBA;
-  static const std::vector<const char*> FINGERS_JOINT_NAMES;
-  static const std::vector<const char*> FINGERS_ACTUATOR_NAMES;
   static constexpr const char* TARGET_OBJ_NAME = "target";
   static constexpr const char* TARGET_OBJ_GOAL_NAME = "target_goal";
 
-  // NOTE: Hardcoded trace prefix as required in task.cc
-  static constexpr const char* TRACE_SENSOR_PREFIX = "trace";
-
-  Lsqp() : residual_(this) {
+  Lsqp() {
     assert(std::ifstream(mjpc::MUJOCO_DIR.c_str()).good());
     mj_defaultVFS(vfs_.get());
     for (const auto& [_, spec] : spec_map_) {
@@ -243,428 +359,20 @@ public:
     }
   }
 
-  std::string Name() const override { return "Lsqp"; }
-
-  std::string XmlPath() const override {
-    // This can be empty if [ComposeOverrideModel()] is defined
-    return {};
-  }
-
   void SetPlanner(Planner* planner) override;
 
   bool IsLSQPSupported() const override { return true; }
-  std::string AttachmentPrefix() const { return attach_prefix_; }
-  std::string AttachmentSuffix() const { return attach_suffix_; }
 
-  std::string PalmBodyName() const {
-    return attach_prefix_ + PALM_NAME;
+  virtual std::string EETargetName() const {
+    return {};
   }
 
-  std::string PalmSiteName() const {
-    return PalmBodyName();
+  virtual std::string EETargetSiteName() const {
+    return {};
   }
 
-  std::string FingerJointName(const std::string& finger_joint_name) const {
-    return attach_prefix_ + finger_joint_name;
-  }
-
-  std::string FingerActuatorName(const std::string& finger_act_name) const {
-    return attach_prefix_ + finger_act_name;
-  }
-
-  std::string FingertipBodyName(const std::string& fingertip_name) const {
-    return attach_prefix_ + fingertip_name;
-  }
-
-  std::string FingertipSiteName(const std::string& fingertip_name) const {
-    return FingertipBodyName(fingertip_name);
-  }
-
-  std::string FingertipTargetMocapName(const std::string& fingertip_name) const {
-    return FingertipSiteName(fingertip_name) + "_target";
-  }
-
-  std::string EETargetName() const {
-    return attach_prefix_ + EE_TARGET_NAME;
-  }
-
-  std::string EETargetSiteName() const {
-    return EETargetName();
-  }
-
-  std::string EETargetMocapName() const {
-    return EETargetName();
-  }
-
-  mjModel* ConstructModel() override {
-#if MJPC_LSQP_PLANAR_ROBOT
-    char error[1024];
-    mjModel* model = mj_loadXML((MUJOCO_DIR + "/mink/examples/planar_robot/scene.xml").c_str(), vfs_.get(),
-                                error, 1024);
-#else
-    // NOTE: For [MjcfModel::LoadToSpec()] to work, these must be independent xml files
-    // -> Having no nested xml files included in themselves
-    // If ones need to load from a compound xml, please use [MjcfModel::FromMjcfFile()]
-    const std::string SCENE_XML =
-        MUJOCO_DIR + "/mink/examples/kuka_iiwa_14/scene.xml";
-    const std::string scene_name = std::filesystem::path(SCENE_XML).stem();
-    const std::string KUKA_IIWA_14_XML =
-        MUJOCO_DIR + "/mink/examples/kuka_iiwa_14/iiwa14.xml";
-    const std::string iiwa14_name = std::filesystem::path(KUKA_IIWA_14_XML).stem();
-    const std::string ALLEGRO_HAND_XML =
-        MUJOCO_DIR + "/mink/examples/wonik_allegro/left_hand.xml";
-    const std::string allegro_name = std::filesystem::path(ALLEGRO_HAND_XML).stem();
-
-    // 1- Create [scene_spec]
-    auto* scene_spec = CreateSpecFromXML(scene_name, SCENE_XML);
-    if (!scene_spec) { return nullptr; }
-    scene_spec->memory = 15000000000;
-    scene_spec->nuserdata = LsqpSE3::PARAMS_DIM; // Storing latest [T_ee] for LsqpPlanner's Diff-IK Control
-    scene_spec->option.noslip_iterations = 5;
-    //scene_spec->option.noslip_tolerance = 1e-06;
-    if (!(scene_spec->option.enableflags & mjENBL_MULTICCD)) {
-      scene_spec->option.enableflags |= mjENBL_MULTICCD;
-    }
-
-    // 2- Create [allegro_spec]
-    auto* allegro_spec = CreateSpecFromXML(allegro_name, ALLEGRO_HAND_XML);
-    if (!allegro_spec) { return nullptr; }
-    const auto allegro_model_name = std::string(mjs_getString(allegro_spec->modelname));
-    mjsBody* allegro_palm = mjs_findBody(allegro_spec, "palm");
-    mju_copy4(allegro_palm->quat, mjpc::QUAT_IDENTITY);
-    memcpy(allegro_palm->pos, (mjtNum[]){0.0, 0.0, 0.095}, sizeof(allegro_palm->pos));
-
-    // 3- Create agents' numeric data (horizon, timestep)
-    // Refer to: CrossEntropyPlanner::Initialize() for specific numeric data names
-    const auto fCreateNumeric = [&scene_spec](const char* numeric_name, double value) {
-      auto* numeric = mjs_addNumeric(scene_spec);
-      mjs_setString(numeric->name, numeric_name);
-      numeric->size = 1;
-      mjs_setDouble(numeric->data, (double[]){value}, 1);
-    };
-    // NOTE: Larger [agent_horizon] may require larger [kMaxTrajectoryHorizon] configured in [trajectory.h]
-    fCreateNumeric("agent_horizon", 0.1);
-    fCreateNumeric("agent_timestep", INTEGRATION_DT);
-    fCreateNumeric("sampling_trajectories", 10);
-
-    // 4- Attach [allegro_palm] -> [scene_spec] through [attach_site]
-    // NOTE: This prefix will be prepended to names of all child elements (bodies, geoms, etc.) in [allegro_model]
-    attach_prefix_ = allegro_model_name + "/";
-    mjsSite* attach_site = mjpc::FindSiteSpec(scene_spec, ATTACHMENT_SITE_NAME);
-    mjs_attach(attach_site->element, allegro_palm->element, attach_prefix_.c_str(), attach_suffix_.c_str());
-
-    // 5- Customize joints
-    for (const auto& jnt_name : FINGERS_JOINT_NAMES) {
-      auto* jnt_spec = mjs_asJoint(mjs_findElement(scene_spec, mjOBJ_JOINT,
-                                                   FingerJointName(jnt_name).c_str()));
-      jnt_spec->armature = 0.05;
-    }
-
-    // 6.1- Customize [IIWA14] actuactors
-    if constexpr (SYSTEM_MODEL_ACTUATORS_OSC) {
-      // Delete all the default fully-actuated actuators
-      for (auto i = 1; i <= IIWA14_DOF; i++) {
-        auto* act_spec = mjs_findElement(scene_spec, mjOBJ_ACTUATOR,
-                                         ("actuator" + std::to_string(i)).c_str());
-        if (mjs_asActuator(act_spec)) {
-          mjs_delete(act_spec);
-        }
-      }
-
-      for (const auto& act_name : FINGERS_ACTUATOR_NAMES) {
-        auto* act_spec = mjs_findElement(allegro_spec, mjOBJ_ACTUATOR, act_name);
-        if (mjs_asActuator(act_spec)) {
-          mjs_delete(act_spec);
-        }
-      }
-    } else {
-      for (auto i = 1; i <= IIWA14_DOF; i++) {
-        auto* act = mjs_asActuator(mjs_findElement(scene_spec, mjOBJ_ACTUATOR,
-                                                   ("actuator" + std::to_string(i)).c_str()));
-        act->trntype = mjTRN_JOINT;
-        act->dyntype = mjDYN_NONE;
-        act->biastype = mjBIAS_AFFINE;
-        act->gaintype = mjGAIN_FIXED;
-        constexpr double kp = 2000;
-        constexpr double kv = 200;
-        if constexpr (POSITION_CTRL_ENABLED) {
-          mju_copy3(act->gainprm, (double[]){kp, 0, 0});
-          mju_copy3(act->biasprm, (double[]){0, -kp, -kv});
-        } else {
-          mju_copy3(act->gainprm, (double[]){kv, 0, 0});
-          mju_copy3(act->biasprm, (double[]){0, 0, -kv});
-        }
-      }
-    }
-
-    // 6.2- Customize [ALLEGRO] actuators
-    for (const auto& act_name : FINGERS_ACTUATOR_NAMES) {
-      auto* act = mjs_asActuator(mjs_findElement(scene_spec, mjOBJ_ACTUATOR,
-                                                 FingerActuatorName(act_name).c_str()));
-      act->trntype = mjTRN_JOINT;
-      act->dyntype = mjDYN_NONE;
-      act->biastype = mjBIAS_AFFINE;
-      act->gaintype = mjGAIN_FIXED;
-      constexpr double kp = 10;
-      constexpr double kv = 1;
-      if constexpr (POSITION_CTRL_ENABLED) {
-        mju_copy3(act->gainprm, (double[]){kp, 0, 0});
-        mju_copy3(act->biasprm, (double[]){0, -kp, -kv});
-      } else {
-        mju_copy3(act->gainprm, (double[]){kv, 0, 0});
-        mju_copy3(act->biasprm, (double[]){0, 0, -kv});
-      }
-    }
-
-    // 7- Re-key new assembled robot model [scene_spec]
-    auto* key_home = mjpc::FindKeySpec(scene_spec, "home");
-    if (!key_home) {
-      key_home = mjs_addKey(scene_spec);
-      mjs_setString(key_home->name, "home");
-    }
-
-    // 7.1- Key qpos
-#if MJPC_LSQP_SPAWN_OBJECT
-    system_qpos_home = mjpc::ChainCollections<mjtNum>(IIWA14_ALLEGRO_HOME_QPOS,
-                                                      mjpc::CollectionFromCArray(TARGET_OBJ_QPOS));
-#else
-    system_qpos_home = IIWA14_ALLEGRO_HOME_QPOS;
-#endif
-    mjs_setDouble(key_home->qpos, system_qpos_home.data(), system_qpos_home.size());
-
-    // 7.2- Key ctrl
-    if constexpr (SYSTEM_MODEL_ACTUATORS_OSC) {
-    } else {
-      mjs_setDouble(key_home->ctrl, IIWA14_ALLEGRO_HOME_QPOS.data(), IIWA14_ALLEGRO_HOME_QPOS.size());
-    }
-
-    // 7- Add mocap bodies
-    mjsBody* world_body = mjpc::FindWorldBodySpec(scene_spec);
-    const auto fCreateSite = [](mjsBody* body, const std::string& site_name,
-                                double pos[3] = nullptr, double quat[4] = nullptr,
-                                mjtGeom type = mjGEOM_SPHERE, double size = 0.001,
-                                float rgba[4] = nullptr) {
-      mjsSite* site = mjs_addSite(body, nullptr);
-      mjs_setString(site->name, site_name.c_str());
-      site->type = type;
-      memcpy(site->size, (mjtNum[]){size, size, size}, sizeof(site->size));
-      if (pos) { memcpy(site->pos, pos, sizeof(site->pos)); }
-      if (quat) { memcpy(site->quat, quat, sizeof(site->quat)); }
-      if (rgba) { memcpy(site->rgba, (float[]){0.5, 0., 0., 0.5}, sizeof(site->rgba)); }
-      site->group = 4;
-      return site;
-    };
-
-    // 7.1- [ee-mocap body]
-    mjsBody* ee_mocap = mjs_addBody(world_body, nullptr);
-    mjs_setString(ee_mocap->name, EETargetMocapName().data());
-    memcpy(ee_mocap->pos, (double[]){0.5, 0, 0.5}, sizeof(ee_mocap->pos));
-    memcpy(ee_mocap->quat, (double[]){0, 1, 0, 0}, sizeof(ee_mocap->quat));
-    ee_mocap->mocap = true;
-    mjsGeom* ee_mocap_geom = mjs_addGeom(ee_mocap, nullptr);
-    ee_mocap_geom->type = mjGEOM_BOX;
-    memcpy(ee_mocap_geom->size, (double[]){0.05, 0.05, 0.05}, sizeof(ee_mocap_geom->size));
-    memcpy(ee_mocap_geom->rgba, (float[]){0.6, 0.5, 0.3, 0.2}, sizeof(ee_mocap_geom->rgba));
-    // Disable collision
-    ee_mocap_geom->contype = 0;
-    ee_mocap_geom->conaffinity = 0;
-
-    // [ee_mocap_site]/[palm_site]
-    if constexpr (SYSTEM_MODEL_ACTUATORS_OSC) {
-      fCreateSite(ee_mocap, EETargetSiteName());
-    } else {
-      fCreateSite(allegro_palm, EETargetSiteName(), (double[]){0.03, 0, 0.03});
-      fCreateSite(allegro_palm, PalmSiteName());
-    }
-
-    // 7.2- [Fingertip-mocap bodies]
-    for (const auto& fingertip : FINGERTIP_NAMES) {
-      const auto fingertip_target_name = FingertipTargetMocapName(fingertip);
-      mjsBody* finger_mocap = mjs_addBody(world_body, nullptr);
-      mjs_setString(finger_mocap->name, fingertip_target_name.c_str());
-      finger_mocap->mocap = true;
-      mjsGeom* finger_mocap_geom = mjs_addGeom(finger_mocap, nullptr);
-      finger_mocap_geom->type = mjGEOM_SPHERE;
-      memcpy(finger_mocap_geom->size, (mjtNum[]){0.02, 0.02, 0.02}, sizeof(finger_mocap_geom->size));
-      memcpy(finger_mocap_geom->rgba, FINGERTIPS_RGBA.at(fingertip).data(),
-             sizeof(finger_mocap_geom->rgba));
-      // Disable collision
-      finger_mocap_geom->contype = 0;
-      finger_mocap_geom->conaffinity = 0;
-
-      // [fingermocap_site]
-      if constexpr (SYSTEM_MODEL_ACTUATORS_OSC) {
-        fCreateSite(finger_mocap, fingertip_target_name);
-      }
-    }
-
-    // 8- [Mocap site Actuators]
-    if constexpr (SYSTEM_MODEL_ACTUATORS_OSC) {
-      const auto fCreateActuator = [&scene_spec](const std::string& actuator_name,
-                                                 const std::string& site_name,
-                                                 double gear[]) {
-        mjsActuator* act = mjs_addActuator(scene_spec, 0);
-        mjs_setString(act->name, actuator_name.c_str());
-        act->trntype = mjTRN_SITE;
-        //act->dyntype = mjtDyn::mjDYN_INTEGRATOR;
-        mjs_setString(act->target, site_name.c_str());
-        act->ctrllimited = true;
-        mju_copy(act->ctrlrange, (double[]){-1, 1}, 2);
-        mju_copy(act->gear, gear, 6);
-        act->gainprm[0] = 1;
-      };
-
-      // Add actuators for [ee + fingertip] targets
-      const auto eetarget_site_name = EETargetSiteName();
-      fCreateActuator("ee_act_x", eetarget_site_name, (double[]){1, 0, 0, 0, 0, 0});
-      fCreateActuator("ee_act_y", eetarget_site_name, (double[]){0, 1, 0, 0, 0, 0});
-      fCreateActuator("ee_act_z", eetarget_site_name, (double[]){0, 0, 1, 0, 0, 0});
-      for (const auto& fingertip : FINGERTIP_NAMES) {
-        const auto fingertip_mocap_site_name = FingertipTargetMocapName(fingertip);
-        const auto fingertip_name = attach_prefix_ + fingertip;
-        fCreateActuator(fingertip_name + "_x", fingertip_mocap_site_name,
-                        (double[]){1, 0, 0, 0, 0, 0});
-        fCreateActuator(fingertip_name + "_y", fingertip_mocap_site_name,
-                        (double[]){0, 1, 0, 0, 0, 0});
-        fCreateActuator(fingertip_name + "_z", fingertip_mocap_site_name,
-                        (double[]){0, 0, 1, 0, 0, 0});
-      }
-    }
-
-    // 9- [User sensors] as residuals
-    // https://github.com/google-deepmind/mujoco_mpc/blob/main/docs/OVERVIEW.md#residual-specification
-    // 9.1- Reach sensor
-    mjsSensor* reach_sensor = mjs_addSensor(scene_spec);
-    reach_sensor->type = mjSENS_USER;
-    reach_sensor->dim = 3;
-    mjs_setString(reach_sensor->name, "Reach");
-    mjs_setDouble(reach_sensor->userdata, (double[]){0 /*Quadratic norm*/, 2.5, 0, 5, 0.01}, 5);
-
-    // 9.2- Bring sensor
-    mjsSensor* bring_sensor = mjs_addSensor(scene_spec);
-    bring_sensor->type = mjSENS_USER;
-    bring_sensor->dim = 7;
-    mjs_setString(bring_sensor->name, "Bring");
-    mjs_setDouble(bring_sensor->userdata, (double[]){2 /*L2 norm*/, 1, 0, 1, 0.003}, 5);
-
-#if MJPC_LSQP_SPAWN_OBJECT
-    // 9.3- Object sensor
-    mjsSensor* obj_pos_sensor = mjs_addSensor(scene_spec);
-    obj_pos_sensor->type = mjSENS_FRAMEPOS;
-    obj_pos_sensor->objtype = mjOBJ_BODY;
-    mjs_setString(obj_pos_sensor->name, (std::string(TARGET_OBJ_NAME) + "_pos").c_str());
-    mjs_setString(obj_pos_sensor->objname, TARGET_OBJ_NAME);
-
-    mjsSensor* obj_quat_sensor = mjs_addSensor(scene_spec);
-    obj_quat_sensor->type = mjSENS_FRAMEQUAT;
-    obj_quat_sensor->objtype = mjOBJ_BODY;
-    mjs_setString(obj_quat_sensor->name, (std::string(TARGET_OBJ_NAME) + "_quat").c_str());
-    mjs_setString(obj_quat_sensor->objname, TARGET_OBJ_NAME);
-#endif
-
-    // 9.4- Palm sensor
-    mjsSensor* palm_sensor = mjs_addSensor(scene_spec);
-    const auto palm_site_name = PalmSiteName();
-    palm_sensor->type = mjSENS_FRAMEPOS;
-    palm_sensor->objtype = mjOBJ_SITE;
-    mjs_setString(palm_sensor->name, (palm_site_name + "_pos").c_str());
-    mjs_setString(palm_sensor->objname, palm_site_name.c_str());
-
-    // 9.5- Fingertip sensors
-    int trace_i = 0;
-    for (const auto& fingertip : FINGERTIP_NAMES) {
-      const auto fingertip_name = attach_prefix_ + fingertip;
-
-      // Trace
-      mjsSensor* trace_sensor = mjs_addSensor(scene_spec);
-      trace_sensor->type = mjSENS_FRAMEPOS;
-      trace_sensor->objtype = mjOBJ_SITE;
-      mjs_setString(trace_sensor->name, (TRACE_SENSOR_PREFIX + std::to_string(trace_i++)).c_str());
-      mjs_setString(trace_sensor->objname, fingertip_name.c_str());
-
-      // Framepos
-      mjsSensor* framepos_sensor = mjs_addSensor(scene_spec);
-      framepos_sensor->type = mjSENS_FRAMEPOS;
-      framepos_sensor->objtype = mjOBJ_SITE;
-      mjs_setString(framepos_sensor->name, (fingertip_name + "_pos").c_str());
-      mjs_setString(framepos_sensor->objname, fingertip_name.c_str());
-
-      // Framelinvel
-      mjsSensor* framelinvel_sensor = mjs_addSensor(scene_spec);
-      framelinvel_sensor->type = mjSENS_FRAMELINVEL;
-      framelinvel_sensor->objtype = mjOBJ_SITE;
-      mjs_setString(framelinvel_sensor->name, (fingertip_name + "_lin_vel").c_str());
-      mjs_setString(framelinvel_sensor->objname, fingertip_name.c_str());
-
-      // Framelinacc
-      mjsSensor* framelinacc_sensor = mjs_addSensor(scene_spec);
-      framelinacc_sensor->type = mjSENS_FRAMELINACC;
-      framelinacc_sensor->objtype = mjOBJ_SITE;
-      mjs_setString(framelinacc_sensor->name, (fingertip_name + "_lin_acc").c_str());
-      mjs_setString(framelinacc_sensor->objname, fingertip_name.c_str());
-
-      // Frameangvel
-      mjsSensor* frameangvel_sensor = mjs_addSensor(scene_spec);
-      frameangvel_sensor->type = mjSENS_FRAMEANGVEL;
-      frameangvel_sensor->objtype = mjOBJ_SITE;
-      mjs_setString(frameangvel_sensor->name, (fingertip_name + "_ang_vel").c_str());
-      mjs_setString(frameangvel_sensor->objname, fingertip_name.c_str());
-
-      // Frameangacc
-      mjsSensor* frameangacc_sensor = mjs_addSensor(scene_spec);
-      frameangacc_sensor->type = mjSENS_FRAMEANGACC;
-      frameangacc_sensor->objtype = mjOBJ_SITE;
-      mjs_setString(frameangacc_sensor->name, (fingertip_name + "_ang_acc").c_str());
-      mjs_setString(frameangacc_sensor->objname, fingertip_name.c_str());
-    }
-
-    // 10- EE Target sensor
-    mjsSensor* ee_target_sensor = mjs_addSensor(scene_spec);
-    const auto ee_target_site_name = EETargetSiteName();
-    ee_target_sensor->type = mjSENS_FRAMEPOS;
-    ee_target_sensor->objtype = mjOBJ_SITE;
-    mjs_setString(ee_target_sensor->name, (ee_target_site_name + "_pos").c_str());
-    mjs_setString(ee_target_sensor->objname, ee_target_site_name.c_str());
-
-#if MJPC_LSQP_SPAWN_OBJECT
-    // 11- Picked object
-    mjsBody* pick_obj = mjs_addBody(world_body, nullptr);
-    mjsJoint* pick_obj_jnt = mjs_addFreeJoint(pick_obj);
-    pick_obj_jnt->armature = 0.1;
-    pick_obj_jnt->damping = 0.5;
-    mjs_setString(pick_obj->name, TARGET_OBJ_NAME);
-    memcpy(pick_obj->pos, TARGET_OBJ_QPOS, sizeof(pick_obj->pos));
-    memcpy(pick_obj->quat, TARGET_OBJ_QPOS + 3, sizeof(pick_obj->quat));
-    pick_obj->mocap = false;
-
-    mjsGeom* pick_obj_geom = mjs_addGeom(pick_obj, nullptr);
-    pick_obj_geom->type = mjGEOM_BOX;
-#if 1
-    pick_obj_geom->density = 8000;
-#else
-    pick_obj->mass = 1;
-    memcpy(pick_obj->inertia, (double[]){1., 1., 1.}, sizeof(pick_obj->inertia));
-#endif
-    memcpy(pick_obj_geom->size, (double[]){0.03, 0.03, 0.03}, sizeof(pick_obj_geom->size));
-    memcpy(pick_obj_geom->rgba, (float[]){0.2, 0.5, 0.3, 0.5}, sizeof(pick_obj_geom->rgba));
-
-    // 11.1- Picked obj's target goal site (!NOTE: Enable site group for visualization)
-    fCreateSite(world_body, TARGET_OBJ_GOAL_NAME,
-                /*pos*/(mjtNum[]){0.1, 0.5, 0.5},/*quat*/(mjtNum[]){0.7, 0., 0.7, 0},
-                mjGEOM_BOX, /*size*/0.03, /*rgba*/(float[]){0.5, 0., 0., 0.5});
-#endif
-
-    // 12- Compile [scene_spec] -> mjModel
-    //!NOTE: If needed, consider setting [scene_spec->modelfiledir], base for all resource paths
-    mjModel* model = mj_compile(scene_spec, vfs_.get());
-#if MJPC_PLANNER_LSQP_DEBUG
-    if (model) {
-      // Output to bin folder
-      mj_saveXML(scene_spec, (iiwa14_name + "_" + allegro_name + ".xml").c_str(), nullptr, 0);
-    }
-#endif
-#endif
-    return model;
+  virtual std::string EETargetMocapName() const {
+    return {};
   }
 
   void ConfigureModel(mjModel* model) override {
@@ -684,65 +392,31 @@ public:
 #endif
   }
 
-  void InitMocaps() {
-#if MJPC_LSQP_PLANAR_ROBOT
-    MoveBodyMocapToSite("target_mocap", "hand");
-#else
-    const auto ee_site_name = EETargetSiteName();
-    mju_copy3(initial_ee_target_pos, QuerySitePos(ee_site_name.data()));
-    mju_copy3(initial_ee_target_quat, QuerySiteQuat(ee_site_name.data()));
-    MoveBodyMocapToSite(EETargetMocapName().data(), ee_site_name.data());
-    for (const auto& fingertip_name : FINGERTIP_NAMES) {
-      const auto finger_site_name = FingertipSiteName(fingertip_name);
-      if (const auto finger_site_id = QuerySiteId(finger_site_name.c_str())) {
-        MoveBodyMocapToSite(FingertipTargetMocapName(fingertip_name).c_str(), finger_site_id);
-      }
-    }
-
-    for (const auto& fingertip : FINGERTIP_NAMES) {
-      mju_sub3(initial_fingertips_direction[fingertip],
-               QuerySitePos(FingertipSiteName(fingertip).data()), initial_ee_target_pos);
-      mju_normalize3(initial_fingertips_direction[fingertip]);
-    }
-#endif
+  virtual void InitMocaps() {
   }
 
-  std::vector<double> GetHandCenterPos(const mjData* data) const {
-    std::vector<double> center_pos(3, 0);
-    // Mid position of {palm, fingertips}
-    double* palm_pos = mjpc::QuerySitePos(model_, data, PalmSiteName().data());
-    for (const auto& fingertip : FINGERTIP_NAMES) {
-      double* fingertip_pos = mjpc::QuerySitePos(model_, data, FingertipSiteName(fingertip).data());
-      mju_addTo3(palm_pos, fingertip_pos);
-    }
-    mju_scl3(center_pos.data(), palm_pos, 0.2);
-    return center_pos;
+  virtual std::vector<double> Control(double* policy_action, mjData* data = nullptr,
+                                      const LsqpSolverPtr& solver = nullptr) {
+    return {};
   }
 
-  class ResidualFn : public BaseResidualFn {
-  public:
-    explicit ResidualFn(const Lsqp* task) : BaseResidualFn(task) {
-    }
+  void InitSolver(const MjOwnerAppType owner_type, int ndofs);
 
-    void Residual(const mjModel* model, const mjData* data, double* residual) const override;
-  };
+  virtual void InitSolverConfigs(const LsqpSolverPtr& solver, const mjData* data, int ndofs) {
+  }
+
+  virtual std::vector<double> Solve(const LsqpSolverPtr& solver, const mjData* data) {
+    return {};
+  }
 
   void ResetLocked(const mjModel* model) override {
     Task::ResetLocked(model);
   }
 
-  // Reset the cube into the hand if it's on the floor
-  void TransitionLocked(mjModel* model, mjData* data) override;
+  virtual void DrawTraces() {
+  }
 
 protected:
-  std::unique_ptr<mjpc::AbstractResidualFn> ResidualLocked() const override {
-    return std::make_unique<ResidualFn>(this);
-  }
-
-  ResidualFn* InternalResidual() override {
-    return &residual_;
-  }
-
   //! xml: xml string or file path
   mjSpec* CreateSpecFromXML(const std::string& spec_name, const std::string& xml) {
     if (auto* spec = mjpc::MjcfModel::LoadToSpec(xml, vfs_.get())) {
@@ -756,18 +430,13 @@ protected:
   }
 
 public:
-  std::vector<double> system_qpos_home;
-  double initial_ee_target_pos[3];
-  double initial_ee_target_quat[4];
-  std::map<std::string, double[3]> initial_fingertips_direction; // toward palm
+  std::vector<double> system_qpos_home_;
+  std::shared_ptr<LsqpSolver> lsqp_solver_ = nullptr;
 
-private:
+protected:
   LsqpPlanner* lsqp_planner_ = nullptr;
-  ResidualFn residual_;
   std::unique_ptr<mjVFS> vfs_ = std::make_unique<mjVFS>();
   std::map<std::string, mjSpec*> spec_map_;
-  std::string attach_prefix_;
-  std::string attach_suffix_;
 };
 
 using LsqpPtr = std::shared_ptr<Lsqp>;

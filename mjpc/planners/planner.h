@@ -25,6 +25,7 @@
 #include "mjpc/urdf_parser/include/model.h"
 #include "mjpc/utilities.h"
 #include "mjpc/core/mjpc_common.h"
+#include "mjpc/utils/mjpc_ctrl_util.h"
 
 namespace mjpc {
 inline constexpr int kMaxTrajectory = 128;
@@ -126,18 +127,8 @@ public:
     control_cb_ = cb;
   }
 
-  std::vector<mjtNum> InvalidControls() const {
-    return InvalidControls(action_dim_);
-  }
-
-  static std::vector<mjtNum> InvalidControls(int nu) {
-    return std::vector(nu, mjMAXVAL + 1);
-  }
-
-  static bool AreInvalidControls(const std::vector<mjtNum>& ctrl) {
-    return std::any_of(ctrl.begin(), ctrl.end(), [&](const mjtNum val) {
-      return mju_isBad(val);
-    });
+  std::vector<mjtNum> InvalidPlannerControls() const {
+    return mjpc::InvalidControls(action_dim_);
   }
 
   std::vector<BaseSolverPtr>& Solvers() {

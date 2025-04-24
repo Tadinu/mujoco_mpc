@@ -3,6 +3,7 @@
 #include <mujoco/mujoco.h>
 
 // mjpc
+#include "mjpc/planners/lsqp/lsqp_damping_task.h"
 #include "mjpc/planners/lsqp/lsqp_base_task.h"
 #include "mjpc/planners/lsqp/lsqp_config.h"
 #include "mjpc/planners/lsqp/lsqp_posture_task.h"
@@ -14,6 +15,8 @@ namespace mjpc {
 class Lsqp;
 
 class LsqpSolver : public BaseSolver {
+  friend class Lsqp;
+
 public:
   LsqpSolver() = default;
 
@@ -23,9 +26,6 @@ public:
     owner_type_(owner_type) {
   }
 
-  void Init(const mjData* data, int ndofs);
-  std::vector<double> Solve(mjData* data);
-
   std::vector<double> DefaultControlInputs() const {
     return std::vector(config_.ndofs(), 0.);
   }
@@ -34,20 +34,25 @@ public:
     return config_;
   }
 
-private:
+  std::vector<LsqpLimitPtr> ConfigLimits() const {
+    return config_limits_;
+  }
+
+public:
   const mjModel* model_ = nullptr;
   Lsqp* lsqp_task_ = nullptr;
   MjOwnerAppType owner_type_ = MjOwnerAppType::MJAPP;
-  LsqpSE3 T_ee_initial_;
+  LsqpSE3 T_wrist_initial_;
 
   // Solver
   LsqpConfig config_;
   std::vector<LsqpBaseTask*> subtasks_;
-  LsqpFrameTask end_effector_subtask_;
+  std::vector<LsqpRelativeFrameTask> end_effector_subtasks_;
   LsqpPostureTask posture_subtask_;
   std::vector<LsqpRelativeFrameTask> finger_subtasks_;
+  LsqpDampingTask damping_subtask_;
   std::vector<LsqpLimitPtr> config_limits_;
-  void SetFrameTaskTarget(mjData* data, LsqpFrameTask* task, const char* target_mocap_name) const;
+  void SetFrameTaskTarget(const mjData* data, LsqpFrameTask* task, const char* target_mocap_name) const;
 };
 
 using LsqpSolverPtr = std::shared_ptr<LsqpSolver>;

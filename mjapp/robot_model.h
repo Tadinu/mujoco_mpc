@@ -68,8 +68,18 @@ public:
     return mjcf_model_->LinkNames();
   }
 
-  void Step() {
-    mj_step(mjcf_model_->model, mjcf_model_->data);
+  void Step(bool kinematics_only = MJPC_LSQP_KINEMATICS_ONLY) {
+    auto* m = mjcf_model_->model;
+    auto* d = mjcf_model_->data;
+    if (kinematics_only) {
+      mj_kinematics(m, d);
+      mj_comPos(m, d);
+    } else {
+      mj_step(m, d);
+    }
+    if (m->neq > 0) {
+      mj_makeConstraint(m, d);
+    }
   }
 
   void ApplyCtrl(int ctrl_id, const mjtNum ctrl) {

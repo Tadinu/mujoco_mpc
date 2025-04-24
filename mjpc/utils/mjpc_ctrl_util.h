@@ -16,7 +16,6 @@
 
 // mjpc
 #include "mjpc/utilities.h"
-#include "mjpc/tasks/lsqp/lsqp.h"
 #include "mjpc/utils/mjpc_core_util.h"
 #include "mjpc/utils/mjpc_math_util.h"
 
@@ -28,6 +27,16 @@ using Matrix6d = Eigen::Matrix<double, 6, 6>;
 using Vector7d = Eigen::Matrix<double, 7, 1>;
 using Matrix7d = Eigen::Matrix<double, 7, 7>;
 static constexpr uint8_t JAC_ROWS_NUM = 6; // linearXYZ + rotXYZ
+
+inline std::vector<mjtNum> InvalidControls(int nu) {
+  return std::vector(nu, mjMAXVAL + 1);
+}
+
+inline bool AreInvalidControls(const std::vector<mjtNum>& ctrl) {
+  return std::any_of(ctrl.begin(), ctrl.end(), [&](const mjtNum val) {
+    return mju_isBad(val);
+  });
+}
 
 // Differential inverse kinematics function
 // Ref: [kevinzakka]-https://github.com/kevinzakka/mjctrl/blob/main/diffik.py
@@ -51,7 +60,7 @@ inline Eigen::VectorXd DiffIk(const Eigen::MatrixXd& J, // Jacobian matrix
   Jt.transposeInPlace();
   return Jt * (J * Jt + regularization).ldlt().solve(vee_desired);
 #else
-  return mjpc::robust_inv(J, damping) * vee_desired;
+  return mjpc::RobustInv(J, damping) * vee_desired;
 #endif
 }
 
@@ -93,20 +102,21 @@ inline std::vector<mjtNum> MjCalculateJacobian(const mjModel* model, const mjDat
   if (base_body_name.empty()) {
     mj_jacSite(model, data, jac.data(), jac.data() + jacr_adr, ee_site_id);
   } else {
-    // Construct chain: [base_body_name] -> [ee_body_name] and sparse Jacobian
-    std::vector<int> chain(nv, 0);
     const int ee_body_id = mjpc::QueryBodyIdFromSite(model, ee_site_id);
     const int base_body_id = mjpc::QueryBodyId(model, base_body_name.data());
     assert(base_body_id >= 0);
-#if 0
+    dofs_num = mjpc::MjuBodyChainDofNum(model, ee_body_id, base_body_id);
+#if 1
     std::vector<mjtNum> jac1(JAC_ROWS_NUM * nv, 0);
     std::vector<mjtNum> jac2(JAC_ROWS_NUM * nv, 0);
-    mjpc::MjuJacDifPair(model, data, chain.data(), base_body_id, ee_body_id,
+    mjpc::MjuJacDifPair(model, data, nullptr, base_body_id, ee_body_id,
                         mjpc::QueryBodyPos(data, base_body_id),
                         mjpc::QuerySitePos(data, ee_site_id),
                         jac1.data(), jac2.data(), jac.data(),
                         jac1.data() + jacr_adr, jac2.data() + jacr_adr, jac.data() + jacr_adr);
 #else
+    // Construct chain: [base_body_name] -> [ee_body_name] and sparse Jacobian
+    std::vector<int> chain(nv, 0);
     dofs_num = mjpc::MjuBodyChain(model, chain.data(), ee_body_id, base_body_id);
 
     // Get sparse body Jacobian structure
@@ -128,14 +138,12 @@ inline std::vector<mjtNum> MjCalculateJacobian(const mjModel* model, const mjDat
   // [jac] -> [out_jac]
   // NOTE: [out_jac] as static, TEMP HACK TO SOLVE UNKNOWN EIGEN MEMORY ISSUE, THIS IS NOT MULTITHREAD-FRIENDLY
   // https://eigen.tuxfamily.org/dox/TopicPitfalls.html
-  const int jac_cols = base_body_name.empty() ? nv : dofs_num;
-  if (jac_cols == dofs_num) {
+  if (nv == dofs_num) {
     return jac;
   } else {
-    // [jac_cols > dofs_num]
     std::vector<mjtNum> out_jac(JAC_ROWS_NUM * dofs_num, 0);
     for (auto i = 0; i < JAC_ROWS_NUM; ++i) {
-      memcpy(out_jac.data() + i * dofs_num, &jac[i * jac_cols], dofs_num * sizeof(mjtNum));
+      memcpy(out_jac.data() + i * dofs_num, &jac[i * dofs_num], dofs_num * sizeof(mjtNum));
     }
     return out_jac;
   }
@@ -188,7 +196,7 @@ inline Eigen::VectorXd ControlDiff(const mjModel* model, const mjData* data,
   mju_scl3(vee_ang_desired, vee_ang_desired, krot);
 
   // Compute joint velocities
-  if (key_qpos) {
+  if (nullspace) {
     const Eigen::VectorXd delta_q = Eigen::Map<const Eigen::VectorXd>(key_qpos, dofs_num) -
                                     Eigen::Map<const Eigen::VectorXd>(cur_qpos, dofs_num);
     return DiffNullspace(J, vee_desired, delta_q);
@@ -310,4 +318,4 @@ inline Eigen::VectorXd ControlOSC(const mjModel* model, mjData* data,
 
   return tau;
 }
-} // namespace mj_app
+} // namespace mjpc

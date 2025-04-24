@@ -19,7 +19,8 @@
 #include "mjpc/utils/mjpc_math_util.h"
 #include "mjpc/utilities.h"
 #include "mjpc/planners/lsqp/lsqp_planner.h"
-#include "mjpc/tasks/lsqp/lsqp.h"
+#include "mjpc/tasks/lsqp/iiwa14_allegro.h"
+#include "mjpc/tasks/garmi/garmi.h"
 
 // mjapp
 #include "mjapp/robot_model.h"
@@ -83,35 +84,38 @@ public:
     // NOTE: This must be invoked everytime a scene XML is newly or reloaded,
     // and necessarily after a call to mj_forward() which fills [data]
 #if MJPC_LSQP_MANUAL_MODE
-    InitControlManualMode(model, mjpc::IsIIWA14()
-                                   ? mjpc::IIWA14_ACTUATED_JOINT_NAMES
-                                   : mjpc::IsUR5()
-                                   ? mjpc::UR5_ACTUATED_JOINT_NAMES
-                                   : mjpc::IsPanda()
-                                   ? mjpc::PANDA_ACTUATED_JOINT_NAMES
-                                   : std::vector<std::string>{});
+    InitControlManualMode(model, mjpc::MAIN_ACTUATED_JOINT_NAMES, mjpc::MAIN_ACTUATOR_NAMES);
 #else
     // 1- Init [lsqp_task_]
-    lsqp_task_->model_ = model;
-    lsqp_task_->data_ = data;
+    lsqp_task_->model_ = const_cast<mjModel*>(model);
+    lsqp_task_->data_ = const_cast<mjData*>(data);
     lsqp_task_->SetPlanner(lsqp_planner_.get());
 
     // 2- Init [lsqp_planner_] with [lsqp_task_]
-    lsqp_planner_->Initialize(model, lsqp_task_);
+    lsqp_planner_->Initialize(lsqp_task_->model_, *lsqp_task_);
 #endif
   }
 
-  void InitControlManualMode(const mjModel* model, const std::vector<std::string>& actuated_joint_names) {
+#if MJPC_LSQP_MANUAL_MODE
+  void InitControlManualMode(const mjModel* model, const std::vector<std::string>& actuated_joint_names,
+                             std::vector<std::string> actuator_names = {}) {
     // [jnt_ids_, dof_ids, actuator_ids_]
     jnt_ids_.clear();
     dof_ids_.clear();
     actuator_ids_.clear();
     for (const auto& jnt_name : actuated_joint_names) {
-      // NOTE: Here we assume all joints = dofs = actuators & sharing the same names as configured in XML
+      // NOTE: Here we assume all joints = dofs & sharing the same names as configured in XML
       const char* name = jnt_name.c_str();
       jnt_ids_.push_back(mjpc::QueryJointId(model, name));
       dof_ids_.push_back(mjpc::QueryDofId(model, name));
-      actuator_ids_.push_back(mjpc::QueryActuatorId(model, name));
+    }
+
+    if (actuator_names.empty()) {
+      actuator_names = actuated_joint_names;
+    }
+
+    for (const auto& act_name : actuator_names) {
+      actuator_ids_.push_back(mjpc::QueryActuatorId(model, act_name.c_str()));
     }
   }
 
@@ -122,8 +126,10 @@ public:
     auto y = r * sin(2 * M_PI * f * t) + k;
     return {x, y};
   }
+#endif
 
-  void Control(const mjModel* model, mjData* data, bool auto_move_target = true) override {
+  void Control(const mjModel* model, mjData* data, bool kinematics_only = MJPC_LSQP_KINEMATICS_ONLY,
+               bool auto_move_target = false) override {
     const mjpc::MutexLock lock(mtx);
 #if MJPC_LSQP_MANUAL_MODE
     // [Control()] can only run after [InitControl()]
@@ -131,26 +137,61 @@ public:
       return;
     }
 
-    if (auto_move_target && !mjpc::MAIN_ROBOT_NULLSPACE_CONTROL_ENABLED) {
+    if (auto_move_target) {
       // Move [target]
       mjtNum target_pos[3];
       mju_copy3(target_pos, mjpc::QueryBodyMocapPos(model, data, "target"));
       mju_copy(target_pos, Circle(data->time, 0.1, 0.5, 0.0, 0.5).data(), 2);
       mjpc::SetBodyMocapPos(model, data, "target", target_pos);
+#if 0
+      mjtNum target_quat[4];
+      for (int i = 0; i < 4; i++) {
+        target_quat[i] = mjpc::Random::rand();
+      }
+      mju_normalize4(target_quat);
+      mjpc::SetBodyMocapQuat(model, data, "target", target_quat);
+#endif
     }
 
     // Control robot [ee] to track [target]
+    if (last_qpos_.empty()) {
+      last_qpos_ = mjpc::QueryKeyJointPositions(model, "home");
+      if (last_qpos_.empty()) {
+        last_qpos_ = std::vector<mjtNum>(jnt_ids_.size(), 0.);
+      }
+    }
     std::vector<mjtNum> cur_qpos;
     for (const auto& jnt_id : jnt_ids_) {
       cur_qpos.push_back(mjpc::QuerySingleJointPos(model, data, jnt_id));
     }
-    auto qvel = mjpc::ControlDiff(model, data,
-                                  mjpc::MAIN_ROBOT_EE_SITE_NAMES[0], "target",
-                                  cur_qpos.data(),
-                                  mjpc::INTEGRATION_DT,
-                                  mjpc::MAIN_ROBOT_NULLSPACE_CONTROL_ENABLED
-                                    ? mjpc::QueryKeyJointPositions(model, "home").data()
-                                    : nullptr);
+
+    VectorXd qvel;
+    if (mjpc::IsDualPanda()) {
+      static constexpr int NV = 14;
+      static constexpr int dofs = NV / 2;
+      using Vector14d = Eigen::Matrix<double, NV, 1>;
+      qvel = Vector14d::Zero();
+      qvel.head<7>() = mjpc::ControlDiff(model, data, mjpc::MAIN_ROBOT_EE_SITE_NAMES[0], "target",
+                                         cur_qpos.data(),
+                                         mjpc::INTEGRATION_DT,
+                                         mjpc::MAIN_ROBOT_NULLSPACE_CONTROL_ENABLED
+                                           ? last_qpos_.data()
+                                           : nullptr,
+                                         mjpc::IsBiFrankaPanda() ? "panda0_link0" : "left_link0");
+      qvel.tail<7>() = mjpc::ControlDiff(model, data, mjpc::MAIN_ROBOT_EE_SITE_NAMES[1], "target",
+                                         cur_qpos.data() + dofs,
+                                         mjpc::INTEGRATION_DT,
+                                         mjpc::MAIN_ROBOT_NULLSPACE_CONTROL_ENABLED
+                                           ? (last_qpos_.data() + dofs)
+                                           : nullptr,
+                                         mjpc::IsBiFrankaPanda() ? "panda1_link0" : "right_link0");
+    } else {
+      qvel = mjpc::ControlDiff(model, data,
+                               mjpc::MAIN_ROBOT_EE_SITE_NAMES[0], "target",
+                               cur_qpos.data(),
+                               mjpc::INTEGRATION_DT,
+                               mjpc::MAIN_ROBOT_NULLSPACE_CONTROL_ENABLED ? last_qpos_.data() : nullptr);
+    }
     assert(cur_qpos.size() == qvel.size());
     mju_addToScl(cur_qpos.data(), qvel.data(), mjpc::INTEGRATION_DT, cur_qpos.size());
     for (auto i = 0; i < jnt_ids_.size(); ++i) {
@@ -160,53 +201,64 @@ public:
       // ghost robot control (required for only certain experiments)
       //main_robot_model->ApplyCtrl(ctrl_id, ctrl_val);
     }
+    last_qpos_.assign(cur_qpos.begin(), cur_qpos.end());
 #else
-    const auto eetarget_mocap_name = lsqp_task_->EETargetMocapName();
-#if 0
-    // RECORD EE_TARGET-POSE
-    double delta_pos[3];
-    mju_sub3(delta_pos, mjpc::QueryBodyPos(model, data, mjpc::Lsqp::TARGET_OBJ_NAME),
-             mjpc::QueryBodyMocapPos(model, data, eetarget_mocap_name.data()));
-    mjpc::print("Pos", delta_pos[0], delta_pos[1], delta_pos[2]);
-
-    double quat[4];
-    mju_copy4(quat, mjpc::QueryBodyMocapQuat(model, data, eetarget_mocap_name.data()));
-    mjpc::print("Quat", quat[0], quat[1], quat[2], quat[3]);
-#endif
-
-    if (auto_move_target) {
-#if 1
-      mjtNum target_pos[3];
-      // MOVE [ee_target] MOCAP TO A SPECIFIC EE_TARGET-POSE
-      mju_add3(target_pos, mjpc::QueryBodyPos(model, data, mjpc::Lsqp::TARGET_OBJ_NAME),
-               (double [3]){0, 0, 0.07});
-#else
-      // MOVE [ee_target] MOCAP AROUND
-      static constexpr float radius = 0.5;
-      mjtNum target_pos[3] = {
-          lsqp_task_->initial_ee_target_pos[0] /* + radius * cos(M_PI * data->time)*/,
-          lsqp_task_->initial_ee_target_pos[1] + radius * sin(M_PI * data->time),
-          lsqp_task_->initial_ee_target_pos[2]};
-#endif
-      mjpc::SetBodyMocapPos(model, data, eetarget_mocap_name.data(), target_pos);
-      mjpc::SetBodyMocapQuat(model, data, eetarget_mocap_name.data(), mjpc::Lsqp::EE_TARGET_PREGRASP_QUAT);
-    }
-
-    // Follow [ee_target] by diff-ik
+    // Follow [ee_target]
     const bool interactive = !auto_move_target;
-    lsqp_planner_->LsqpControl(interactive
-                                 ? nullptr
-                                 : std::vector<double>(mjpc::CEM_PARAMS_TOTAL_DIM,
-                                                       mjpc::Random::rand(-1., 1.)).data());
+    const auto ctrl = lsqp_planner_->LsqpControl(interactive
+                                                   ? nullptr
+                                                   : std::vector<double>(mjpc::CEM_PARAMS_TOTAL_DIM,
+                                                     mjpc::Random::rand(-1., 1.)).data());
+    // Copy [ctrl] -> [data->ctrl]
+    if (!mjpc::AreInvalidControls(ctrl)) {
+#if 1
+      static const bool is_garmi = std::dynamic_pointer_cast<mjpc::Garmi>(lsqp_task_) != nullptr;
+      static std::vector<std::string> finger_jnt_names;
+      if (finger_jnt_names.empty() && !is_garmi) {
+        for (const auto& fjnames : mjpc::ALLEGRO_ACTUATED_JOINT_NAMES) {
+          finger_jnt_names = mjpc::ChainCollections<std::string>(finger_jnt_names, fjnames);
+        }
+      }
+      static const auto joint_names = is_garmi
+                                        ? mjpc::GARMI_ACTUATED_JOINT_NAMES
+                                        : mjpc::ChainCollections<std::string>(
+                                            mjpc::IIWA14_ACTUATED_JOINT_NAMES,
+                                            finger_jnt_names);
+      static const auto act_names = is_garmi
+                                      ? mjpc::GARMI_ACTUATOR_NAMES
+                                      : joint_names;
+
+      if (kinematics_only) {
+        for (const auto& jnt_name : joint_names) {
+          const int i = mjpc::QueryJointId(model, jnt_name.c_str());
+          if (mjpc::Lsqp::POSITION_CTRL_ENABLED) {
+            data->qpos[mjpc::QueryJointPosAddress(model, i)] = ctrl[i];
+          } else {
+            data->qvel[mjpc::QueryJointDofAddress(model, i)] = ctrl[i];
+          }
+        }
+      } else {
+        for (int i = 0; i < act_names.size(); ++i) {
+          const auto& act_name = act_names[i];
+          data->ctrl[mjpc::QueryActuatorId(model, act_name.c_str())] = ctrl[i];
+        }
+      }
+#else
+      mju_copy(kinematics_only ? (mjpc::Lsqp::POSITION_CTRL_ENABLED ? data->qpos : data->qvel) : data->ctrl,
+               ctrl.data(), ctrl.size());
 #endif
+    }
+#endif // END MJPC_LSQP_AUTO_MODE
   }
 
+#if MJPC_LSQP_MANUAL_OSC_ENABLED
   void ControlOSCBodyChain(const mjModel* model, mjData* data,
                            const std::string& ee_site_name, const std::string& target_name,
                            const std::vector<string>& jnt_names,
                            const mjtNum* key_qpos,
                            const VectorXd& kp_null, // Impedance control gains
-                           const std::string& base_body_name = {}/*Make sure base_body has at least 1 dof*/) {
+                           const std::string& base_body_name = {}/*Make sure base_body has at least 1 dof*/,
+                           bool kinematics_only = MJPC_LSQP_KINEMATICS_ONLY) {
     std::vector<mjtNum> cur_qpos;
     std::vector<mjtNum> cur_qvel;
     std::vector<mjtNum> cur_qfrc_bias;
@@ -237,15 +289,20 @@ public:
     for (auto i = 0; i < dof_ids_.size(); ++i) {
       const auto& ctrl_id = actuator_ids_[i];
       const auto& ctrl_val = tau[i];
-      data->ctrl[ctrl_id] = ctrl_val;
+      if (kinematics_only) {
+        data->qpos[i] = ctrl_val;
+      }
+      else {
+        data->ctrl[ctrl_id] = ctrl_val;
+      }
       // ghost robot control (required for only certain experiments)
       //main_robot_model->ApplyCtrl(ctrl_id, ctrl_val);
     }
   }
 
-  void ControlOSC(const mjModel* model, mjData* data, bool auto_move_target = false) {
+  void ControlOSC(const mjModel* model, mjData* data, bool kinematics_only = MJPC_LSQP_KINEMATICS_ONLY,
+    bool auto_move_target = false) {
     const mjpc::MutexLock lock(mtx);
-#if MJPC_LSQP_MANUAL_MODE
     // [Control()] can only run after [InitControl()]
     if (!control_inited_) {
       return;
@@ -268,7 +325,8 @@ public:
                         mjpc::IIWA14_ACTUATED_JOINT_NAMES,
                         mjpc::IIWA14_HOME_QPOS,
                         IIWA14_KP_NULL,
-                        mjpc::IIWA14_BASE_DOF_BODY_NAME);
+                        mjpc::IIWA14_BASE_DOF_BODY_NAME,
+                        kinematics_only);
 
     // Control fingers -> Fingertips
     if (mjpc::IsIIWA14Allegro()) {
@@ -280,11 +338,12 @@ public:
                             mjpc::ALLEGRO_ACTUATED_JOINT_NAMES[i],
                             mjpc::ALLEGRO_HOME_QPOS[i],
                             ALLEGRO_KP_NULL,
-                            mjpc::ALLEGRO_BASE_DOF_BODY_NAME);
+                            mjpc::ALLEGRO_BASE_DOF_BODY_NAME,
+                            kinematics_only);
       }
     }
-#endif
   }
+#endif
 
 protected:
   void ModifyVisualScene(mjvScene* scn, const mjModel* model, const mjData* data) override {
@@ -301,8 +360,9 @@ private:
   std::vector<int> jnt_ids_; // nq
   std::vector<int> dof_ids_; // nv
   std::vector<int> actuator_ids_; // nu
+  std::vector<mjtNum> last_qpos_;
 #endif
-  mjpc::LsqpPtr lsqp_task_ = std::make_shared<mjpc::Lsqp>();
+  mjpc::LsqpPtr lsqp_task_ = std::make_shared<mjpc::Garmi>();
   mjpc::LsqpPlannerPtr lsqp_planner_ = std::make_shared<mjpc::LsqpPlanner>(mjpc::MjOwnerAppType::MJAPP);
 };
 } // namespace mujoco

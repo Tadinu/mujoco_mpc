@@ -50,12 +50,13 @@ public:
 
   std::string Name() const { return name_; }
   virtual bool Empty() const { return false; }
-  virtual Eigen::VectorXd ComputeError(mjData* data, const LsqpConfig& config) const = 0;
-  virtual Eigen::MatrixXd ComputeJac(mjData* data, const LsqpConfig& config) const = 0;
+  virtual Eigen::VectorXd ComputeError(const mjData* data, const LsqpConfig& config) const = 0;
+  virtual Eigen::MatrixXd ComputeJac(const mjData* data, const LsqpConfig& config) const = 0;
 
-  LsqpObjective ComputeQPObjective(mjData* data, const LsqpConfig& config) const {
+  LsqpObjective ComputeQPObjective(const mjData* data, const LsqpConfig& config) const {
     const int ndofs = config.ndofs();
     Eigen::MatrixXd jac = ComputeJac(data, config);
+    //mjpc::print(jac);
     const int jac_rows = jac.rows();
     const int jac_cols = jac.cols();
     const bool bTrim_dofs = config.MjModel()->nv > ndofs;

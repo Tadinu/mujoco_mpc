@@ -266,9 +266,11 @@ set(DM_ROBOTICS_BUILD_DIR "${DM_ROBOTICS_DIR}/build_gcc")
 
 # qp_solver_collection
 find_package(qp_solver_collection REQUIRED)
+set(QP_SOLVER_3RD_LIBS qp_solver_collection::QpSolverCollection)
+
 # -> required 3rd solvers:
 # NOTE: If any solver is unavailable, make sure [qp_solver_collection] is rebuilt with its disabled ENABLE_<solver> flag
-set(QP_SOLVER_3RD_LIBS eigen-quadprog::eigen-quadprog)
+set(QP_SOLVER_3RD_LIBS "${QP_SOLVER_3RD_LIBS}" eigen-quadprog::eigen-quadprog)
 find_package(eigen-quadprog REQUIRED)
 
 # [osqp]: Only required if using either [Google's osqp-cpp]
@@ -277,6 +279,10 @@ find_package(eigen-quadprog REQUIRED)
 # Robotology's cpp wrapper over osqp
 #set(QP_SOLVER_3RD_LIBS "${QP_SOLVER_3RD_LIBS}" OsqpEigen::OsqpEigen)
 #find_package(OsqpEigen REQUIRED)
+
+# daqp
+set(QP_SOLVER_3RD_LIBS "${QP_SOLVER_3RD_LIBS}" daqp daqpstat)
+find_package(daqp REQUIRED)
 
 set(MJPC_COMPILE_OPTIONS "${AVX_COMPILE_OPTIONS}" "${EXTRA_COMPILE_OPTIONS}")
 set(MJPC_LINK_OPTIONS "${EXTRA_LINK_OPTIONS}")

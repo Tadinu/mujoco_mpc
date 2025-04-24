@@ -28,8 +28,11 @@ public:
   int ndofs() const { return ndofs_; }
   int nv() const { return model_->nv; }
   int nq() const { return model_->nq; }
-  virtual LsqpConstraint ComputeQPInequalities(mjData* data, const LsqpConfig& config,
+  virtual LsqpConstraint ComputeQPInequalities(const mjData* data, const LsqpConfig& config,
                                                double dt = 1.0) const = 0;
+
+  virtual Eigen::VectorXd Lower() const { return {}; }
+  virtual Eigen::VectorXd Upper() const { return {}; }
 
 protected:
   const mjModel* model_ = nullptr;
@@ -109,16 +112,19 @@ public:
     }
 
     if (!index_list.empty()) {
-      assert(ndofs_ <= index_list.size());
-      indices_ = Eigen::VectorXi::Map(index_list.data(), ndofs_);
-      projection_matrix_ = Eigen::MatrixXd::Zero(ndofs_, ndofs_);
+      assert(index_list.size() <= ndofs_);
+      indices_ = Eigen::VectorXi::Map(index_list.data(), index_list.size());
+      projection_matrix_ = Eigen::MatrixXd::Zero(index_list.size(), ndofs_);
       for (int i = 0; i < indices_.size(); ++i) {
         projection_matrix_(i, indices_[i]) = 1.0;
       }
     }
   }
 
-  LsqpConstraint ComputeQPInequalities(mjData* data, const LsqpConfig& config, double dt = 1.0) const {
+  Eigen::VectorXd Lower() const override { return lower_(indices_); }
+  Eigen::VectorXd Upper() const override { return upper_(indices_); }
+
+  LsqpConstraint ComputeQPInequalities(const mjData* data, const LsqpConfig& config, double dt = 1.0) const {
     if (projection_matrix_.size() == 0) {
       return {};
     }
@@ -140,10 +146,11 @@ public:
     const Eigen::VectorXd p_max = gain_ * dq_max(indices_);
 
     // https://kevinzakka.github.io/mink/derivations.html
+    // dq = v * dt
     // q_min <= q + dq <= q_max
     //  -dq <= (q - q_min)
     //   dq <= (q_max - q)
-    // [G*dq <= h]
+    // [G*dq <= h], G = [1, -1]^T, h = [q_max - q, q - q_min]^T
     const auto rows = projection_matrix_.rows();
     Eigen::MatrixXd G(2 * rows, projection_matrix_.cols());
     G.topRows(indices_.size()) = -projection_matrix_; // G_min
@@ -215,7 +222,7 @@ public:
     }
   }
 
-  LsqpConstraint ComputeQPInequalities(mjData* data, const LsqpConfig& config, double dt = 1.0) const {
+  LsqpConstraint ComputeQPInequalities(const mjData* data, const LsqpConfig& config, double dt = 1.0) const {
     if (projection_matrix_.size() == 0) {
       return {};
     }

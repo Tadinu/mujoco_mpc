@@ -65,9 +65,6 @@ public:
   }
 
   // visualize planner-specific traces
-  double visual_policy_ee_target_pos_[3];
-  double visual_ee_direction_[3];
-  double palm_normal_[3];
   void Traces(mjvScene* scn) override;
 
   void ClearTrace() override {
@@ -109,7 +106,6 @@ public:
 protected:
   // mjpc
   mutable std::shared_mutex mutex_;
-  LsqpSolverPtr lsqp_solver_ = nullptr;
 };
 
 using LsqpPlannerPtr = std::shared_ptr<LsqpPlanner>;

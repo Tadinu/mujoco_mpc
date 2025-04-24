@@ -180,8 +180,11 @@ static int MjuBodyChain(const mjModel* m, int* chain, int body, int base_body = 
     //mjpc::print(body, mj_id2name(m, mjOBJ_BODY, body), "dof_adr", m->body_dofadr[body]);
     //mjpc::print(base_body, mj_id2name(m, mjOBJ_BODY, base_body), "dof_adr", m->body_dofadr[base_body]);
     while ((da > -1) && (da >= m->body_dofadr[base_body])) {
-      //mjpc::print(da, mj_id2name(m, mjOBJ_JOINT, m->dof_jntid[da]));
+      //mjpc::print(da, mj_id2name(m, mjOBJ_JOINT, m->dof_jntid[da]), "body", m->dof_bodyid[da]);
       chain[NV++] = da;
+      if (m->dof_bodyid[da] == base_body + 1) {
+        break;
+      }
       da = m->dof_parentid[da];
     }
 
@@ -192,6 +195,43 @@ static int MjuBodyChain(const mjModel* m, int* chain, int body, int base_body = 
       chain[NV - i - 1] = tmp;
     }
 
+    return NV;
+  }
+}
+
+static int MjuBodyChainDofNum(const mjModel* m, int body, int base_body = 0) {
+  // simple body
+  if (m->body_simple[body]) {
+    return m->body_dofnum[body];
+  }
+
+  // general case
+  else {
+    // skip fixed bodies
+    while (body && !m->body_dofnum[body]) {
+      body = m->body_parentid[body];
+    }
+
+    // not movable: empty chain
+    if (body == base_body) {
+      return 0;
+    }
+
+    // intialize last dof
+    int da = m->body_dofadr[body] + m->body_dofnum[body] - 1;
+    int NV = 0;
+
+    // construct chain from child to parent
+    //mjpc::print(body, mj_id2name(m, mjOBJ_BODY, body), "dof_adr", m->body_dofadr[body]);
+    //mjpc::print(base_body, mj_id2name(m, mjOBJ_BODY, base_body), "dof_adr", m->body_dofadr[base_body]);
+    while ((da > -1) && (da >= m->body_dofadr[base_body])) {
+      //mjpc::print(da, mj_id2name(m, mjOBJ_JOINT, m->dof_jntid[da]), "body", m->dof_bodyid[da]);
+      NV++;
+      if (m->dof_bodyid[da] == base_body + 1) {
+        break;
+      }
+      da = m->dof_parentid[da];
+    }
     return NV;
   }
 }
@@ -297,6 +337,10 @@ static void MjuJacSparse(const mjModel* m, const mjData* d,
     // find chain index for this dof
     while (ci >= 0 && chain[ci] > da) {
       ci--;
+    }
+
+    if (m->dof_bodyid[da] == base_body_id + 1) {
+      break;
     }
 
     // make sure we found it; SHOULD NOT OCCUR

@@ -267,11 +267,30 @@ mjModel* LoadModel(const char* file, mjapp::Simulate& sim) {
   return mnew;
 }
 
-void StepModel(mjapp::Simulate& sim, mjModel* m, mjData* d) {
-  mj_step(m, d);
-  for (auto& [_,robot_model] : sim.GetRobotModels()) {
-    robot_model->Step();
+void StepModel(mjapp::Simulate& sim, mjModel* m, mjData* d,
+               bool kinematics_only = MJPC_LSQP_KINEMATICS_ONLY) {
+  if (kinematics_only) {
+    mj_kinematics(m, d);
+    mj_comPos(m, d);
+  } else {
+    mj_step(m, d);
   }
+  if (m->neq > 0) {
+    mj_makeConstraint(m, d);
+  }
+#if 0
+  for (auto& [_,robot_model] : sim.GetRobotModels()) {
+    robot_model->Step(kinematics_only);
+  }
+#endif
+
+  // Invoke [gbSim] controlling here instead of [controller()] callback, which only runs upon mj_step()
+  // Write into [data->ctrl]
+#if MJPC_LSQP_MANUAL_OSC_ENABLED
+  gbSim->ControlOSC(m, d, kinematics_only);
+#else
+  gbSim->Control(m, d, kinematics_only);
+#endif
 }
 
 void PostLoadModel(mjapp::Simulate& sim, mjModel* m, mjData* d) {
@@ -456,14 +475,10 @@ void controller(const mjModel* m, mjData* d);
 void controller(const mjModel* m, mjData* d) {
   // NOTE: This happens when multiple XML loading or direct model compilation are done, creating multiple [m,d],
   // while there is only a single [mjcb_control]
+  // ALSO This only runs in physics mode upon mj_step()
   if (d != mjapp::d) {
     return;
   }
-#if MJPC_LSQP_OSC_ENABLED
-  gbSim->ControlOSC(m, d);
-#else
-  gbSim->Control(m, d);
-#endif
 }
 
 //-------------------------------------- physics_thread --------------------------------------------

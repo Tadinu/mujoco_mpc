@@ -73,7 +73,8 @@ public:
   virtual void InitInThread(mjModel* model, mjData* data) {
   }
 
-  virtual void Control(const mjModel* model, mjData* data, bool auto_move_target = false) {
+  virtual void Control(const mjModel* model, mjData* data, bool kinematics_only,
+                       bool auto_move_target) {
   }
 
   virtual void ModifyVisualScene(mjvScene* scn, const mjModel* model, const mjData* data) {

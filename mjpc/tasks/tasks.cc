@@ -21,6 +21,7 @@
 #include "mjpc/tasks/acrobot/acrobot.h"
 #include "mjpc/tasks/allegro/allegro.h"
 #include "mjpc/tasks/allegro_x/allegro_x.h"
+#include "mjpc/tasks/garmi/garmi.h"
 #include "mjpc/tasks/bimanual/cobring/cobring.h"
 #include "mjpc/tasks/bimanual/handover/handover.h"
 #include "mjpc/tasks/bimanual/insert/insert.h"
@@ -46,13 +47,15 @@
 #include "mjpc/tasks/walker/walker.h"
 #include "planar_robot/planar_robot.h"
 // EXTRA
-#include "mjpc/tasks/lsqp/lsqp.h"
+#include "mjpc/tasks/lsqp/iiwa14_allegro.h"
+#include "mjpc/tasks/garmi/garmi.h"
 #include "mjpc/tasks/mpl/mpl.h"
 
 namespace mjpc {
 std::vector<std::shared_ptr<Task>> GetTasks() {
   return {
-      std::make_shared<Lsqp>(),
+      std::make_shared<IIWA14Allegro>(),
+      std::make_shared<Garmi>(),
       std::make_shared<MPL>(),
       std::make_shared<manipulation_x::Bring>(),
       std::make_shared<manipulation::Bring>(),

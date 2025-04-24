@@ -38,19 +38,19 @@ public:
     target_q_ = std::move(target);
   }
 
-  Eigen::VectorXd ComputeError(mjData* data, const LsqpConfig& config) const override {
+  Eigen::VectorXd ComputeError(const mjData* data, const LsqpConfig& config) const override {
     if (Empty()) {
       throw std::runtime_error("`target_q_` is empty");
     }
 
     assert(target_q_.size() == config.nq());
-    Eigen::VectorXd dq = Eigen::VectorXd::Zero(config.nq());
-    mj_differentiatePos(config.MjModel(), dq.data(), 1.0, data->qpos, target_q_.data());
-    mjpc::ResetEigenVector(dq, free_dof_ids_);
-    return dq;
+    Eigen::VectorXd qvel = Eigen::VectorXd::Zero(config.nv());
+    mj_differentiatePos(config.MjModel(), qvel.data(), 1.0, data->qpos, target_q_.data());
+    mjpc::ResetEigenVector(qvel, free_dof_ids_);
+    return qvel;
   }
 
-  Eigen::MatrixXd ComputeJac(mjData* data, const LsqpConfig& config) const override {
+  Eigen::MatrixXd ComputeJac(const mjData* data, const LsqpConfig& config) const override {
     if (Empty()) {
       throw std::runtime_error("`target_q_` is empty");
     }

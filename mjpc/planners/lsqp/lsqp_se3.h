@@ -185,11 +185,13 @@ public:
 
   // Compute adjoint matrix
   Eigen::MatrixXd Adjoint() const override {
-    Eigen::MatrixXd adj = Eigen::MatrixXd::Zero(TANGENT_DIM, TANGENT_DIM);
-    const Eigen::Matrix3d R = rotation_.AsMatrix();
-    adj.block<3, 3>(0, 0) = R; // Top-left
-    adj.block<3, 3>(0, 3) = Skew(translation_) * R; // Top-right
-    adj.block<3, 3>(3, 3) = R; // Bottom-right
+    Eigen::MatrixXd adj = Eigen::Matrix<double, TANGENT_DIM, TANGENT_DIM>::Zero();
+    if constexpr (TANGENT_DIM == 6) {
+      const Eigen::Matrix3d R = rotation_.AsMatrix();
+      adj.topLeftCorner<3, 3>() = R;
+      adj.topRightCorner<3, 3>() = Skew(translation_) * R; // Tangent matrix
+      adj.bottomRightCorner<3, 3>() = R;
+    }
     return adj;
   }
 
@@ -197,22 +199,24 @@ public:
   Eigen::MatrixXd LeftJac(const Eigen::VectorXd& tangent) const override {
     assert(tangent.size() == TANGENT_DIM);
 
-    // Extract translational (upsilon) and rotational (omega) components
-    Eigen::Vector3d upsilon = tangent.head<3>();
-    Eigen::Vector3d theta = tangent.tail<3>();
+    // Extract translational (upsilon) and rotational (theta) components
+    //const Eigen::Vector3d upsilon = tangent.head<3>();
+    const Eigen::Vector3d theta = tangent.tail<3>();
 
     // Compute the rotational left Jacobian for SO(3)
     static LsqpSO3 so3;
-    Eigen::Matrix3d J_R = so3.LeftJac(theta);
+    const Eigen::Matrix3d J_R = so3.LeftJac(theta);
 
     // Compute the Q matrix
-    Eigen::Matrix3d Q = GetQ(tangent);
+    const Eigen::Matrix3d Q = GetQ(tangent);
 
     // Construct the 6x6 left Jacobian matrix
-    Eigen::MatrixXd J_ljac = Eigen::MatrixXd::Zero(TANGENT_DIM, TANGENT_DIM);
-    J_ljac.block<3, 3>(0, 0) = J_R; // Top-left: rotational Jacobian
-    J_ljac.block<3, 3>(3, 0) = Q; // Bottom-left: Q coupling matrix
-    J_ljac.block<3, 3>(3, 3) = J_R; // Bottom-right: rotational Jacobian
+    Eigen::MatrixXd J_ljac = Eigen::Matrix<double, TANGENT_DIM, TANGENT_DIM>::Zero();
+    if constexpr (TANGENT_DIM == 6) {
+      J_ljac.topLeftCorner<3, 3>() = J_R; // Rotational Jacobian
+      J_ljac.bottomLeftCorner<3, 3>() = Q; // Q coupling matrix
+      J_ljac.bottomRightCorner<3, 3>() = J_R; // Rotational Jacobian
+    }
 
     return J_ljac;
   }
@@ -221,23 +225,25 @@ public:
     assert(tangent.size() == TANGENT_DIM);
 
     // Extract translational (upsilon) and rotational (omega) components
-    Eigen::Vector3d theta = tangent.tail<3>();
+    const Eigen::Vector3d theta = tangent.tail<3>();
     if (theta.dot(theta) < 1e-10) {
       return Eigen::MatrixXd::Identity(TANGENT_DIM, TANGENT_DIM);
     }
 
     // Compute the rotational left Jacobian inverse for SO(3)
     static LsqpSO3 so3;
-    Eigen::Matrix3d J_R_inv = so3.LeftJacInverse(theta);
+    const Eigen::Matrix3d J_R_inv = so3.LeftJacInverse(theta);
 
     // Compute the Q matrix
-    Eigen::Matrix3d Q = GetQ(tangent);
+    const Eigen::Matrix3d Q = GetQ(tangent);
 
     // Construct the 6x6 left Jacobian inverse
-    Eigen::MatrixXd J_ljacinv = Eigen::MatrixXd::Zero(TANGENT_DIM, TANGENT_DIM);
-    J_ljacinv.block<3, 3>(0, 0) = J_R_inv; // Top-left: inverse rotational Jacobian
-    J_ljacinv.block<3, 3>(3, 0) = -J_R_inv * Q * J_R_inv; // Bottom-left: coupling
-    J_ljacinv.block<3, 3>(3, 3) = J_R_inv; // Bottom-right: inverse rotational Jacobian
+    Eigen::MatrixXd J_ljacinv = Eigen::Matrix<double, TANGENT_DIM, TANGENT_DIM>::Zero();
+    if constexpr (TANGENT_DIM == 6) {
+      J_ljacinv.topLeftCorner<3, 3>() = J_R_inv; // Inverse rotational Jacobian
+      J_ljacinv.bottomLeftCorner<3, 3>() = -J_R_inv * Q * J_R_inv; // Coupling
+      J_ljacinv.bottomRightCorner<3, 3>() = J_R_inv; // Inverse rotational Jacobian
+    }
     return J_ljacinv;
   }
 

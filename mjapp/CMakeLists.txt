@@ -106,7 +106,6 @@ target_link_libraries(libmjapp_simulate PUBLIC
   ${DM_ROBOTICS_BUILD_DIR}/mujoco/libdmr_mujoco.so
   ${DM_ROBOTICS_BUILD_DIR}/least_squares_qp/core/libdmr_lsqp_core.so
   ${DM_ROBOTICS_BUILD_DIR}/least_squares_qp/common/libdmr_lsqp_common.so
-  qp_solver_collection::QpSolverCollection
   ${QP_SOLVER_3RD_LIBS}
 )
 target_link_options(libmjapp_simulate PRIVATE ${MJPC_LINK_OPTIONS})

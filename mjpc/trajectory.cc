@@ -146,7 +146,7 @@ void Trajectory::NoisyRollout(std::function<void(double* action, const double* s
 
     if (control_cb) {
       const std::vector<mjtNum> ctrl = control_cb(act, data, solver);
-      if (Planner::AreInvalidControls(ctrl)) {
+      if (mjpc::AreInvalidControls(ctrl)) {
         data->warning[mjWARN_BADCTRL].number++;
       } else {
         mju_copy(data->ctrl, ctrl.data(), nu);

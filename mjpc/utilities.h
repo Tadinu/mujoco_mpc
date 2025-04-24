@@ -135,14 +135,20 @@ inline int QueryJointId(const mjModel* model, const char* joint_name) {
   return model ? mj_name2id(model, mjOBJ_JOINT, joint_name) : -1;
 }
 
+inline int QueryJointPosAddress(const mjModel* model, int joint_id) {
+  return (model && (joint_id > -1) && (joint_id < model->njnt)) ? model->jnt_qposadr[joint_id] : -1;
+}
+
 inline int QueryJointPosAddress(const mjModel* model, const char* joint_name) {
-  int joint_id = QueryJointId(model, joint_name);
-  return (model && (joint_id > -1) && (joint_id < model->njnt)) ? model->jnt_qposadr[joint_id] : 0;
+  return QueryJointPosAddress(model, QueryJointId(model, joint_name));
+}
+
+inline int QueryJointDofAddress(const mjModel* model, int joint_id) {
+  return (model && (joint_id > -1) && (joint_id < model->njnt)) ? model->jnt_dofadr[joint_id] : -1;
 }
 
 inline int QueryJointDofAddress(const mjModel* model, const char* joint_name) {
-  int joint_id = QueryJointId(model, joint_name);
-  return (model && (joint_id > -1) && (joint_id < model->njnt)) ? model->jnt_dofadr[joint_id] : 0;
+  return QueryJointDofAddress(model, QueryJointId(model, joint_name));
 }
 
 // NOTE: model_->nq,nv are actuated joints/controls configured in MJ model

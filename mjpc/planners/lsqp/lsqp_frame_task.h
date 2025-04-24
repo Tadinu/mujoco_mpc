@@ -35,7 +35,7 @@ public:
 
   ~LsqpFrameTask() override = default;
 
-  virtual SE3 GetFrameTransform(mjData* data, const LsqpConfig& config) const {
+  virtual SE3 GetFrameTransform(const mjData* data, const LsqpConfig& config) const {
     return config.GetTransformFrameToWorld(data, frame_name_, frame_type_);
   }
 
@@ -47,14 +47,13 @@ public:
     SetTarget(GetFrameTransform(data, config));
   }
 
-  Eigen::VectorXd ComputeError(mjData* data, const LsqpConfig& config) const override {
+  Eigen::VectorXd ComputeError(const mjData* data, const LsqpConfig& config) const override {
     return target_transform_.Minus(GetFrameTransform(data, config));
   }
 
-  Eigen::MatrixXd ComputeJac(mjData* data, const LsqpConfig& config) const override {
+  Eigen::MatrixXd ComputeJac(const mjData* data, const LsqpConfig& config) const override {
     const Eigen::MatrixXd frame_jac = config.GetFrameJacobian(data, frame_name_, frame_type_);
     const SE3 current_frame_transf = GetFrameTransform(data, config);
-
     const SE3 new_target_transf = target_transform_.Inverse() * current_frame_transf;
     return -new_target_transf.JacLog() * frame_jac;
   }
