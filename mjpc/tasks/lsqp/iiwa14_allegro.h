@@ -6,6 +6,8 @@
 #include <mujoco/mujoco.h>
 #include "mjpc/tasks/lsqp/lsqp.h"
 
+#define IIWA14_ALLEGRO_BRING (0)
+
 namespace mjpc {
 class IIWA14Allegro : public Lsqp {
 public:
@@ -126,7 +128,8 @@ public:
     // NOTE: Larger [agent_horizon] may require larger [kMaxTrajectoryHorizon] configured in [trajectory.h]
     fCreateNumeric("agent_horizon", 0.1);
     fCreateNumeric("agent_timestep", INTEGRATION_DT);
-    fCreateNumeric("sampling_trajectories", 10);
+    fCreateNumeric("sampling_trajectories", 60);
+    fCreateNumeric("sampling_spline_points", 5);
 
     // 4- Attach [allegro_palm] -> [scene_spec] through [attach_site]
     // NOTE: This prefix will be prepended to names of all child elements (bodies, geoms, etc.) in [allegro_model]
@@ -321,12 +324,14 @@ public:
     mjs_setString(reach_sensor->name, "Reach");
     mjs_setDouble(reach_sensor->userdata, (double[]){0 /*Quadratic norm*/, 2.5, 0, 5, 0.01}, 5);
 
+#if IIWA14_ALLEGRO_BRING
     // 9.2- Bring sensor
     mjsSensor* bring_sensor = mjs_addSensor(scene_spec);
     bring_sensor->type = mjSENS_USER;
     bring_sensor->dim = 7;
     mjs_setString(bring_sensor->name, "Bring");
     mjs_setDouble(bring_sensor->userdata, (double[]){2 /*L2 norm*/, 1, 0, 1, 0.003}, 5);
+#endif
 
 #if MJPC_LSQP_SPAWN_OBJECT
     // 9.3- Object sensor

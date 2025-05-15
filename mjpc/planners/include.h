@@ -30,6 +30,7 @@ enum PlannerType : int {
   kILQSPlanner,
   kRobustPlanner,
   kCrossEntropyPlanner,
+  kDiffusionPlanner,
   kSampleGradientPlanner,
 };
 

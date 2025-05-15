@@ -25,7 +25,7 @@
 #include "mjpc/tasks/tasks.h"
 
 // Particle, Quadruped Flat
-ABSL_FLAG(std::string, task_name, "XPickAndPlace", "Which model to load on startup.");
+ABSL_FLAG(std::string, task_name, "Quadruped Flat", "Which model to load on startup.");
 
 // machinery for replacing command line error by a macOS dialog box
 // when running under Rosetta

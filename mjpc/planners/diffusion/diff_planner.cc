@@ -1,0 +1,636 @@
+#include <absl/random/random.h>
+#include <absl/types/span.h>
+#include <mujoco/mujoco.h>
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <mutex>
+#include <shared_mutex>
+
+#include "mjpc/array_safety.h"
+#include "mjpc/planners/diffusion/diff_planner.h"
+#include "mjpc/planners/planner.h"
+#include "mjpc/planners/sampling/planner.h"
+#include "mjpc/spline/spline.h"
+#include "mjpc/states/state.h"
+#include "mjpc/task.h"
+#include "mjpc/threadpool.h"
+#include "mjpc/trajectory.h"
+#include "mjpc/utilities.h"
+
+namespace mjpc {
+namespace mju = ::mujoco::util_mjpc;
+using mjpc::spline::TimeSpline;
+
+// initialize data and settings
+void DiffusionPlanner::Initialize(mjModel* model, const Task& task) {
+  // delete mjData instances since model might have changed.
+  data_.clear();
+  solvers_.clear();
+
+  // allocate one mjData for nominal.
+  ResizeMjData(model, 1);
+
+  // model
+  this->model = model;
+  action_dim_ = model->nu;
+  const auto limits_num = 2 * action_dim_;
+  action_limits_.resize(limits_num);
+  mju_copy(action_limits_.data(), model->actuator_ctrlrange, limits_num); // [min, max, min, max, ..]
+
+  // task
+  this->task = &task;
+
+  // sampling noise
+  std_initial_ = GetNumberOrDefault(0.1, model,
+                                    "sampling_exploration"); // initial variance
+  std_min_ = GetNumberOrDefault(0.01, model, "std_min"); // minimum variance
+  // fraction of the trajectories that will use full exploration noise
+  explore_fraction_ = GetNumberOrDefault(0.0, model, "explore_fraction");
+
+  // set number of trajectories to rollout
+  num_trajectory_ = GetNumberOrDefault(10, model, "sampling_trajectories");
+
+  // set number of elite samples max(best 10%, 2)
+  n_elite_ = GetNumberOrDefault(std::max(num_trajectory_ / 10, 2), model, "n_elite");
+
+  if (num_trajectory_ > kMaxTrajectory) {
+    mju_error_i("Too many trajectories, %d is the maximum allowed.", kMaxTrajectory);
+  }
+
+  // DIFFUSION
+  diff_config_.Nsample = num_trajectory_;
+  mbdpi_ = std::make_unique<MBDPI>(this, diff_config_, action_dim_);
+  Y_ = Eigen::MatrixXd::Zero(diff_config_.Hnode + 1, action_dim_);
+}
+
+// allocate memory
+void DiffusionPlanner::Allocate() {
+  // initial state
+  int num_state = model->nq + model->nv + model->na;
+
+  // state
+  state.resize(num_state);
+  mocap.resize(7 * model->nmocap);
+  userdata.resize(model->nuserdata);
+
+  // policy
+  int num_max_parameter = action_dim_ * kMaxTrajectoryHorizon;
+  policy(model, action_dim_, action_limits_).Allocate(model, *task, kMaxTrajectoryHorizon);
+  nominal_policy(model, action_dim_, action_limits_).Allocate(model, *task, kMaxTrajectoryHorizon);
+  previous_policy(model, action_dim_, action_limits_).Allocate(model, *task, kMaxTrajectoryHorizon);
+
+  // scratch
+  parameters_scratch.resize(num_max_parameter);
+  times_scratch.resize(kMaxTrajectoryHorizon);
+
+  // noise
+  noise.resize(kMaxTrajectory * (action_dim_ * kMaxTrajectoryHorizon));
+
+  // variance
+  variance.resize(action_dim_ * kMaxTrajectoryHorizon); // (nu * horizon)
+
+  // need to initialize an arbitrary order of the trajectories
+  trajectory_order.resize(kMaxTrajectory);
+  for (int i = 0; i < kMaxTrajectory; i++) {
+    trajectory_order[i] = i;
+  }
+
+  // trajectories and parameters
+  for (int i = 0; i < kMaxTrajectory; i++) {
+    trajectory[i]->Initialize(num_state, action_dim_, task->num_residual, task->num_trace,
+                              kMaxTrajectoryHorizon);
+    trajectory[i]->Allocate(kMaxTrajectoryHorizon);
+    candidate_policy[i](model, action_dim_, action_limits_).Allocate(model, *task, kMaxTrajectoryHorizon);
+  }
+  nominal_trajectory->Initialize(num_state, action_dim_, task->num_residual, task->num_trace,
+                                 kMaxTrajectoryHorizon);
+  nominal_trajectory->Allocate(kMaxTrajectoryHorizon);
+}
+
+// reset memory to zeros
+void DiffusionPlanner::Reset(int horizon, const double* initial_repeated_action) {
+  // state
+  std::fill(state.begin(), state.end(), 0.0);
+  std::fill(mocap.begin(), mocap.end(), 0.0);
+  std::fill(userdata.begin(), userdata.end(), 0.0);
+  time = 0.0;
+
+  // policy parameters
+  policy.Reset(horizon, initial_repeated_action);
+  nominal_policy.Reset(horizon, initial_repeated_action);
+  previous_policy.Reset(horizon, initial_repeated_action);
+
+  // scratch
+  std::fill(parameters_scratch.begin(), parameters_scratch.end(), 0.0);
+  std::fill(times_scratch.begin(), times_scratch.end(), 0.0);
+
+  // noise
+  std::fill(noise.begin(), noise.end(), 0.0);
+
+  // variance
+  double var = std_initial_ * std_initial_;
+  std::fill(variance.begin(), variance.end(), var);
+
+  // trajectory samples
+  for (int i = 0; i < kMaxTrajectory; i++) {
+    trajectory[i]->Reset(kMaxTrajectoryHorizon);
+    candidate_policy[i].Reset(horizon);
+  }
+  nominal_trajectory->Reset(kMaxTrajectoryHorizon);
+
+  for (const auto& d : data_) {
+    mju_zero(d->ctrl, action_dim_);
+  }
+
+  // improvement
+  improvement = 0.0;
+}
+
+// set state
+void DiffusionPlanner::SetState(const State& state) {
+  state.CopyTo(this->state.data(), this->mocap.data(), this->userdata.data(), &this->time);
+}
+
+void DiffusionPlanner::ResizeMjData(const mjModel* model, int num_threads) {
+  Planner::ResizeMjData(model, num_threads);
+  if (post_resize_mjdata_cb_) {
+    post_resize_mjdata_cb_();
+  }
+}
+
+void DiffusionPlanner::ReverseScan(Eigen::MatrixXd& Y0,
+                                   const Eigen::VectorXd& traj_diffuse_factors, int horizon,
+                                   ThreadPool& pool) {
+  for (const auto& f : traj_diffuse_factors) {
+    Y0 = mbdpi_->ReverseOnce(Y0, f, horizon, pool);
+  }
+  policy = PolicyFromY(horizon, Y0);
+}
+
+Eigen::VectorXd GetTrajDiffuseFactors(int n_diffuse,
+                                      double traj_diffuse_factor = 0.5) {
+  // assume: double traj_diffuse_factor; int n_diffuse;
+  Eigen::VectorXd arange = Eigen::VectorXd::LinSpaced(n_diffuse, 0, n_diffuse - 1);
+  Eigen::VectorXd traj_diffuse_factors = arange.unaryExpr([&](double x) {
+    return std::pow(traj_diffuse_factor, x);
+  });
+  return traj_diffuse_factors;
+}
+
+Eigen::VectorXd Acts2Joints(const Eigen::VectorXd& act,
+                            const std::pair<Eigen::VectorXd, Eigen::VectorXd>& joint_range,
+                            const double action_scale = 1.0) {
+  Eigen::VectorXd act_normalized = (act * action_scale + Eigen::VectorXd::Ones(act.size())) / 2.0; // (nu,)
+  Eigen::VectorXd joint_targets = joint_range.first
+                                  + act_normalized * (joint_range.second - joint_range.first);
+  return joint_targets;
+}
+
+SamplingPolicy DiffusionPlanner::PolicyFromY(int horizon, const Eigen::MatrixXd& Y0s) {
+  SamplingPolicy res_policy = policy;
+  // dimensions
+  res_policy.num_spline_points = Y0s.rows();
+
+  // time
+  double nominal_time = time;
+  double time_shift = mju_max((horizon - 1) * model->opt.timestep / (res_policy.num_spline_points - 1),
+                              1.0e-5);
+
+  // get spline points
+  for (int t = 0; t < res_policy.num_spline_points; t++) {
+    times_scratch[t] = nominal_time;
+    nominal_time += time_shift;
+  }
+
+  // copy resampled policy parameters
+  res_policy.plan.Clear();
+  for (int t = 0; t < res_policy.num_spline_points; t++) {
+    absl::Span<const double> values = absl::MakeConstSpan(Y0s.row(t).data(), Y0s.cols());
+    res_policy.plan.AddNode(times_scratch[t], values);
+  }
+  res_policy.plan.SetInterpolation(policy.plan.Interpolation());
+  return res_policy;
+}
+
+void DiffusionPlanner::Plan(int horizon, ThreadPool& pool) {
+  // Compose [Y_]
+  static bool first_time = true;
+  Y_ = Shift(Y_, first_time ? 0.0 : GetDuration(last_plan_time_), mbdpi_->step_nodes);
+  last_plan_time_ = std::chrono::steady_clock::now();
+
+  // ReverseScan [Y_]
+  if (first_time) {
+    first_time = false;
+    ReverseScan(Y_, GetTrajDiffuseFactors(diff_config_.Ndiffuse_init), horizon, pool);
+  }
+
+  ReverseScan(Y_, GetTrajDiffuseFactors(diff_config_.Ndiffuse), horizon, pool);
+#if 0
+  auto us = mbdpi_->Nodes2Us(Y_);
+  assert(us.size() == action_dim_);
+  Eigen::VectorXd limit0 = mjpc::ArrayToEigen(action_limits_.data(), action_dim_);
+  Eigen::VectorXd limit1 = mjpc::ArrayToEigen(action_limits_.data() + action_dim_, action_dim_);
+  auto joint_targets = Acts2Joints(us, {limit0, limit1});
+  mjpc::print(joint_targets);
+  assert(parameters_scratch.size() == joint_targets.size());
+  mju_copy(parameters_scratch.data(), joint_targets.data(), joint_targets.size());
+#endif
+}
+
+// optimize nominal policy using random sampling
+// Inputs: candidate_policy[] + trajectory[]
+// Outputs: policy (temp) -> nominal_policy + nominal_trajectory
+// Temp: policy, parameters_scratch[], times_scratch[]
+void DiffusionPlanner::OptimizePolicy(int horizon, ThreadPool& pool) {
+  // Update [nominal_policy]'s plan interpolation mode by Planner's
+  nominal_policy.plan.SetInterpolation(interpolation_);
+
+  // if num_trajectory_ has changed, use it in this new iteration.
+  // num_trajectory_ might change while this function runs. Keep it constant
+  // for the duration of this function.
+  int num_trajectory = num_trajectory_;
+
+  // n_elite_ might change in the GUI - keep constant for in this function
+  n_elite_ = std::min(n_elite_, num_trajectory);
+  int n_elite = std::min(n_elite_, num_trajectory);
+
+  // resize number of mjData
+  ResizeMjData(model, pool.NumThreads());
+
+  // update [nominal_policy] <- [policy] from the previous run
+  {
+    const std::shared_lock<std::shared_mutex> lock(mtx_);
+    nominal_policy.CopyFrom(policy, policy.num_spline_points);
+  }
+
+  // resample [nominal_policy] to current time
+  // 1- Update [times_scratch] to current time
+  // 2- Sample/Interpolate [parameters_scratch] using [nominal policy]'s plan
+  // 2.1- Reupdate [nominal_policy]'s plan with [times_scratch] (as current time now) + sampled
+  // [parameters_scratch]
+  // 3- Update [nominal_policy]'s plan interpolation mode with [policy]'s one
+  this->ResamplePolicy(horizon);
+
+  // ----- rollout noisy policies ----- //
+  // start timer
+  auto rollouts_start = std::chrono::steady_clock::now();
+
+#if 1
+  // DIFFUSION
+  // Update [policy] here-in!
+  Plan(horizon, pool);
+#else
+  // perturb policies with noise & rollout them all
+  // ([candidate_policy] + [nominal_policy]) -> [trajectory[i].total_return]
+  this->Rollouts(num_trajectory, horizon, pool);
+
+  // sort candidate policies and trajectories by score
+  for (int i = 0; i < num_trajectory; i++) {
+    trajectory_order[i] = i;
+  }
+
+  // sort [trajectory_order[]] so that the first ncandidates elements are the best candidates, and
+  // the rest are in an unspecified order
+  std::partial_sort(trajectory_order.begin(), trajectory_order.begin() + num_trajectory,
+                    trajectory_order.begin() + num_trajectory, [&trajectory = trajectory](int a, int b) {
+                      return trajectory[a]->total_return < trajectory[b]->total_return;
+                    });
+
+  // stop timer
+  rollouts_compute_time = GetDuration(rollouts_start);
+
+  // ----- update policy ----- //
+  // start timer
+  auto policy_update_start = std::chrono::steady_clock::now();
+
+  // dimensions
+  int num_spline_points = nominal_policy.num_spline_points;
+  int num_parameters = num_spline_points * action_dim_;
+
+  // averaged return over elites
+  double avg_return = 0.0;
+
+  // reset [parameters_scratch]
+  std::fill(parameters_scratch.begin(), parameters_scratch.end(), 0.0);
+
+  // loop over elites to compute average total_return
+  // update [parameters_scratch] with [candidate_policy[elite_i]]
+  for (int i = 0; i < n_elite; i++) {
+    // ordered trajectory index
+    int idx = trajectory_order[i];
+    const TimeSpline& elite_plan = candidate_policy[idx].plan;
+
+    // add parameters
+    for (int t = 0; t < num_spline_points; t++) {
+      TimeSpline::ConstNode n = elite_plan.NodeAt(t);
+      for (int j = 0; j < action_dim_; j++) {
+        parameters_scratch[t * action_dim_ + j] += n.values()[j];
+      }
+    }
+
+    // add total return
+    avg_return += trajectory[idx]->total_return;
+  }
+
+  // normalize [parameters_scratch]
+  mju_scl(parameters_scratch.data(), parameters_scratch.data(), 1.0 / n_elite, num_parameters);
+  avg_return /= n_elite;
+
+  // compute [variance] (for noise added to [candidate_policy[]] during rollouts on the next batch)
+  // loop over elites (node values of candidate_policy[trajectory_order[0]])
+  std::fill(variance.begin(), variance.end(), 0.0); // reset variance to zero
+  for (int i = 0; i < n_elite; i++) {
+    int idx = trajectory_order[i];
+    const TimeSpline& elite_plan = candidate_policy[idx].plan;
+    for (int t = 0; t < num_spline_points; t++) {
+      TimeSpline::ConstNode n = elite_plan.NodeAt(t);
+      for (int j = 0; j < action_dim_; j++) {
+        // average
+        const double p_avg = parameters_scratch[t * action_dim_ + j];
+
+        // candidate parameter
+        const double pi = n.values()[j];
+        const double diff = pi - p_avg;
+        variance[t * action_dim_ + j] += (n_elite >= 1) ? (n_elite * pow(diff, 2)) / (n_elite - 1) : 0;
+      }
+    }
+  }
+
+  // update [policy] with [times_scratch] + [parameters_scratch] of all [candidate_policy[]]
+  UpdatePolicyWithScratch(policy);
+
+  // improvement: compare nominal to elite average
+  improvement = mju_max(avg_return - trajectory[trajectory_order[0]]->total_return, 0.0);
+
+  // stop timer
+  policy_update_compute_time = GetDuration(policy_update_start);
+#endif
+}
+
+void DiffusionPlanner::UpdatePolicyWithScratch(SamplingPolicy& in_policy) {
+  const std::unique_lock<std::shared_mutex> lock(mtx_);
+  in_policy.plan.Clear();
+  in_policy.plan.SetInterpolation(interpolation_);
+  for (int t = 0; t < in_policy.num_spline_points; t++) {
+    absl::Span<const double> values = absl::MakeConstSpan(parameters_scratch.data() + t * action_dim_,
+                                                          parameters_scratch.data() + (t + 1) * action_dim_);
+    in_policy.plan.AddNode(times_scratch[t], values);
+  }
+}
+
+// compute trajectory using nominal policy
+void DiffusionPlanner::NominalTrajectory(int horizon) {
+  // set policy
+  auto frun_nominal_policy = [&cp = nominal_policy](double* action, const double* state, double time) {
+    cp.Action(action, state, time);
+  };
+
+  // rollout nominal policy
+  nominal_trajectory->Rollout(frun_nominal_policy, task, model, data_[ThreadPool::WorkerId()].get(),
+                              state.data(), time, mocap.data(), userdata.data(), horizon,
+                              solvers_[ThreadPool::WorkerId()], control_cb_);
+}
+
+void DiffusionPlanner::NominalTrajectory(int horizon, ThreadPool& pool) { NominalTrajectory(horizon); }
+
+// set action from policy
+void DiffusionPlanner::ActionFromPolicy(double* action, const double* state, double time, bool use_previous) {
+  const std::shared_lock<std::shared_mutex> lock(mtx_);
+  if (use_previous) {
+    previous_policy.Action(action, state, time);
+  } else {
+    policy.Action(action, state, time);
+  }
+}
+
+// update policy via resampling
+void DiffusionPlanner::ResamplePolicy(int horizon) {
+  // dimensions
+  int num_spline_points = nominal_policy.num_spline_points;
+
+  // time
+  double nominal_time = time;
+  double time_shift = mju_max((horizon - 1) * model->opt.timestep / (num_spline_points - 1), 1.0e-5);
+
+  // get spline points
+  for (int t = 0; t < num_spline_points; t++) {
+    times_scratch[t] = nominal_time;
+    nominal_policy.Action(DataAt(parameters_scratch, t * action_dim_), nullptr, nominal_time);
+    nominal_time += time_shift;
+  }
+
+  // copy resampled policy parameters
+  nominal_policy.plan.Clear();
+  for (int t = 0; t < num_spline_points; t++) {
+    absl::Span<const double> values = absl::MakeConstSpan(parameters_scratch.data() + t * action_dim_,
+                                                          parameters_scratch.data() + (t + 1) * action_dim_);
+    nominal_policy.plan.AddNode(times_scratch[t], values);
+  }
+  nominal_policy.plan.SetInterpolation(policy.plan.Interpolation());
+}
+
+// add random noise to nominal policy
+void DiffusionPlanner::AddNoiseToPolicy(int i, double std_min) {
+  // start timer
+  auto noise_start = std::chrono::steady_clock::now();
+
+  // dimensions
+  int num_spline_points = candidate_policy[i].num_spline_points;
+  int num_parameters = num_spline_points * action_dim_;
+
+  // sampling token
+  absl::BitGen gen_;
+
+  // shift index
+  int shift = i * (action_dim_ * kMaxTrajectoryHorizon);
+
+  // sample noise
+  // variance[k] is the standard deviation for the k^th control parameter over
+  // the elite samples we draw a bunch of control actions from this distribution
+  // (which i indexes) - the noise is stored in `noise`.
+  for (int k = 0; k < num_parameters; k++) {
+    noise[k + shift] = absl::Gaussian<double>(gen_, 0.0, std::max(std::sqrt(variance[k]), std_min));
+  }
+
+  for (int k = 0; k < candidate_policy[i].plan.Size(); k++) {
+    TimeSpline::Node n = candidate_policy[i].plan.NodeAt(k);
+    // add noise
+    mju_addTo(n.values().data(), DataAt(noise, shift + k * action_dim_), action_dim_);
+    // clamp parameters
+    Clamp(n.values().data(), action_limits_.data(), action_dim_);
+  }
+
+  // end timer
+  IncrementAtomic(noise_compute_time, GetDuration(noise_start));
+}
+
+// compute candidate trajectories
+void DiffusionPlanner::Rollouts(int num_trajectory, const std::vector<Eigen::MatrixXd>& Y0s,
+                                int horizon, ThreadPool& pool) {
+  // reset noise compute time
+  noise_compute_time = 0.0;
+
+  // lock std_min
+  double std_min = std_min_;
+  double std_initial = std_initial_;
+
+  // random search
+  int count_before = pool.GetCount();
+  for (int i = 0; i < num_trajectory; i++) {
+    double std;
+    if (i < num_trajectory * explore_fraction_) {
+      std = std_initial;
+    } else {
+      std = std_min;
+    }
+    pool.Schedule([&s = *this, &model = this->model, &task = this->task, &state = this->state,
+          &time = this->time, &mocap = this->mocap, &userdata = this->userdata, &Y0s, horizon, std,
+          i]() {
+          // copy [nominal_policy] -> all of [candidate_policy], added with noise
+          {
+            const std::shared_lock<std::shared_mutex> lock(s.mtx_);
+            s.nominal_policy = s.PolicyFromY(horizon, Y0s[i]);
+            s.candidate_policy[i].CopyFrom(s.nominal_policy, s.nominal_policy.num_spline_points);
+            s.candidate_policy[i].plan.SetInterpolation(s.nominal_policy.plan.Interpolation());
+
+            // sample noise
+            s.AddNoiseToPolicy(i, std);
+          }
+
+          // ----- rollout sample policy ----- //
+
+          // run all of sample [candidate_policy]
+          auto sample_policy_i = [&candidate_policy = s.candidate_policy, &i](
+              double* action, const double* state,
+              double time) {
+            candidate_policy[i].Action(action, state, time);
+          };
+
+          // policy rollout
+          s.trajectory[i]->Rollout(sample_policy_i, task, model, s.data_[ThreadPool::WorkerId()].get(),
+                                   state.data(), time, mocap.data(), userdata.data(), horizon,
+                                   s.solvers_[ThreadPool::WorkerId()], s.control_cb_);
+        });
+  }
+  // nominal
+  pool.Schedule([&s = *this, horizon]() { s.NominalTrajectory(horizon); });
+
+  // wait
+  pool.WaitCount(count_before + num_trajectory + 1);
+  pool.ResetCount();
+}
+
+// returns the **nominal** trajectory (this is the purple trace)
+const Trajectory* DiffusionPlanner::BestTrajectory() { return nominal_trajectory.get(); }
+
+// visualize planner-specific traces
+void DiffusionPlanner::Traces(mjvScene* scn) {
+  // sample color
+  float color[4];
+  color[0] = 1.0;
+  color[1] = 1.0;
+  color[2] = 1.0;
+  color[3] = 1.0;
+
+  // width of a sample trace, in pixels
+  double width = GetNumberOrDefault(3, model, "agent_sample_width");
+
+  // scratch
+  double zero3[3] = {0};
+  double zero9[9] = {0};
+
+  // best
+  auto best = this->BestTrajectory();
+
+  // sample traces
+  int n_elite = n_elite_;
+  for (int k = 0; k < n_elite; k++) {
+    // plot sample
+    for (int i = 0; i < best->horizon - 1; i++) {
+      if (scn->ngeom + task->num_trace > scn->maxgeom) break;
+      for (int j = 0; j < task->num_trace; j++) {
+        // initialize geometry
+        mjv_initGeom(&scn->geoms[scn->ngeom], mjGEOM_LINE, zero3, zero3, zero9, color);
+
+        // elite index
+        int idx = trajectory_order[k];
+        // make geometry
+        mjv_connector(&scn->geoms[scn->ngeom], mjGEOM_LINE, width,
+                      trajectory[idx]->trace.data() + 3 * task->num_trace * i + 3 * j,
+                      trajectory[idx]->trace.data() + 3 * task->num_trace * (i + 1) + 3 * j);
+
+        // increment number of geometries
+        scn->ngeom += 1;
+      }
+    }
+  }
+}
+
+// planner-specific GUI elements
+void DiffusionPlanner::GUI(mjUI& ui) {
+  mjuiDef defCrossEntropy[] = {{mjITEM_SLIDERINT, "Rollouts", 2, &num_trajectory_, "0 1"},
+                               {mjITEM_SELECT, "Spline", 2, &interpolation_, "Zero\nLinear\nCubic"},
+                               {mjITEM_SLIDERINT, "Spline Pts", 2, &policy.num_spline_points, "0 1"},
+                               {mjITEM_SLIDERNUM, "Init. Std", 2, &std_initial_, "0 1"},
+                               {mjITEM_SLIDERNUM, "Min. Std", 2, &std_min_, "0.01 0.5"},
+                               {mjITEM_SLIDERNUM, "Explore", 2, &explore_fraction_, "0.0 1.0"},
+                               {mjITEM_SLIDERINT, "Elite", 2, &n_elite_, "2 128"},
+                               {mjITEM_END}};
+
+  // set number of trajectory slider limits
+  mju::sprintf_arr(defCrossEntropy[0].other, "%i %i", 1, kMaxTrajectory);
+
+  // set spline point limits
+  mju::sprintf_arr(defCrossEntropy[2].other, "%i %i", MinSamplingSplinePoints, MaxSamplingSplinePoints);
+
+  // set noise standard deviation limits
+  mju::sprintf_arr(defCrossEntropy[3].other, "%f %f", MinNoiseStdDev, MaxNoiseStdDev);
+
+  // add cross entropy planner
+  mjui_add(&ui, defCrossEntropy);
+}
+
+// planner-specific plots
+void DiffusionPlanner::Plots(mjvFigure* fig_planner, mjvFigure* fig_timer, int planner_shift, int timer_shift,
+                             int planning, int* shift) {
+  // ----- planner ----- //
+  double planner_bounds[2] = {-6.0, 6.0};
+
+  // improvement
+  mjpc::PlotUpdateData(fig_planner, planner_bounds, fig_planner->linedata[0 + planner_shift][0] + 1,
+                       mju_log10(mju_max(improvement, 1.0e-6)), 100, 0 + planner_shift, 0, 1, -100);
+
+  // legend
+  mju::strcpy_arr(fig_planner->linename[0 + planner_shift], "Avg - Best");
+
+  fig_planner->range[1][0] = planner_bounds[0];
+  fig_planner->range[1][1] = planner_bounds[1];
+
+  // bounds
+  double timer_bounds[2] = {0.0, 1.0};
+
+  // ----- timer ----- //
+
+  PlotUpdateData(fig_timer, timer_bounds, fig_timer->linedata[0 + timer_shift][0] + 1,
+                 1.0e-3 * noise_compute_time * planning, 100, 0 + timer_shift, 0, 1, -100);
+
+  PlotUpdateData(fig_timer, timer_bounds, fig_timer->linedata[1 + timer_shift][0] + 1,
+                 1.0e-3 * rollouts_compute_time * planning, 100, 1 + timer_shift, 0, 1, -100);
+
+  PlotUpdateData(fig_timer, timer_bounds, fig_timer->linedata[2 + timer_shift][0] + 1,
+                 1.0e-3 * policy_update_compute_time * planning, 100, 2 + timer_shift, 0, 1, -100);
+
+  // legend
+  mju::strcpy_arr(fig_timer->linename[0 + timer_shift], "Noise");
+  mju::strcpy_arr(fig_timer->linename[1 + timer_shift], "Rollout");
+  mju::strcpy_arr(fig_timer->linename[2 + timer_shift], "Policy Update");
+
+  // planner shift
+  shift[0] += 1;
+
+  // timer shift
+  shift[1] += 3;
+}
+} // namespace mjpc

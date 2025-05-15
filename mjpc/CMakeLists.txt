@@ -86,6 +86,9 @@ set(LIB_MJPC_HEADERS
         planners/cost_derivatives.h
         planners/model_derivatives.h
         planners/cross_entropy/planner.h
+        planners/diffusion/diff_planner.h
+        planners/diffusion/diff_config.h
+        planners/diffusion/diff_core.h
         planners/robust/robust_planner.h
         planners/sample_gradient/planner.h
         planners/sampling/planner.h
@@ -245,6 +248,8 @@ add_library(
         planners/cost_derivatives.cc
         planners/model_derivatives.cc
         planners/cross_entropy/planner.cc
+        planners/diffusion/diff_planner.cc
+        planners/diffusion/diff_core.cpp
         planners/robust/robust_planner.cc
         planners/sample_gradient/planner.cc
         planners/sampling/planner.cc

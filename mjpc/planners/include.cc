@@ -20,6 +20,7 @@
 #include "mjpc/planners/bimanual/bimanual_planner.h"
 #include "mjpc/planners/cio/cio_planner.h"
 #include "mjpc/planners/cross_entropy/planner.h"
+#include "mjpc/planners/diffusion/diff_planner.h"
 #include "mjpc/planners/fabrics/include/fab_planner.h"
 #include "mjpc/planners/gradient/planner.h"
 #include "mjpc/planners/lsqp/lsqp_planner.h"
@@ -51,6 +52,7 @@ const char kPlannerNames[] =
     "iLQS\n"
     "Robust Sampling\n"
     "Cross Entropy\n"
+    "Diffusion\n"
     "Sample Gradient";
 
 // load all available planners
@@ -74,6 +76,7 @@ std::vector<std::unique_ptr<mjpc::Planner>> LoadPlanners() {
   planners.emplace_back(new mjpc::iLQSPlanner);
   planners.emplace_back(new RobustPlanner(std::make_unique<mjpc::SamplingPlanner>()));
   planners.emplace_back(new mjpc::CrossEntropyPlanner);
+  planners.emplace_back(new mjpc::DiffusionPlanner);
   planners.emplace_back(new mjpc::SampleGradientPlanner);
 
   assert(planners.size() == mjpc::tokenize<std::string>(kPlannerNames, "\n", true).size());

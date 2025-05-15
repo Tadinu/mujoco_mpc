@@ -239,18 +239,22 @@ IIWA14Allegro::Control(double* policy_action, mjData* data, const LsqpSolverPtr&
 
   // [Lsqp solver]: solve diff-ik
   std::vector<double> ctrl = is_rollout_thread_data ? Solve(solver, data) : Solve(lsqp_solver_, data);
-  if (is_rollout_thread_data && !MJPC_LSQP_FINGERS_OSC) {
-    for (uint8_t i = IIWA14_DOF; i < IIWA14_DOF + ALLEGRO_DOF; ++i) {
-      const int jnt_id = model_->dof_jntid[i];
-      const double low_lim = model_->jnt_range[2 * jnt_id];
-      const double high_lim = model_->jnt_range[2 * jnt_id + 1];
-      ctrl[i] = low_lim + (policy_action
-                             ? std::abs(policy_action[EE_CEM_PARAMS_DIM + (i - IIWA14_DOF)])
-                             : mjpc::Random::rand()) * (high_lim - low_lim);
+  if (ctrl.size()) {
+    if (is_rollout_thread_data && !MJPC_LSQP_FINGERS_OSC) {
+      for (uint8_t i = IIWA14_DOF; i < IIWA14_DOF + ALLEGRO_DOF; ++i) {
+        const int jnt_id = model_->dof_jntid[i];
+        const double low_lim = model_->jnt_range[2 * jnt_id];
+        const double high_lim = model_->jnt_range[2 * jnt_id + 1];
+        ctrl[i] = low_lim + (policy_action
+                               ? std::abs(policy_action[EE_CEM_PARAMS_DIM + (i - IIWA14_DOF)])
+                               : mjpc::Random::rand()) * (high_lim - low_lim);
+      }
+      if (!has_reached_target_obj) {
+        mju_zero(ctrl.data() + IIWA14_DOF, ALLEGRO_DOF);
+      }
     }
-    if (!has_reached_target_obj) {
-      mju_zero(ctrl.data() + IIWA14_DOF, ALLEGRO_DOF);
-    }
+  } else {
+    ctrl = std::vector<double>(IIWA14_DOF + ALLEGRO_DOF, 0.0);
   }
 
   mjpc::print("[IIWA14Allegro] Solved ctrl", ctrl);
@@ -311,8 +315,6 @@ std::vector<double> IIWA14Allegro::Solve(const LsqpSolverPtr& solver, const mjDa
       ctrl = std::vector<double>(vel.size(), 0.0);
       mju_copy(ctrl.data(), vel.data(), ctrl.size());
     }
-  } else {
-    mju_zero(ctrl.data(), ctrl.size());
   }
 
   // Save latest [T_wrist] to [data->userdata]
@@ -411,10 +413,11 @@ void IIWA14Allegro::ResidualFn::Residual(const mjModel* model, const mjData* dat
   // EE target position
   double* ee_target_pos = SensorByName(model, data, lsqp_task->EETargetSiteName() + "_pos");
 
-  // position error
+  // reach error
   mju_sub3(residual + counter, obj_pos, ee_target_pos);
   counter += 3;
 
+#if IIWA14_ALLEGRO_BRING
   // ---------- Residual (1) ----------
   // goal position error
   mju_sub3(residual + counter, mjpc::QuerySitePos(model, data, TARGET_OBJ_GOAL_NAME), obj_pos);
@@ -424,7 +427,6 @@ void IIWA14Allegro::ResidualFn::Residual(const mjModel* model, const mjData* dat
   mju_subQuat(residual + counter, mjpc::QuerySiteQuat(model, data, TARGET_OBJ_GOAL_NAME), obj_quat);
   counter += 4;
 
-#if 0
   // ---------- Residual (2) ----------
   // grasp error
   residual[counter++] = cost_calc_.TotalCost();
