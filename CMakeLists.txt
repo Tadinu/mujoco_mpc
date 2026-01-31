@@ -196,7 +196,7 @@ FetchContent_Declare(
 
 FetchContent_GetProperties(menagerie)
 if(NOT menagerie_POPULATED)
-  FetchContent_Populate(menagerie)
+  FetchContent_MakeAvailable(menagerie)
 endif()
 
 FetchContent_Declare(
@@ -207,7 +207,7 @@ FetchContent_Declare(
 
 FetchContent_GetProperties(dm_control)
 if(NOT dm_control_POPULATED)
-  FetchContent_Populate(dm_control)
+  FetchContent_MakeAvailable(dm_control)
 endif()
 
 if(NOT TARGET lodepng)
@@ -219,7 +219,7 @@ if(NOT TARGET lodepng)
 
   FetchContent_GetProperties(lodepng)
   if(NOT lodepng_POPULATED)
-    FetchContent_Populate(lodepng)
+    FetchContent_MakeAvailable(lodepng)
     # This is not a CMake project.
     set(LODEPNG_SRCS ${lodepng_SOURCE_DIR}/lodepng.cpp)
     set(LODEPNG_HEADERS ${lodepng_SOURCE_DIR}/lodepng.h)
@@ -262,7 +262,7 @@ else ()
 endif ()
 
 # dm-robotics
-set(DM_ROBOTICS_BUILD_DIR "${DM_ROBOTICS_DIR}/build_gcc")
+set(DM_ROBOTICS_RELEASE_DIR "${DM_ROBOTICS_DIR}/release")
 
 # qp_solver_collection
 find_package(qp_solver_collection REQUIRED)

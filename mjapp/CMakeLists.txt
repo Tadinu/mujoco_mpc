@@ -53,7 +53,7 @@ if(NOT TARGET lodepng)
 
   FetchContent_GetProperties(lodepng)
   if(NOT lodepng_POPULATED)
-    FetchContent_Populate(lodepng)
+    FetchContent_MakeAvailable(lodepng)
     # This is not a CMake project.
     set(LODEPNG_SRCS ${lodepng_SOURCE_DIR}/lodepng.cpp)
     set(LODEPNG_HEADERS ${lodepng_SOURCE_DIR}/lodepng.h)
@@ -102,10 +102,10 @@ target_link_libraries(libmjapp_simulate PUBLIC
   Eigen3::Eigen
   casadi
   ${DQ_DIR}/lib/libdqrobotics.so
-  ${DM_ROBOTICS_BUILD_DIR}/controllers/lsqp/libdmr_controllers_lsqp.so
-  ${DM_ROBOTICS_BUILD_DIR}/mujoco/libdmr_mujoco.so
-  ${DM_ROBOTICS_BUILD_DIR}/least_squares_qp/core/libdmr_lsqp_core.so
-  ${DM_ROBOTICS_BUILD_DIR}/least_squares_qp/common/libdmr_lsqp_common.so
+  ${DM_ROBOTICS_RELEASE_DIR}/lib/libdmr_controllers_lsqp.so
+  ${DM_ROBOTICS_RELEASE_DIR}/lib/libdmr_mujoco.so
+  ${DM_ROBOTICS_RELEASE_DIR}/lib/libdmr_lsqp_core.so
+  ${DM_ROBOTICS_RELEASE_DIR}/lib/libdmr_lsqp_common.so
   ${QP_SOLVER_3RD_LIBS}
 )
 target_link_options(libmjapp_simulate PRIVATE ${MJPC_LINK_OPTIONS})

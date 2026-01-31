@@ -323,10 +323,10 @@ target_link_libraries(
         lbfgspp
         autodiff::autodiff
         ${MCMC_DIR}/lib/libmcmc.so
-        ${DM_ROBOTICS_BUILD_DIR}/controllers/lsqp/libdmr_controllers_lsqp.so
-        ${DM_ROBOTICS_BUILD_DIR}/mujoco/libdmr_mujoco.so
-        ${DM_ROBOTICS_BUILD_DIR}/least_squares_qp/core/libdmr_lsqp_core.so
-        ${DM_ROBOTICS_BUILD_DIR}/least_squares_qp/common/libdmr_lsqp_common.so
+        ${DM_ROBOTICS_RELEASE_DIR}/lib/libdmr_controllers_lsqp.so
+        ${DM_ROBOTICS_RELEASE_DIR}/lib/libdmr_mujoco.so
+        ${DM_ROBOTICS_RELEASE_DIR}/lib/libdmr_lsqp_core.so
+        ${DM_ROBOTICS_RELEASE_DIR}/lib/libdmr_lsqp_common.so
         ${QP_SOLVER_3RD_LIBS}
 )
 message("MCMC_DIR  ${MCMC_DIR}")

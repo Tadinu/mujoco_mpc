@@ -9,31 +9,37 @@
 FabPlanner::FabPlanner() = default;
 FabPlanner::~FabPlanner() = default;
 
-void FabPlanner::Initialize(mjModel* model, const mjpc::Task& task) {
+void FabPlanner::Initialize(mjModel* model, const mjpc::Task& task)
+{
   task_ = const_cast<mjpc::Task*>(&task);
   model_ = model;
   data_ = task_->data_;
 
   // dimensions
-  dim_state_ = model->nq + model->nv + model->na;     // state dimension
-  dim_state_derivative_ = 2 * model->nv + model->na;  // state derivative dimension
-  action_dim_ = task.GetActionDim();                  // action dimension
-  dim_sensor_ = model->nsensordata;                   // number of sensor values
-  dim_max_ = std::max({dim_state_, dim_state_derivative_, action_dim_, model->nuser_sensor});
+  dim_state_ = model->nq + model->nv + model->na; // state dimension
+  dim_state_derivative_ = 2 * model->nv + model->na; // state derivative dimension
+  action_dim_ = task.GetActionDim(); // action dimension
+  dim_sensor_ = model->nsensordata; // number of sensor values
+  dim_max_ = std::max({dim_state_, dim_state_derivative_, action_dim_, int(model->nuser_sensor)});
 
-  if (trajectory_) {
+  if (trajectory_)
+  {
     trajectory_->Reset(0);
-  } else {
+  }
+  else
+  {
     trajectory_ = std::make_shared<mjpc::Trajectory>();
   }
 
   // Init task fabrics
-  if (task.IsFabricsSupported()) {
+  if (task.IsFabricsSupported())
+  {
     InitTaskFabrics();
   }
 }
 
-void FabPlanner::InitTaskFabrics() {
+void FabPlanner::InitTaskFabrics()
+{
   // NOTE: This can be invoked amid a run as "Tune" is toggled (to switch the setup), so requiring a lock
   const FabSharedMutexLock lock(policy_mutex_);
   // 1- Config
@@ -46,7 +52,8 @@ void FabPlanner::InitTaskFabrics() {
 
   // 3- Goal
   FabGoalComposition goal;
-  for (const auto& subgoal : task_->GetSubGoals()) {
+  for (const auto& subgoal : task_->GetSubGoals())
+  {
     goal.add_sub_goal(subgoal);
   }
 
@@ -60,18 +67,23 @@ void FabPlanner::InitTaskFabrics() {
   concretize(task_->GetFabricsControlMode(), model_->opt.timestep);
 
   // 6- Param tuner (NOTE: always inited at last for using a fully-inited FabPlanner)
-  if (tuning_on_) {
+  if (tuning_on_)
+  {
     param_tuner_ = std::make_unique<FabParamTuner>();
     param_tuner_->set_planner(this);
-  } else {
+  }
+  else
+  {
     param_tuner_ = nullptr;
   }
 }
 
-void FabPlanner::SetGoalArguments() {
+void FabPlanner::SetGoalArguments()
+{
   // [X-space goals] & [Weights of goals]
   const auto sub_goals = task_->GetSubGoals();
-  for (auto i = 0; i < sub_goals.size(); ++i) {
+  for (auto i = 0; i < sub_goals.size(); ++i)
+  {
     const auto& sub_goal = sub_goals[i];
     const auto i_str = std::to_string(i);
     const auto& desired_goal_state = sub_goal->cfg_.desired_state;
@@ -82,9 +94,12 @@ void FabPlanner::SetGoalArguments() {
 
     const auto& indices = sub_goal->indices();
 
-    if (task_->IsGoalFixed()) {
+    if (task_->IsGoalFixed())
+    {
       arguments_["x_goal_" + i_str] = mjpc::get_subcollection(pos, indices);
-    } else {
+    }
+    else
+    {
       arguments_["x_ref_goal_" + i_str + "_leaf"] = mjpc::get_subcollection(pos, indices);
       arguments_["xdot_ref_goal_" + i_str + "_leaf"] = mjpc::get_subcollection(vel, indices);
       arguments_["xddot_ref_goal_" + i_str + "_leaf"] = mjpc::get_subcollection(acc, indices);
@@ -93,23 +108,29 @@ void FabPlanner::SetGoalArguments() {
   }
 }
 
-void FabPlanner::SetConstraintArguments() {
-  for (auto i = 0; i < task_->GetPlaneConstraintsNum(); ++i) {
+void FabPlanner::SetConstraintArguments()
+{
+  for (auto i = 0; i < task_->GetPlaneConstraintsNum(); ++i)
+  {
     arguments_["constraint_" + std::to_string(i)] = std::vector<double>{0, 0, 1, 0};
   }
 }
 
-void FabPlanner::SetCollisionArguments() {
-  for (const auto& [link_name, link_size] : task_->GetCollisionLinkProps()) {
+void FabPlanner::SetCollisionArguments()
+{
+  for (const auto& [link_name, link_size] : task_->GetCollisionLinkProps())
+  {
     arguments_["radius_body_" + link_name] = link_size;
   }
 }
 
-std::string FabPlanner::GetObstaclePropName(const char* prefix, int idx) const {
+std::string FabPlanner::GetObstaclePropName(const char* prefix, int idx) const
+{
   return (task_->AreObstaclesFixed() ? prefix : (std::string(prefix) + "dynamic_")) + std::to_string(idx);
 }
 
-void FabPlanner::SetObstacleArguments() {
+void FabPlanner::SetObstacleArguments()
+{
   const auto obstacle_statesX = task_->GetObstacleStatesX();
   const bool dynamic_obstacles = !task_->AreObstaclesFixed();
 
@@ -117,7 +138,8 @@ void FabPlanner::SetObstacleArguments() {
   std::vector obst_pos(dim, 0.);
   std::vector obst_vel(dim, 0.);
   std::vector obst_acc(dim, 0.);
-  for (auto i = 0; i < obstacle_statesX.size(); ++i) {
+  for (auto i = 0; i < obstacle_statesX.size(); ++i)
+  {
     const auto& obstacle_i = obstacle_statesX[i];
     arguments_[GetObstaclePropName("radius_obst_", i)] = FAB_OBSTACLE_SIZE_SCALE * obstacle_i.size_[0];
 
@@ -125,7 +147,8 @@ void FabPlanner::SetObstacleArguments() {
     memcpy(obst_pos.data(), obstacle_i.pos_.data(), dim * sizeof(double));
     arguments_[GetObstaclePropName("x_obst_", i)] = obst_pos;
 
-    if (dynamic_obstacles) {
+    if (dynamic_obstacles)
+    {
       // [obst_vel]
       memcpy(obst_vel.data(), obstacle_i.vel_.data(), dim * sizeof(double));
       arguments_[GetObstaclePropName("xdot_obst_", i)] = obst_vel;
@@ -137,13 +160,16 @@ void FabPlanner::SetObstacleArguments() {
   }
 }
 
-void FabPlanner::SetTuningArguments(const FabParamWeightDict& params) {
+void FabPlanner::SetTuningArguments(const FabParamWeightDict& params)
+{
 #if FAB_VERIFY_TUNED_PARAMS
   static std::map<const char*, bool> fetched_params_names;
   fetched_params_names.clear();
 #endif
-  const auto fetch_param = [&params](const char* param_name) {
-    if (params.contains(param_name)) {
+  const auto fetch_param = [&params](const char* param_name)
+  {
+    if (params.contains(param_name))
+    {
 #if FAB_VERIFY_TUNED_PARAMS
       fetched_params_names[param_name] = true;
 #endif
@@ -152,38 +178,44 @@ void FabPlanner::SetTuningArguments(const FabParamWeightDict& params) {
     throw FabError::customized("SetTuningArguments", "Undefined param: " + std::string(param_name));
   };
 
-  const auto fconstraint_prop_name = [](const char* prefix, const std::string& link_name, const int i) {
+  const auto fconstraint_prop_name = [](const char* prefix, const std::string& link_name, const int i)
+  {
     return std::string(prefix) + link_name + "_constraint_" + std::to_string(i);
   };
-  for (const auto& link_name : task_->GetCollisionLinkNames()) {
-    for (auto i = 0; i < task_->GetObstacleStatesX().size(); ++i) {
+  for (const auto& link_name : task_->GetCollisionLinkNames())
+  {
+    for (auto i = 0; i < task_->GetObstacleStatesX().size(); ++i)
+    {
       // LINK OBSTACLE LEAF
       const auto link_name_leaf_str = link_name + "_leaf";
       arguments_[GetObstaclePropName("exp_geo_obst_", i) + "_" + link_name_leaf_str] =
-          fetch_param("exp_geo_obst_leaf");
+        fetch_param("exp_geo_obst_leaf");
       arguments_[GetObstaclePropName("k_geo_obst_", i) + "_" + link_name_leaf_str] =
-          fetch_param("k_geo_obst_leaf");
+        fetch_param("k_geo_obst_leaf");
       arguments_[GetObstaclePropName("exp_fin_obst_", i) + "_" + link_name_leaf_str] =
-          fetch_param("exp_fin_obst_leaf");
+        fetch_param("exp_fin_obst_leaf");
       arguments_[GetObstaclePropName("k_fin_obst_", i) + "_" + link_name_leaf_str] =
-          fetch_param("k_fin_obst_leaf");
-    }  // End obstacles
+        fetch_param("k_fin_obst_leaf");
+    } // End obstacles
 
     // Plane constraints
-    for (auto i = 0; i < task_->GetPlaneConstraintsNum(); ++i) {
+    for (auto i = 0; i < task_->GetPlaneConstraintsNum(); ++i)
+    {
       arguments_[fconstraint_prop_name("k_plane_geo_", link_name, i)] = fetch_param("k_plane_geo");
       arguments_[fconstraint_prop_name("exp_plane_geo_", link_name, i)] = fetch_param("exp_plane_geo");
       arguments_[fconstraint_prop_name("k_plane_fin_", link_name, i)] = fetch_param("k_plane_fin");
       arguments_[fconstraint_prop_name("exp_plane_fin_", link_name, i)] = fetch_param("exp_plane_fin");
-    }  // End plane constraints
-  }  // End collision link names
+    } // End plane constraints
+  } // End collision link names
 
   // Sundries
   arguments_["base_inertia"] = fetch_param("base_inertia");
 
-  for (auto j = 0; j < robot_->dof(); ++j) {
+  for (auto j = 0; j < robot_->dof(); ++j)
+  {
     const auto j_str = std::to_string(j);
-    for (auto i = 0; i < 2; ++i) {
+    for (auto i = 0; i < 2; ++i)
+    {
       const auto i_str = std::to_string(i);
       const auto j_i_leaf_str = j_str + "_" + i_str + "_leaf";
       arguments_["exp_limit_fin_limit_joint_" + j_i_leaf_str] = fetch_param("exp_fin_limit_leaf");
@@ -193,8 +225,10 @@ void FabPlanner::SetTuningArguments(const FabParamWeightDict& params) {
     }
   }
 
-  for (const auto& [link_name_key, links_pair] : task_->GetSelfCollisionNamePairs()) {
-    for (const auto& paired_link_name : links_pair) {
+  for (const auto& [link_name_key, links_pair] : task_->GetSelfCollisionNamePairs())
+  {
+    for (const auto& paired_link_name : links_pair)
+    {
       // NOTE: This concatenation order must match one defined in [FabPlanner::set_components()] as params
       // to add_spherical_self_collision_geometry(), further at [FabSelfCollisionLeaf ctor]
       const auto affix = paired_link_name + "_" + link_name_key;
@@ -206,7 +240,8 @@ void FabPlanner::SetTuningArguments(const FabParamWeightDict& params) {
   }
 
   // Attractor args
-  for (auto i = 0; i < task_->GetSubGoals().size(); ++i) {
+  for (auto i = 0; i < task_->GetSubGoals().size(); ++i)
+  {
     const auto i_leaf_str = "_goal_" + std::to_string(i) + "_leaf";
     arguments_["attractor_alpha" + i_leaf_str] = fetch_param("attractor_alpha");
     arguments_["attractor_weight" + i_leaf_str] = fetch_param("attractor_weight");
@@ -225,8 +260,10 @@ void FabPlanner::SetTuningArguments(const FabParamWeightDict& params) {
   arguments_["ex_factor_damper"] = fetch_param("ex_factor_damper");
 
 #if FAB_VERIFY_TUNED_PARAMS
-  for (const auto& [param_name, _] : FabParamTuner::get_default_parameters()) {
-    if (false == fetched_params_names.contains(param_name)) {
+  for (const auto& [param_name, _] : FabParamTuner::get_default_parameters())
+  {
+    if (false == fetched_params_names.contains(param_name))
+    {
       MJPC_PRINT(param_name);
       assert(false);
     }
@@ -235,7 +272,8 @@ void FabPlanner::SetTuningArguments(const FabParamWeightDict& params) {
   mjpc::print_named_mapdb(arguments_, "TUNED ARG VALS");
 }
 
-void FabPlanner::Plan(const FabParamDict& params) {
+void FabPlanner::Plan(const FabParamDict& params)
+{
   const auto robot_dof = robot_->dof();
   std::vector<double> q = task_->QueryJointPositions(robot_dof);
   std::vector<double> qdot = task_->QueryJointVels(robot_dof);
@@ -256,7 +294,8 @@ void FabPlanner::Plan(const FabParamDict& params) {
   SetObstacleArguments();
 
   /// [Scalar tuned coeffecients]
-  if (tuning_on_) {
+  if (tuning_on_)
+  {
     SetTuningArguments(params);
   }
 
@@ -264,7 +303,8 @@ void FabPlanner::Plan(const FabParamDict& params) {
   SetAction(compute_action(arguments_));
 }
 
-void FabPlanner::OptimizePolicy(int horizon, mjpc::ThreadPool& pool) {
+void FabPlanner::OptimizePolicy(int horizon, mjpc::ThreadPool& pool)
+{
   // get nominal trajectory
   this->NominalTrajectory(horizon, pool);
 
@@ -275,7 +315,8 @@ void FabPlanner::OptimizePolicy(int horizon, mjpc::ThreadPool& pool) {
   static bool last_tuning_on = false;
   bool tuning_off_then_on = (!last_tuning_on && tuning_on_);
   last_tuning_on = tuning_on_;
-  if (tuning_on_ && !param_tuner_->tuning_finished()) {
+  if (tuning_on_ && !param_tuner_->tuning_finished())
+  {
     // Fetch last trial tuning result
     param_tuner_->fetch_tune_results();
 
@@ -283,7 +324,8 @@ void FabPlanner::OptimizePolicy(int horizon, mjpc::ThreadPool& pool) {
     param_tuner_->tune(tuning_off_then_on);
   }
   // Plan with best params from the tuning
-  else {
+  else
+  {
     Plan(tuning_on_ ? FabParamTuner::get_best_parameters() : FabParamTuner::get_default_parameters());
   }
 }
